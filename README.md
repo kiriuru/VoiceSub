@@ -25,7 +25,7 @@ This README describes the desktop release surface for `0.3.0`.
 - Browser Speech lifecycle is supervised and more resilient to `onend`, reconnect, stale worker state, and client-event/logging failures;
 - dashboard/runtime WebSocket paths are more defensive under reconnect and dead-socket scenarios;
 - `/google-asr-experimental` is documented as a separate experimental browser worker path;
-- experimental backend provider `google_legacy_http_experimental` is part of the documented release surface.
+- local backend ASR is now limited to the supported Parakeet providers only.
 
 ## Release Package
 
@@ -190,6 +190,8 @@ Visual layout was not redesigned in `0.3.0`; the major change is the internal mo
 - Set maximum visible translated lines.
 - Configure subtitle lifetime behavior.
 - Manage display order used by both preview and overlay.
+- By default, the previous completed translation remains visible while a new source phrase is still only an active partial.
+- The completed translation block switches only after the newer phrase is finalized and its replacement translation arrives.
 
 ### Style
 
@@ -241,15 +243,7 @@ Visual layout was not redesigned in `0.3.0`; the major change is the internal mo
 - Supports GPU-first policy on compatible NVIDIA systems.
 - CPU fallback is available when needed.
 - Remains the default local AI path and is still available in `0.3.0`.
-
-### Google Legacy HTTP Speech Experimental
-
-- Selected inside `Recognition -> Local ASR provider` while `Recognition method` stays `Local Parakeet`.
-- Uses the backend audio capture path and sends `PCM16 mono 16 kHz` directly from backend to an experimental legacy Google speech endpoint.
-- Does not open `/google-asr` and does not launch the browser SpeechRecognition worker.
-- Requires `asr.google_legacy_http.enabled = true`.
-- `endpoint_host` is an advanced override; the provider does not rely on a regular Google Cloud Speech API key path.
-- This path is unofficial/unsupported, sends audio to Google, and may stop working without notice.
+- `Recognition -> Backend ASR provider` now only offers `Official EU Parakeet Low Latency` and `Official EU Parakeet`.
 
 ### Browser Speech
 

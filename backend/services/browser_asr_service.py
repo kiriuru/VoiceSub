@@ -27,6 +27,18 @@ class BrowserAsrService:
             "generation_id": 0,
             "client_segment_id": None,
             "forced_final": False,
+            "provider_name": None,
+            "active_recognition": False,
+            "active_media_stream": False,
+            "last_result_index": None,
+            "last_result_at_ms": None,
+            "last_session_started_at_ms": None,
+            "last_session_ended_at_ms": None,
+            "browser_session_age_ms": None,
+            "browser_cycle_pending": False,
+            "browser_cycle_count": 0,
+            "browser_minimum_reconnect_suppressed_count": 0,
+            "browser_forced_final_on_interruption_count": 0,
             "browser_restarts_count": 0,
             "browser_no_speech_count": 0,
             "browser_network_error_count": 0,
@@ -38,6 +50,11 @@ class BrowserAsrService:
             "mic_rms": 0.0,
             "mic_active_recent_ms": None,
             "last_mic_activity_at": None,
+            "get_user_media_count": 0,
+            "get_user_media_last_error": None,
+            "mic_stream_active": False,
+            "media_tracks_stopped_count": 0,
+            "media_track_leak_guard_count": 0,
             "browser_stale_events_ignored": 0,
         }
 
@@ -57,6 +74,9 @@ class BrowserAsrService:
                     "supervisor_state": "idle",
                     "client_segment_id": None,
                     "forced_final": False,
+                    "provider_name": None,
+                    "active_recognition": False,
+                    "active_media_stream": False,
                     "duplicate_partial_suppressed": 0,
                     "duplicate_final_suppressed": 0,
                     "late_forced_final_suppressed": 0,
@@ -65,6 +85,11 @@ class BrowserAsrService:
                     "mic_rms": 0.0,
                     "mic_active_recent_ms": None,
                     "last_mic_activity_at": None,
+                    "get_user_media_count": 0,
+                    "get_user_media_last_error": None,
+                    "mic_stream_active": False,
+                    "media_tracks_stopped_count": 0,
+                    "media_track_leak_guard_count": 0,
                     "last_seen_at_ms": self._now_ms(),
                 }
             )
@@ -83,6 +108,8 @@ class BrowserAsrService:
                     "desired_running": False,
                     "client_segment_id": None,
                     "forced_final": False,
+                    "active_recognition": False,
+                    "active_media_stream": False,
                     "last_seen_at_ms": self._now_ms(),
                 }
             )
@@ -105,10 +132,56 @@ class BrowserAsrService:
             "degraded_reason": payload.get("degraded_reason"),
             "last_error": payload.get("last_error"),
             "last_seen_at_ms": self._now_ms(),
+            "provider_name": str(payload.get("provider_name", self._snapshot["provider_name"]) or "").strip() or None,
             "generation_id": int(payload.get("generation_id", self._snapshot["generation_id"]) or 0),
             "session_id": str(payload.get("session_id", self._snapshot["session_id"]) or "").strip() or None,
             "client_segment_id": str(payload.get("client_segment_id", self._snapshot["client_segment_id"]) or "").strip() or None,
             "forced_final": bool(payload.get("forced_final", self._snapshot["forced_final"])),
+            "active_recognition": bool(payload.get("active_recognition", self._snapshot["active_recognition"])),
+            "active_media_stream": bool(payload.get("active_media_stream", self._snapshot["active_media_stream"])),
+            "last_result_index": (
+                int(payload.get("last_result_index", self._snapshot["last_result_index"]) or 0)
+                if payload.get("last_result_index") is not None
+                else None
+            ),
+            "last_result_at_ms": (
+                max(0, int(payload.get("last_result_at_ms", 0) or 0))
+                if payload.get("last_result_at_ms") is not None
+                else None
+            ),
+            "last_session_started_at_ms": (
+                max(0, int(payload.get("last_session_started_at_ms", 0) or 0))
+                if payload.get("last_session_started_at_ms") is not None
+                else None
+            ),
+            "last_session_ended_at_ms": (
+                max(0, int(payload.get("last_session_ended_at_ms", 0) or 0))
+                if payload.get("last_session_ended_at_ms") is not None
+                else None
+            ),
+            "browser_session_age_ms": (
+                max(0, int(payload.get("browser_session_age_ms", 0) or 0))
+                if payload.get("browser_session_age_ms") is not None
+                else None
+            ),
+            "browser_cycle_pending": bool(
+                payload.get("browser_cycle_pending", self._snapshot["browser_cycle_pending"])
+            ),
+            "browser_cycle_count": int(payload.get("browser_cycle_count", self._snapshot["browser_cycle_count"]) or 0),
+            "browser_minimum_reconnect_suppressed_count": int(
+                payload.get(
+                    "browser_minimum_reconnect_suppressed_count",
+                    self._snapshot["browser_minimum_reconnect_suppressed_count"],
+                )
+                or 0
+            ),
+            "browser_forced_final_on_interruption_count": int(
+                payload.get(
+                    "browser_forced_final_on_interruption_count",
+                    self._snapshot["browser_forced_final_on_interruption_count"],
+                )
+                or 0
+            ),
             "browser_restarts_count": int(payload.get("restart_count", self._snapshot["browser_restarts_count"]) or 0),
             "browser_no_speech_count": int(payload.get("no_speech_count", self._snapshot["browser_no_speech_count"]) or 0),
             "browser_network_error_count": int(payload.get("network_error_count", self._snapshot["browser_network_error_count"]) or 0),
@@ -137,6 +210,18 @@ class BrowserAsrService:
                 if payload.get("last_mic_activity_at") is not None
                 else None
             ),
+            "get_user_media_count": int(payload.get("get_user_media_count", self._snapshot["get_user_media_count"]) or 0),
+            "get_user_media_last_error": str(
+                payload.get("get_user_media_last_error", self._snapshot["get_user_media_last_error"]) or ""
+            ).strip()
+            or None,
+            "mic_stream_active": bool(payload.get("mic_stream_active", self._snapshot["mic_stream_active"])),
+            "media_tracks_stopped_count": int(
+                payload.get("media_tracks_stopped_count", self._snapshot["media_tracks_stopped_count"]) or 0
+            ),
+            "media_track_leak_guard_count": int(
+                payload.get("media_track_leak_guard_count", self._snapshot["media_track_leak_guard_count"]) or 0
+            ),
         }
         async with self._lock:
             self._snapshot.update(snapshot_update)
@@ -149,16 +234,29 @@ class BrowserAsrService:
         accepted = await self._accept_payload(transport_id, payload)
         if not accepted:
             return False
-        await self._runtime_orchestrator.ingest_external_asr_update(
-            partial=str(payload.get("partial", "") or ""),
-            final=str(payload.get("final", "") or ""),
-            is_final=bool(payload.get("is_final", False)),
-            source_lang=str(payload.get("source_lang", "") or "") or None,
-            generation_id=int(payload.get("generation_id", 0) or 0),
-            session_id=str(payload.get("session_id", "") or "").strip() or None,
-            client_segment_id=str(payload.get("client_segment_id", "") or "").strip() or None,
-            forced_final=bool(payload.get("forced_final", False)),
-        )
+        backend_received_at_ms = self._now_ms()
+        update_payload: dict[str, Any] = {
+            "partial": str(payload.get("partial", "") or ""),
+            "final": str(payload.get("final", "") or ""),
+            "is_final": bool(payload.get("is_final", False)),
+            "source_lang": str(payload.get("source_lang", "") or "") or None,
+            "generation_id": int(payload.get("generation_id", 0) or 0),
+            "session_id": str(payload.get("session_id", "") or "").strip() or None,
+            "client_segment_id": str(payload.get("client_segment_id", "") or "").strip() or None,
+            "forced_final": bool(payload.get("forced_final", False)),
+        }
+        if payload.get("asr_result_created_at_ms") is not None:
+            update_payload["asr_result_created_at_ms"] = int(payload.get("asr_result_created_at_ms", 0) or 0)
+        if payload.get("worker_send_started_at_ms") is not None:
+            update_payload["worker_send_started_at_ms"] = int(payload.get("worker_send_started_at_ms", 0) or 0)
+        if payload.get("worker_message_sequence") is not None:
+            update_payload["worker_message_sequence"] = int(payload.get("worker_message_sequence", 0) or 0)
+        if any(
+            key in update_payload
+            for key in ("asr_result_created_at_ms", "worker_send_started_at_ms", "worker_message_sequence")
+        ):
+            update_payload["backend_received_at_ms"] = backend_received_at_ms
+        await self._runtime_orchestrator.ingest_external_asr_update(**update_payload)
         async with self._lock:
             self._snapshot["last_seen_at_ms"] = self._now_ms()
         return True

@@ -24,7 +24,7 @@
 - overlay/runtime event path теперь лучше переживает duplicate/stale event storm и поздние translation updates;
 - отдельная experimental страница `/google-asr-experimental` включена в релиз как поддерживаемый experimental path на базе `SpeechRecognition.start(audioTrack)`;
 - локальный AI path и `browser_google` не удалены; Parakeet остаётся доступным;
-- добавлен experimental backend provider `google_legacy_http_experimental` как отдельный local ASR provider path.
+- unsupported backend ASR experiment removed from the active product surface; only Parakeet + browser worker modes remain.
 
 ### Backend Architecture
 
@@ -47,8 +47,7 @@
 - schema публикуется в `backend/data/config.schema.json`;
 - расширены Pydantic schema-модули в `backend/schemas/` для config/runtime/asr/translation/overlay/diagnostics;
 - migration v3 переводит `official_eu_parakeet_realtime` на `official_eu_parakeet_low_latency`;
-- migration v4 добавляет shape `asr.google_legacy_http`;
-- migration v5 переводит legacy HTTP provider на keyless contract с `pair_id_prefix`.
+- unsupported historical backend ASR settings are normalized back to the supported Parakeet defaults.
 
 ### Frontend Modularization
 
@@ -130,19 +129,16 @@
 - duplicate runtime noise не должен лишний раз дёргать overlay payload;
 - subtitle router и overlay broadcaster получили дополнительное suppression/coalescing поведение.
 
-### Experimental Google Legacy HTTP Speech Provider
+### ASR Surface Cleanup
 
-- добавлен отдельный backend provider `google_legacy_http_experimental`;
-- он использует backend audio path и не открывает browser worker;
-- streaming transport/parser/provider разнесены по отдельным модулям;
-- provider использует bounded queue, reconnect/backoff и stale generation suppression;
-- UI явно показывает, что этот provider выбирается внутри local ASR provider path, а не как отдельный browser mode;
-- provider остаётся experimental/unofficial.
+- current ASR surface is limited to local Parakeet and the two browser worker modes;
+- removed/unsupported backend ASR experiments are normalized away during config migration and save/load;
+- dashboard and schema no longer expose deprecated backend transport settings.
 
 ### Remote Mode and Startup
 
 - remote mode сохранён как explicit LAN-only exception;
-- remote worker sync дополнительно фиксирует локальный AI provider, чтобы worker не уходил в browser/legacy HTTP path;
+- remote worker sync дополнительно фиксирует локальный AI provider, чтобы worker не уходил в browser worker path;
 - default startup остаётся local-first;
 - `start.bat` по смыслу не превращён в remote bootstrap;
 - dashboard/overlay/browser worker pages по-прежнему обслуживаются локальным FastAPI backend.
@@ -169,7 +165,7 @@
 - frontend modular architecture
 - dashboard logging contract
 - runtime status contract
-- legacy HTTP provider/parser/runtime
+- ASR provider selection and legacy-config migration cleanup
 - remote flow and versioning
 
 Проверка на актуальном наборе изменений:
@@ -179,7 +175,7 @@
 
 Результат:
 
-- `130 tests`
+- `135 tests`
 - `OK`
 
 ## 0.2.9.2

@@ -21,9 +21,24 @@ def configure_backend_logging(logs_dir: Path) -> Path:
     log_path = logs_path / "backend.log"
 
     root_logger = logging.getLogger()
-    for handler in root_logger.handlers:
-        if getattr(handler, "_sst_handler_name", None) == _HANDLER_NAME:
+    existing_handlers = [
+        handler for handler in list(root_logger.handlers) if getattr(handler, "_sst_handler_name", None) == _HANDLER_NAME
+    ]
+    for handler in existing_handlers:
+        handler_path = Path(getattr(handler, "baseFilename", "")).resolve() if getattr(handler, "baseFilename", None) else None
+        if handler_path == log_path.resolve():
+            logging.getLogger("httpx").setLevel(logging.WARNING)
+            logging.getLogger("httpcore").setLevel(logging.WARNING)
             return log_path
+        root_logger.removeHandler(handler)
+        try:
+            handler.flush()
+        except Exception:
+            pass
+        try:
+            handler.close()
+        except Exception:
+            pass
 
     handler = RotatingFileHandler(
         log_path,
@@ -37,5 +52,7 @@ def configure_backend_logging(logs_dir: Path) -> Path:
 
     if root_logger.level == logging.NOTSET or root_logger.level > logging.INFO:
         root_logger.setLevel(logging.INFO)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
     root_logger.addHandler(handler)
     return log_path

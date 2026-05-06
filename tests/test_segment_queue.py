@@ -48,6 +48,21 @@ class SegmentQueueTests(unittest.TestCase):
         self.assertEqual((second.segment_id, second.kind, second.audio), ("seg-1", "final", b"final"))
         self.assertIsNone(queue.pop(timeout=0.01))
 
+    def test_queue_is_bounded_and_drops_partial_work(self) -> None:
+        queue = SegmentQueue(maxsize=2)
+        queue.push(AsrWorkItem(kind="partial", audio=b"one", duration_ms=10, segment_id="seg-1"))
+        queue.push(AsrWorkItem(kind="partial", audio=b"two", duration_ms=10, segment_id="seg-2"))
+        queue.push(AsrWorkItem(kind="partial", audio=b"three", duration_ms=10, segment_id="seg-3"))
+
+        self.assertEqual(queue.qsize(), 2)
+        self.assertEqual(queue.partial_jobs_dropped, 1)
+
+    def test_clear_wakes_blocked_pop(self) -> None:
+        queue = SegmentQueue()
+        queue.clear()
+
+        self.assertIsNone(queue.pop(timeout=0.01))
+
 
 if __name__ == "__main__":
     unittest.main()

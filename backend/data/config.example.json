@@ -1,6 +1,9 @@
 {
   "config_version": 5,
   "profile": "default",
+  "ui": {
+    "language": ""
+  },
   "source_lang": "auto",
   "targets": [
     "en"
@@ -14,22 +17,30 @@
     "browser": {
       "recognition_language": "ru-RU",
       "interim_results": true,
-      "continuous_results": false,
+      "continuous_results": true,
       "force_finalization_enabled": true,
-      "force_finalization_timeout_ms": 1600
-    },
-    "google_legacy_http": {
-      "enabled": false,
-      "language": "ru-RU",
-      "profanity_filter": false,
-      "connect_timeout_ms": 10000,
-      "send_timeout_ms": 10000,
-      "recv_timeout_ms": 30000,
-      "max_queue_depth": 50,
-      "reconnect_initial_ms": 1000,
-      "reconnect_max_ms": 30000,
-      "endpoint_host": "",
-      "pair_id_prefix": "sst"
+      "force_finalization_timeout_ms": 1600,
+      "minimum_reconnect_interval_ms": 500,
+      "normal_restart_delay_ms": 350,
+      "no_speech_restart_delay_ms": 350,
+      "network_reconnect_initial_ms": 1000,
+      "network_reconnect_max_ms": 30000,
+      "stuck_stopping_timeout_ms": 2500,
+      "max_browser_session_age_ms": 240000,
+      "prepare_cycle_before_ms": 15000,
+      "force_final_on_interruption": true,
+      "force_final_min_chars": 3,
+      "force_final_min_stable_ms": 700,
+      "experimental": {
+        "start_with_audio_track": true,
+        "fallback_to_default_start": true,
+        "keep_stream_alive": true,
+        "audio_track_constraints": {
+          "echoCancellation": false,
+          "noiseSuppression": false,
+          "autoGainControl": false
+        }
+      }
     },
     "realtime": {
       "vad_mode": 3,
@@ -112,6 +123,9 @@
     "target_languages": [
       "en"
     ],
+    "timeout_ms": 10000,
+    "queue_max_size": 8,
+    "max_concurrent_jobs": 2,
     "provider_settings": {
       "google_translate_v2": {
         "api_key": ""
@@ -183,6 +197,7 @@
     "label": "Clean Default",
     "description": "Balanced white subtitles with readable outline and no extra effects.",
     "built_in": true,
+    "recommended_max_visible_lines": null,
     "base": {
       "font_family": "\"Segoe UI\", Tahoma, Geneva, Verdana, sans-serif",
       "font_size_px": 30,
@@ -224,8 +239,7 @@
       "translation_5": {
         "enabled": false
       }
-    },
-    "custom_presets": {}
+    }
   },
   "subtitle_lifecycle": {
     "completed_block_ttl_ms": 4500,
@@ -234,6 +248,7 @@
     "pause_to_finalize_ms": 350,
     "allow_early_replace_on_next_final": true,
     "sync_source_and_translation_expiry": true,
+    "keep_completed_translation_during_active_partial": true,
     "hard_max_phrase_ms": 5500
   }
 }

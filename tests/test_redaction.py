@@ -14,12 +14,7 @@ class RedactionTests(unittest.TestCase):
                 "api_key": "secret-value",
                 "endpoint": "https://example.test/translate?token=abc123&mode=fast",
             },
-            "asr": {
-                "google_legacy_http": {
-                    "api_key": "legacy-secret",
-                    "endpoint_host": "https://www.google.com",
-                }
-            },
+            "providers": {"backup": {"key": "legacy-secret"}},
             "remote": {
                 "pair_code": "123456",
                 "controller": {
@@ -30,7 +25,7 @@ class RedactionTests(unittest.TestCase):
 
         redacted = redact_data(payload)
         self.assertEqual(redacted["translation"]["api_key"], REDACTED_VALUE)
-        self.assertEqual(redacted["asr"]["google_legacy_http"]["api_key"], REDACTED_VALUE)
+        self.assertEqual(redacted["providers"]["backup"]["key"], REDACTED_VALUE)
         endpoint_query = parse_qs(urlsplit(redacted["translation"]["endpoint"]).query)
         self.assertEqual(endpoint_query["token"][0], REDACTED_VALUE)
         self.assertEqual(redacted["remote"]["pair_code"], REDACTED_VALUE)
@@ -39,6 +34,10 @@ class RedactionTests(unittest.TestCase):
     def test_redacts_bearer_tokens_in_text(self) -> None:
         text = "Authorization failed for Bearer super-secret-token"
         self.assertEqual(redact_text(text), "Authorization failed for Bearer [redacted]")
+
+    def test_redacts_key_query_parameter_in_text(self) -> None:
+        text = "key=legacy-secret&pair=sst-123"
+        self.assertIn("key=[redacted]", redact_text(text))
 
 
 if __name__ == "__main__":

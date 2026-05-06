@@ -60,19 +60,6 @@ def _likely_asr_mode(config: dict, model_path: Path, torch_info: dict[str, objec
     provider_preference = str(asr_config.get("provider_preference", "official_eu_parakeet_low_latency"))
     prefer_gpu = bool(asr_config.get("prefer_gpu", True))
 
-    if provider_preference == "google_legacy_http_experimental":
-        google_legacy_http = asr_config.get("google_legacy_http", {}) if isinstance(asr_config, dict) else {}
-        endpoint_host = (
-            str(google_legacy_http.get("endpoint_host", "")).strip()
-            if isinstance(google_legacy_http, dict)
-            else ""
-        )
-        return (
-            "backend legacy HTTP speech",
-            "Experimental backend streaming provider is selected. "
-            f"Endpoint host: {endpoint_host or 'default Google legacy host'}",
-        )
-
     if not model_path.exists():
         return (
             "ASR cold-start download pending",
@@ -87,7 +74,7 @@ def _likely_asr_mode(config: dict, model_path: Path, torch_info: dict[str, objec
             return "baseline compatibility", "Baseline provider selected explicitly; realtime is not the active default."
         return "baseline fallback", "Baseline provider selected explicitly."
 
-    if provider_preference in {"official_eu_parakeet_low_latency", "auto"}:
+    if provider_preference in {"official_eu_parakeet_low_latency", "official_eu_parakeet"}:
         if prefer_gpu and cuda_build and cuda_available:
             return "realtime GPU", None
         if prefer_gpu:

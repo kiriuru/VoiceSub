@@ -48,6 +48,61 @@
           "title": "Force Finalization Timeout Ms",
           "type": "integer"
         },
+        "minimum_reconnect_interval_ms": {
+          "default": 500,
+          "title": "Minimum Reconnect Interval Ms",
+          "type": "integer"
+        },
+        "normal_restart_delay_ms": {
+          "default": 350,
+          "title": "Normal Restart Delay Ms",
+          "type": "integer"
+        },
+        "no_speech_restart_delay_ms": {
+          "default": 350,
+          "title": "No Speech Restart Delay Ms",
+          "type": "integer"
+        },
+        "network_reconnect_initial_ms": {
+          "default": 1000,
+          "title": "Network Reconnect Initial Ms",
+          "type": "integer"
+        },
+        "network_reconnect_max_ms": {
+          "default": 30000,
+          "title": "Network Reconnect Max Ms",
+          "type": "integer"
+        },
+        "stuck_stopping_timeout_ms": {
+          "default": 2500,
+          "title": "Stuck Stopping Timeout Ms",
+          "type": "integer"
+        },
+        "max_browser_session_age_ms": {
+          "default": 240000,
+          "title": "Max Browser Session Age Ms",
+          "type": "integer"
+        },
+        "prepare_cycle_before_ms": {
+          "default": 15000,
+          "title": "Prepare Cycle Before Ms",
+          "type": "integer"
+        },
+        "force_final_on_interruption": {
+          "default": true,
+          "title": "Force Final On Interruption",
+          "type": "boolean"
+        },
+        "force_final_min_chars": {
+          "default": 3,
+          "title": "Force Final Min Chars",
+          "type": "integer"
+        },
+        "force_final_min_stable_ms": {
+          "default": 700,
+          "title": "Force Final Min Stable Ms",
+          "type": "integer"
+        },
         "experimental": {
           "$ref": "#/$defs/AsrBrowserExperimentalConfig"
         }
@@ -94,10 +149,8 @@
         "provider_preference": {
           "default": "official_eu_parakeet_low_latency",
           "enum": [
-            "auto",
             "official_eu_parakeet",
-            "official_eu_parakeet_low_latency",
-            "google_legacy_http_experimental"
+            "official_eu_parakeet_low_latency"
           ],
           "title": "Provider Preference",
           "type": "string"
@@ -119,9 +172,6 @@
         },
         "browser": {
           "$ref": "#/$defs/AsrBrowserConfig"
-        },
-        "google_legacy_http": {
-          "$ref": "#/$defs/GoogleLegacyHttpConfig"
         },
         "realtime": {
           "$ref": "#/$defs/AsrRealtimeConfig"
@@ -301,67 +351,6 @@
         }
       },
       "title": "GoogleGasUrlProviderSettings",
-      "type": "object"
-    },
-    "GoogleLegacyHttpConfig": {
-      "properties": {
-        "enabled": {
-          "default": false,
-          "title": "Enabled",
-          "type": "boolean"
-        },
-        "language": {
-          "default": "ru-RU",
-          "title": "Language",
-          "type": "string"
-        },
-        "profanity_filter": {
-          "default": false,
-          "title": "Profanity Filter",
-          "type": "boolean"
-        },
-        "connect_timeout_ms": {
-          "default": 10000,
-          "title": "Connect Timeout Ms",
-          "type": "integer"
-        },
-        "send_timeout_ms": {
-          "default": 10000,
-          "title": "Send Timeout Ms",
-          "type": "integer"
-        },
-        "recv_timeout_ms": {
-          "default": 30000,
-          "title": "Recv Timeout Ms",
-          "type": "integer"
-        },
-        "max_queue_depth": {
-          "default": 50,
-          "title": "Max Queue Depth",
-          "type": "integer"
-        },
-        "reconnect_initial_ms": {
-          "default": 1000,
-          "title": "Reconnect Initial Ms",
-          "type": "integer"
-        },
-        "reconnect_max_ms": {
-          "default": 30000,
-          "title": "Reconnect Max Ms",
-          "type": "integer"
-        },
-        "endpoint_host": {
-          "default": "",
-          "title": "Endpoint Host",
-          "type": "string"
-        },
-        "pair_id_prefix": {
-          "default": "sst",
-          "title": "Pair Id Prefix",
-          "type": "string"
-        }
-      },
-      "title": "GoogleLegacyHttpConfig",
       "type": "object"
     },
     "GoogleTranslateV2ProviderSettings": {
@@ -685,6 +674,11 @@
         "sync_source_and_translation_expiry": {
           "default": true,
           "title": "Sync Source And Translation Expiry",
+          "type": "boolean"
+        },
+        "keep_completed_translation_during_active_partial": {
+          "default": true,
+          "title": "Keep Completed Translation During Active Partial",
           "type": "boolean"
         },
         "hard_max_phrase_ms": {

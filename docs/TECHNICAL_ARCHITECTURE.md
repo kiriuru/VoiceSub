@@ -13,7 +13,6 @@
 - ASR:
   - локальный AI runtime
   - browser speech worker ingestion
-  - experimental legacy HTTP backend provider
 - optional translation на 0..N target languages;
 - единая маршрутизация subtitle payload в dashboard и OBS overlay;
 - экспорт сессий и локальные runtime/client diagnostics.
@@ -123,9 +122,6 @@ flowchart LR
   - `browser_asr_gateway.py`
 - providers:
   - `parakeet_provider.py`
-  - `google_legacy_http_provider.py`
-  - `google_legacy_http_transport.py`
-  - `google_legacy_http_parser.py`
 - remote:
   - `remote_mode.py`
   - `remote_session.py`
@@ -176,8 +172,7 @@ flowchart LR
 Ключевые migration steps:
 
 - provider rename to `official_eu_parakeet_low_latency`
-- adding `asr.google_legacy_http` shape
-- keyless legacy HTTP contract with `pair_id_prefix`
+- cleanup path for removed backend ASR settings so old configs fall back to supported Parakeet defaults
 
 Это важно для:
 
@@ -404,24 +399,13 @@ Core responsibilities:
 - reducing stale translation/source mismatch risk;
 - keeping overlay updates aligned with source segment lifecycle.
 
-## 16. Experimental Legacy HTTP Provider
+## 16. ASR Provider Surface
 
-Provider:
+Supported ASR paths:
 
-- `backend/core/google_legacy_http_provider.py`
-
-Supporting modules:
-
-- `backend/core/google_legacy_http_transport.py`
-- `backend/core/google_legacy_http_parser.py`
-
-This path:
-
-- stays in the backend audio pipeline;
-- does not open browser speech worker pages;
-- is separate from `browser_google`;
-- is separate from local Parakeet;
-- remains experimental and unofficial.
+- local Parakeet runtime through the backend audio pipeline;
+- classic browser speech worker (`/google-asr`);
+- experimental browser speech worker (`/google-asr-experimental`).
 
 ## 17. Remote Mode
 
@@ -438,7 +422,7 @@ Controller/worker artifacts are preserved:
 Constraints:
 
 - remote worker must not run browser speech mode;
-- remote worker sync enforces a local AI path rather than drifting into browser/legacy experimental providers.
+- remote worker sync enforces a local AI path rather than drifting into browser worker providers.
 
 ## 18. Startup and Local Data
 
@@ -475,7 +459,7 @@ All continue to be served by the Python application.
 - session logger fault tolerance
 - frontend modular architecture
 - dashboard logging contract
-- legacy HTTP provider/parser/runtime
+- ASR provider selection and legacy-config migration cleanup
 - remote flow
 - versioning
 
@@ -486,7 +470,7 @@ Current verification command set used on the release work:
 
 Observed result:
 
-- `130 tests`
+- `135 tests`
 - `OK`
 
 ## 20. Product Invariants Preserved in 0.3.0

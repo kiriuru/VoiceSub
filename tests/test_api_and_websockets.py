@@ -213,19 +213,18 @@ class ApiAndWebSocketTests(unittest.TestCase):
             {"ok": True, "logged": False, "reason": "log_write_failed"},
         )
 
-    def test_settings_logs_drop_deprecated_google_legacy_http_api_key(self) -> None:
+    def test_settings_logs_redact_nested_secrets(self) -> None:
         payload = {
             "source_lang": "ru",
             "asr": {
                 "mode": "local",
-                "provider_preference": "google_legacy_http_experimental",
-                "google_legacy_http": {
-                    "enabled": True,
-                    "language": "ru-RU",
-                    "api_key": "super-secret-key",
-                },
+                "provider_preference": "official_eu_parakeet_low_latency",
             },
-            "translation": {"enabled": False},
+            "translation": {
+                "enabled": True,
+                "provider": "google_translate_v2",
+                "provider_settings": {"google_translate_v2": {"api_key": "super-secret-key"}},
+            },
             "subtitle_output": {"show_source": True, "show_translations": True},
             "remote": {"enabled": False, "role": "disabled"},
         }

@@ -122,6 +122,21 @@ class TranscriptSegment(SchemaModel):
     latency_ms: float | None = None
     sequence: int = 0
     revision: int = 0
+    asr_result_created_at_ms: int | None = None
+    worker_send_started_at_ms: int | None = None
+    worker_message_sequence: int | None = None
+    worker_generation_id: int | None = None
+    worker_session_id: str | None = None
+    backend_received_at_ms: int | None = None
+    backend_published_to_router_at_ms: int | None = None
+    router_received_at_ms: int | None = None
+    ws_broadcast_at_ms: int | None = None
+    dashboard_received_at_ms: int | None = None
+    audio_segment_started_at_ms: int | None = None
+    vad_partial_ready_at_ms: int | None = None
+    parakeet_transcribe_started_at_ms: int | None = None
+    parakeet_transcribe_done_at_ms: int | None = None
+    provider_result_created_at_ms: int | None = None
 
 
 class SettingsSaveRequest(SchemaModel):

@@ -6,16 +6,17 @@
       this.options = options || {};
       this.state = this.options.state || {};
       this.SpeechRecognitionCtor = this.options.SpeechRecognitionCtor || null;
-      this.restartDelayByReasonMs = Object.freeze({
-        normal_onend: 200,
-        settings_change: 200,
-        websocket_reconnect: 300,
+      this.restartDelayByReasonMs = {
+        normal_onend: 350,
+        settings_change: 350,
+        websocket_reconnect: 350,
         watchdog_stall: 750,
-      });
-      this.initialNoSpeechDelayMs = 1200;
+        session_cycle: 350,
+      };
+      this.initialNoSpeechDelayMs = 350;
       this.maxNoSpeechDelayMs = 5000;
       this.initialNetworkBackoffMs = 1000;
-      this.maxNetworkBackoffMs = 10000;
+      this.maxNetworkBackoffMs = 30000;
       this.watchdogIntervalMs = 1000;
       this.maxStoppingMs = 2500;
       this.visibleIdleRestartMs = 30000;
@@ -23,6 +24,12 @@
       this.stallDegradedAfterMs = 6000;
       this.micSilentDegradedAfterMs = 5000;
       this.recentMicActivityWindowMs = 2000;
+      this.minimumReconnectIntervalMs = 500;
+      this.maxBrowserSessionAgeMs = 240000;
+      this.prepareCycleBeforeMs = 15000;
+      this.forceFinalOnInterruption = true;
+      this.forceFinalMinChars = 3;
+      this.forceFinalMinStableMs = 700;
       this._watchdogTimer = null;
       this._permissionPromise = null;
       this._socketListenersAttached = false;
@@ -35,6 +42,7 @@
         pendingStart: Boolean(this.state.pendingStart),
         generationId: Number(this.state.generationId || 0),
         sessionId: this.state.sessionId || `browser-worker-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+        providerName: this.state.providerName || this.state.browserMode || "browser_google",
         browserSupervisorState: this.state.browserSupervisorState || "idle",
         recognitionState: this.state.recognitionState || "idle",
         restartTimer: this.state.restartTimer || null,
@@ -47,8 +55,15 @@
         stoppingSinceMs: this.state.stoppingSinceMs || null,
         lastStartAtMs: Number(this.state.lastStartAtMs || 0),
         lastEndAtMs: Number(this.state.lastEndAtMs || 0),
+        lastSessionStartedAtMs: Number(this.state.lastSessionStartedAtMs || 0),
+        lastSessionEndedAtMs: Number(this.state.lastSessionEndedAtMs || 0),
         lastEventAtMs: Number(this.state.lastEventAtMs || 0),
         lastResultAtMs: Number(this.state.lastResultAtMs || 0),
+        lastResultIndex: this.state.lastResultIndex == null ? null : Number(this.state.lastResultIndex || 0),
+        browserCyclePending: Boolean(this.state.browserCyclePending),
+        browserCycleCount: Number(this.state.browserCycleCount || 0),
+        browserMinimumReconnectSuppressedCount: Number(this.state.browserMinimumReconnectSuppressedCount || 0),
+        browserForcedFinalOnInterruptionCount: Number(this.state.browserForcedFinalOnInterruptionCount || 0),
         lastErrorKind: this.state.lastErrorKind || null,
         lastError: this.state.lastError || null,
         degradedReason: this.state.degradedReason || null,
@@ -67,16 +82,33 @@
         nextClientSegmentOrdinal: Number(this.state.nextClientSegmentOrdinal || 0),
         currentSegmentLastPartialText: this.state.currentSegmentLastPartialText || "",
         currentSegmentLastFinalText: this.state.currentSegmentLastFinalText || "",
+        currentPartialStableSinceMs: Number(this.state.currentPartialStableSinceMs || 0),
         currentSegmentForcedFinalized: Boolean(this.state.currentSegmentForcedFinalized),
         lastForcedFinal: this.state.lastForcedFinal || null,
         duplicatePartialSuppressed: Number(this.state.duplicatePartialSuppressed || 0),
         duplicateFinalSuppressed: Number(this.state.duplicateFinalSuppressed || 0),
         lateForcedFinalSuppressed: Number(this.state.lateForcedFinalSuppressed || 0),
+        minimumReconnectIntervalMs: Number(this.state.minimumReconnectIntervalMs || 500),
+        normalRestartDelayMs: Number(this.state.normalRestartDelayMs || 350),
+        noSpeechRestartDelayMs: Number(this.state.noSpeechRestartDelayMs || 350),
+        networkReconnectInitialMs: Number(this.state.networkReconnectInitialMs || 1000),
+        networkReconnectMaxMs: Number(this.state.networkReconnectMaxMs || 30000),
+        maxBrowserSessionAgeMs: Number(this.state.maxBrowserSessionAgeMs || 240000),
+        prepareCycleBeforeMs: Number(this.state.prepareCycleBeforeMs || 15000),
+        forceFinalOnInterruption: this.state.forceFinalOnInterruption !== false,
+        forceFinalMinChars: Number(this.state.forceFinalMinChars || 3),
+        forceFinalMinStableMs: Number(this.state.forceFinalMinStableMs || 700),
         micTrackReadyState: this.state.micTrackReadyState || null,
         micTrackMuted: Boolean(this.state.micTrackMuted),
         micRms: Number(this.state.micRms || 0),
         micActiveRecentMs: this.state.micActiveRecentMs == null ? null : Number(this.state.micActiveRecentMs || 0),
         lastMicActivityAt: Number(this.state.lastMicActivityAt || 0),
+        getUserMediaCount: Number(this.state.getUserMediaCount || 0),
+        getUserMediaLastError: this.state.getUserMediaLastError || null,
+        micStreamActive: Boolean(this.state.micStreamActive),
+        mediaTracksStoppedCount: Number(this.state.mediaTracksStoppedCount || 0),
+        mediaTrackLeakGuardCount: Number(this.state.mediaTrackLeakGuardCount || 0),
+        workerTranscriptMessageSequence: Number(this.state.workerTranscriptMessageSequence || 0),
       });
     }
 
@@ -110,6 +142,96 @@
 
     _currentVisibilityState() {
       return document.hidden ? "hidden" : "visible";
+    }
+
+    _currentSessionAgeMs(nowMs = this._now()) {
+      if (!this.state.lastSessionStartedAtMs) {
+        return null;
+      }
+      return Math.max(0, nowMs - Number(this.state.lastSessionStartedAtMs || 0));
+    }
+
+    _resetCycleState() {
+      this.state.browserCyclePending = false;
+    }
+
+    _minimumReconnectGuardDelayMs(delayMs) {
+      const minimumIntervalMs = Math.max(0, Number(this.state.minimumReconnectIntervalMs || this.minimumReconnectIntervalMs || 0));
+      if (!minimumIntervalMs) {
+        return delayMs;
+      }
+      const anchorMs = Math.max(
+        Number(this.state.lastSessionEndedAtMs || 0),
+        Number(this.state.lastEndAtMs || 0),
+        Number(this.state.lastStartAtMs || 0)
+      );
+      if (!anchorMs) {
+        return delayMs;
+      }
+      const remainingMs = minimumIntervalMs - Math.max(0, this._now() - anchorMs);
+      if (remainingMs <= 0 || remainingMs <= delayMs) {
+        return delayMs;
+      }
+      this.state.browserMinimumReconnectSuppressedCount = Number(this.state.browserMinimumReconnectSuppressedCount || 0) + 1;
+      return remainingMs;
+    }
+
+    _canForceFinalizeOnInterruption() {
+      if (!this.state.forceFinalOnInterruption || !this._isForceFinalizationEnabled()) {
+        return false;
+      }
+      const normalizedText = this._normalizeTranscriptText(this.state.currentPartial);
+      if (!normalizedText || normalizedText.length < Math.max(1, Number(this.state.forceFinalMinChars || 0))) {
+        return false;
+      }
+      if (normalizedText === this.state.currentSegmentLastFinalText) {
+        return false;
+      }
+      const stableSinceMs = Number(this.state.currentPartialStableSinceMs || 0);
+      if (!stableSinceMs) {
+        return false;
+      }
+      return (this._now() - stableSinceMs) >= Math.max(0, Number(this.state.forceFinalMinStableMs || 0));
+    }
+
+    _forceFinalizeOnInterruption(reason) {
+      if (!this._canForceFinalizeOnInterruption()) {
+        return false;
+      }
+      const finalText = this._normalizeTranscriptText(this.state.currentPartial);
+      const clientSegmentId = this.state.currentClientSegmentId || this._ensureClientSegmentId();
+      if (this._shouldSuppressFinal(finalText, { forcedFinal: true })) {
+        return false;
+      }
+      this._clearForceFinalizeTimer();
+      this.state.missingFinalCount = Number(this.state.missingFinalCount || 0) + 1;
+      this.state.forcedCount = Number(this.state.forcedCount || 0) + 1;
+      this.state.browserForcedFinalOnInterruptionCount = Number(this.state.browserForcedFinalOnInterruptionCount || 0) + 1;
+      this.state.currentSegmentLastFinalText = finalText;
+      this.state.currentSegmentForcedFinalized = true;
+      this.state.lastForcedFinal = {
+        generation_id: this._currentGenerationId(),
+        client_segment_id: clientSegmentId,
+        text: finalText,
+        reason: String(reason || "browser_recognition_interrupted"),
+        at_ms: this._now(),
+      };
+      this.state.currentPartial = "";
+      this.state.currentPartialStableSinceMs = 0;
+      this.options.setFinalText?.(finalText);
+      this.options.setPartialText?.("");
+      this._sendUpdate({
+        partial: finalText,
+        final: finalText,
+        is_final: true,
+        source_lang: this.state.sourceLang,
+        client_segment_id: clientSegmentId,
+        forced_final: true,
+        forced_final_reason: String(reason || "browser_recognition_interrupted"),
+      });
+      this._setStatus("forced-finalized");
+      this._updateCounters();
+      return true;
     }
 
     _clearForceFinalizeTimer() {
@@ -204,6 +326,7 @@
       this.state.currentClientSegmentId = null;
       this.state.currentSegmentLastPartialText = "";
       this.state.currentSegmentLastFinalText = "";
+      this.state.currentPartialStableSinceMs = 0;
       this.state.currentSegmentForcedFinalized = false;
       this.state.lastForcedFinal = null;
       this._clearForceFinalizeTimer();
@@ -242,11 +365,14 @@
       const normalized = String(reason || "").trim().toLowerCase();
       if (normalized === "no_speech") {
         if (!this.state.noSpeechBackoffMs) {
-          this.state.noSpeechBackoffMs = this.initialNoSpeechDelayMs;
+          this.state.noSpeechBackoffMs = Math.max(0, Number(this.state.noSpeechRestartDelayMs || this.initialNoSpeechDelayMs));
         } else {
           this.state.noSpeechBackoffMs = Math.min(
             this.maxNoSpeechDelayMs,
-            Math.max(this.initialNoSpeechDelayMs, this.state.noSpeechBackoffMs + 800)
+            Math.max(
+              Math.max(0, Number(this.state.noSpeechRestartDelayMs || this.initialNoSpeechDelayMs)),
+              this.state.noSpeechBackoffMs + 800
+            )
           );
         }
         return this.state.noSpeechBackoffMs;
@@ -298,6 +424,8 @@
     }
 
     _buildUpdatePayload(payload) {
+      const nowMs = this._now();
+      this.state.workerTranscriptMessageSequence = Number(this.state.workerTranscriptMessageSequence || 0) + 1;
       return {
         partial: payload.partial || "",
         final: payload.final || "",
@@ -305,6 +433,10 @@
         source_lang: payload.source_lang || this.state.sourceLang || "auto",
         client_segment_id: payload.client_segment_id || this.state.currentClientSegmentId || null,
         forced_final: Boolean(payload.forced_final),
+        forced_final_reason: payload.forced_final_reason || null,
+        asr_result_created_at_ms: payload.asr_result_created_at_ms || nowMs,
+        worker_send_started_at_ms: nowMs,
+        worker_message_sequence: this.state.workerTranscriptMessageSequence,
       };
     }
 
@@ -370,7 +502,10 @@
         session_id: this.state.sessionId,
         generation_id: Number(this.state.generationId || 0),
         browser_mode: this.state.browserMode || "browser_google",
+        provider_name: this.state.providerName || this.state.browserMode || "browser_google",
         desired_running: Boolean(this.state.desiredRunning),
+        active_recognition: Boolean(this.state.recognition),
+        active_media_stream: Boolean(this.state.mediaStream),
         recognition_state: this.state.recognitionState || "idle",
         browser_supervisor_state: this.state.browserSupervisorState || "idle",
         supervisor_state: this.state.browserSupervisorState || "idle",
@@ -389,6 +524,15 @@
         effective_continuous_mode: this.state.effectiveContinuousMode || "native_continuous",
         client_segment_id: this.state.currentClientSegmentId || null,
         forced_final: Boolean(this.state.currentSegmentForcedFinalized),
+        last_result_index: this.state.lastResultIndex,
+        last_result_at_ms: Number(this.state.lastResultAtMs || 0) || null,
+        last_session_started_at_ms: Number(this.state.lastSessionStartedAtMs || 0) || null,
+        last_session_ended_at_ms: Number(this.state.lastSessionEndedAtMs || 0) || null,
+        browser_session_age_ms: this._currentSessionAgeMs(),
+        browser_cycle_pending: Boolean(this.state.browserCyclePending),
+        browser_cycle_count: Number(this.state.browserCycleCount || 0),
+        browser_minimum_reconnect_suppressed_count: Number(this.state.browserMinimumReconnectSuppressedCount || 0),
+        browser_forced_final_on_interruption_count: Number(this.state.browserForcedFinalOnInterruptionCount || 0),
         duplicate_partial_suppressed: Number(this.state.duplicatePartialSuppressed || 0),
         duplicate_final_suppressed: Number(this.state.duplicateFinalSuppressed || 0),
         late_forced_final_suppressed: Number(this.state.lateForcedFinalSuppressed || 0),
@@ -397,6 +541,11 @@
         mic_rms: Number.isFinite(this.state.micRms) ? Number(this.state.micRms) : 0,
         mic_active_recent_ms: this.state.micActiveRecentMs == null ? null : Math.max(0, Number(this.state.micActiveRecentMs || 0)),
         last_mic_activity_at: Number(this.state.lastMicActivityAt || 0) || null,
+        get_user_media_count: Number(this.state.getUserMediaCount || 0),
+        get_user_media_last_error: this.state.getUserMediaLastError || null,
+        mic_stream_active: Boolean(this.state.micStreamActive),
+        media_tracks_stopped_count: Number(this.state.mediaTracksStoppedCount || 0),
+        media_track_leak_guard_count: Number(this.state.mediaTrackLeakGuardCount || 0),
         visibility_state: this._currentVisibilityState(),
         last_seen_at_ms: this._now(),
         ...extra,
@@ -504,8 +653,31 @@
       const settings = this._getRecognitionSettings();
       this.state.configuredLanguage = settings.language || this.state.configuredLanguage || "ru-RU";
       this.state.sourceLang = String(this.state.configuredLanguage.split("-", 1)[0] || "ru").toLowerCase();
+      this.state.providerName = String(settings.providerName || this.state.browserMode || "browser_google");
       this.state.actualContinuous = settings.continuous !== false;
       this.state.effectiveContinuousMode = this.state.actualContinuous ? "native_continuous" : "segmented_restart";
+      this.state.minimumReconnectIntervalMs = Math.max(100, Number(settings.minimumReconnectIntervalMs || this.state.minimumReconnectIntervalMs || 500));
+      this.state.normalRestartDelayMs = Math.max(0, Number(settings.normalRestartDelayMs || this.state.normalRestartDelayMs || 350));
+      this.state.noSpeechRestartDelayMs = Math.max(0, Number(settings.noSpeechRestartDelayMs || this.state.noSpeechRestartDelayMs || 350));
+      this.state.networkReconnectInitialMs = Math.max(100, Number(settings.networkReconnectInitialMs || this.state.networkReconnectInitialMs || 1000));
+      this.state.networkReconnectMaxMs = Math.max(
+        this.state.networkReconnectInitialMs,
+        Number(settings.networkReconnectMaxMs || this.state.networkReconnectMaxMs || 30000)
+      );
+      this.state.maxBrowserSessionAgeMs = Math.max(10000, Number(settings.maxBrowserSessionAgeMs || this.state.maxBrowserSessionAgeMs || 240000));
+      this.state.prepareCycleBeforeMs = Math.max(0, Number(settings.prepareCycleBeforeMs || this.state.prepareCycleBeforeMs || 15000));
+      this.state.forceFinalOnInterruption = settings.forceFinalOnInterruption !== false;
+      this.state.forceFinalMinChars = Math.max(1, Number(settings.forceFinalMinChars || this.state.forceFinalMinChars || 3));
+      this.state.forceFinalMinStableMs = Math.max(0, Number(settings.forceFinalMinStableMs || this.state.forceFinalMinStableMs || 700));
+      this.restartDelayByReasonMs.normal_onend = this.state.normalRestartDelayMs;
+      this.restartDelayByReasonMs.settings_change = this.state.normalRestartDelayMs;
+      this.restartDelayByReasonMs.websocket_reconnect = this.state.normalRestartDelayMs;
+      this.restartDelayByReasonMs.session_cycle = this.state.normalRestartDelayMs;
+      this.initialNoSpeechDelayMs = this.state.noSpeechRestartDelayMs;
+      this.initialNetworkBackoffMs = this.state.networkReconnectInitialMs;
+      this.maxNetworkBackoffMs = this.state.networkReconnectMaxMs;
+      this.maxStoppingMs = Math.max(500, Number(settings.stuckStoppingTimeoutMs || this.state.stuckStoppingTimeoutMs || this.maxStoppingMs));
+      this.state.stuckStoppingTimeoutMs = this.maxStoppingMs;
       const recognition = this.state.recognition;
       if (!recognition) {
         this._updateCounters();
@@ -577,8 +749,10 @@
       this.state.desiredRunning = false;
       this.state.pendingStart = false;
       this.state.generationId = Number(this.state.generationId || 0) + 1;
+      this._resetCycleState();
       this._clearAllTimers();
       this.state.currentPartial = "";
+      this.state.currentPartialStableSinceMs = 0;
       this.state.hasOpenSentence = false;
       this.state.stoppingSinceMs = this._now();
       this.state.pendingRestartReason = null;
@@ -735,11 +909,13 @@
       this._permissionPromise = Promise.resolve(this.options.ensureMicrophonePermission?.())
         .then((result) => {
           this._permissionPromise = null;
+          this.state.getUserMediaLastError = null;
           this._appendLog("microphone permission granted");
           return result;
         })
         .catch((error) => {
           this._permissionPromise = null;
+          this.state.getUserMediaLastError = error instanceof Error ? error.message : String(error || "");
           this._appendLog(`microphone permission failed: ${error instanceof Error ? error.message : error}`);
           throw error;
         });
@@ -758,12 +934,14 @@
           return;
         }
         this.state.lastStartAtMs = this._now();
+        this.state.lastSessionStartedAtMs = this.state.lastStartAtMs;
         this.state.stoppingSinceMs = null;
         this._setLastError(null, null);
         this.state.noSpeechBackoffMs = 0;
         this.state.restartBackoffMs = 0;
         this._setTerminalDegradedReason(null);
         this.state.pendingRestartReason = null;
+        this._resetCycleState();
         this._setRecognitionState("running");
         this._setSupervisorState("running");
         this._setStatus("listening");
@@ -843,6 +1021,7 @@
           return;
         }
         this.state.lastEndAtMs = this._now();
+        this.state.lastSessionEndedAtMs = this.state.lastEndAtMs;
         this.state.onSound = false;
         this._setRecognitionState("idle");
         if (!this.state.desiredRunning) {
@@ -876,6 +1055,7 @@
         }
         let interimText = "";
         let finalText = "";
+        this.state.lastResultIndex = Number(event.resultIndex || 0);
         for (let index = event.resultIndex; index < event.results.length; index += 1) {
           const result = event.results[index];
           const transcript = String(result?.[0]?.transcript || "").trim();
@@ -892,11 +1072,16 @@
         if (interimText) {
           this._markActivity("result");
           const clientSegmentId = this._ensureClientSegmentId();
+          const nowMs = this._now();
+          const normalizedInterimText = this._normalizeTranscriptText(interimText);
+          if (normalizedInterimText !== this.state.currentSegmentLastPartialText) {
+            this.state.currentPartialStableSinceMs = nowMs;
+          }
           this.state.currentPartial = interimText;
-          this.state.lastPartialAt = this._now();
+          this.state.lastPartialAt = nowMs;
           this.options.setPartialText?.(interimText);
           if (!this._shouldSuppressDuplicatePartial(interimText)) {
-            this.state.currentSegmentLastPartialText = this._normalizeTranscriptText(interimText);
+            this.state.currentSegmentLastPartialText = normalizedInterimText;
             this.state.currentSegmentForcedFinalized = false;
             this._sendUpdate({
               partial: interimText,
@@ -923,6 +1108,7 @@
           }
           this._clearForceFinalizeTimer();
           this.state.currentPartial = "";
+          this.state.currentPartialStableSinceMs = 0;
           this.state.lastFinalAt = this._now();
           this.state.finalCount = Number(this.state.finalCount || 0) + 1;
           this.state.currentSegmentLastFinalText = this._normalizeTranscriptText(finalText);
@@ -963,6 +1149,7 @@
       this._setSupervisorState("starting");
       this._setRecognitionState("starting");
       this.state.stoppingSinceMs = null;
+      this.state.providerName = this.state.browserMode || "browser_google";
       this.state.pendingRestartReason = null;
       this.ensureSocketConnected();
       const recognition = this._createRecognition(generationId);
@@ -986,6 +1173,9 @@
 
     _transitionToStopping(reason) {
       const recognition = this.state.recognition;
+      if (reason !== "user-stop") {
+        this._forceFinalizeOnInterruption("browser_recognition_interrupted");
+      }
       if (!recognition) {
         this._cleanupRecognitionInstance(this.state.recognitionGenerationId);
         this._setRecognitionState("idle");
@@ -1021,10 +1211,11 @@
         return;
       }
       const normalizedReason = String(reason || "normal_onend").trim().toLowerCase();
-      const delayMs = Math.max(
+      const requestedDelayMs = Math.max(
         0,
         Number(options.backoffMs != null ? options.backoffMs : this._restartDelayForReason(normalizedReason))
       );
+      const delayMs = this._minimumReconnectGuardDelayMs(requestedDelayMs);
       this._clearRestartTimer();
       this.state.restartCount = Number(this.state.restartCount || 0) + 1;
       this.state.lastRestartReason = normalizedReason;
@@ -1049,9 +1240,12 @@
 
     _nextNetworkBackoff() {
       if (!this.state.restartBackoffMs) {
-        return this.initialNetworkBackoffMs;
+        return Math.max(100, Number(this.state.networkReconnectInitialMs || this.initialNetworkBackoffMs));
       }
-      return Math.min(this.maxNetworkBackoffMs, this.state.restartBackoffMs * 2);
+      return Math.min(
+        Math.max(100, Number(this.state.networkReconnectMaxMs || this.maxNetworkBackoffMs)),
+        this.state.restartBackoffMs * 2
+      );
     }
 
     _cleanupRecognitionInstance(generationId) {
@@ -1096,6 +1290,34 @@
       }
       const now = this._now();
       this._refreshHealthSignals();
+      const sessionAgeMs = this._currentSessionAgeMs(now);
+      const prepareAtMs = Math.max(
+        0,
+        Number(this.state.maxBrowserSessionAgeMs || this.maxBrowserSessionAgeMs)
+        - Number(this.state.prepareCycleBeforeMs || this.prepareCycleBeforeMs)
+      );
+      if (
+        this.state.browserSupervisorState === "running"
+        && sessionAgeMs != null
+        && sessionAgeMs >= prepareAtMs
+        && !this.state.browserCyclePending
+      ) {
+        this.state.browserCyclePending = true;
+        this._emitWorkerStatus("cycle-pending");
+      }
+      if (
+        this.state.browserSupervisorState === "running"
+        && sessionAgeMs != null
+        && sessionAgeMs >= Number(this.state.maxBrowserSessionAgeMs || this.maxBrowserSessionAgeMs)
+      ) {
+        this.state.browserCycleCount = Number(this.state.browserCycleCount || 0) + 1;
+        this.state.pendingStart = true;
+        this.state.pendingRestartReason = "session_cycle";
+        this._appendLog("browser session age limit reached; controlled cycle requested");
+        this._transitionToStopping("session-cycle");
+        this._emitWorkerStatus("session-cycle");
+        return;
+      }
       if (this.state.browserSupervisorState === "stopping" && this.state.stoppingSinceMs) {
         if ((now - Number(this.state.stoppingSinceMs)) >= this.maxStoppingMs) {
           const recognition = this.state.recognition;

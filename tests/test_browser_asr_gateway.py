@@ -36,6 +36,18 @@ class BrowserAsrGatewayTests(unittest.TestCase):
                 "recognition_state": "running",
                 "client_segment_id": "browser-seg-3",
                 "forced_final": True,
+                "provider_name": "browser_google",
+                "active_recognition": True,
+                "active_media_stream": False,
+                "last_result_index": 9,
+                "last_result_at_ms": 1234,
+                "last_session_started_at_ms": 1000,
+                "last_session_ended_at_ms": 0,
+                "browser_session_age_ms": 234,
+                "browser_cycle_pending": True,
+                "browser_cycle_count": 3,
+                "browser_minimum_reconnect_suppressed_count": 2,
+                "browser_forced_final_on_interruption_count": 1,
                 "last_error": "temporary glitch",
                 "error_type": "network",
                 "degraded_reason": "document_hidden",
@@ -52,6 +64,11 @@ class BrowserAsrGatewayTests(unittest.TestCase):
                 "mic_rms": 0.021,
                 "mic_active_recent_ms": 320,
                 "last_mic_activity_at": 1234567890,
+                "get_user_media_count": 4,
+                "get_user_media_last_error": "permission dismissed",
+                "mic_stream_active": True,
+                "media_tracks_stopped_count": 6,
+                "media_track_leak_guard_count": 2,
                 "last_partial_age_ms": 25,
                 "last_final_age_ms": 120,
             }
@@ -63,6 +80,17 @@ class BrowserAsrGatewayTests(unittest.TestCase):
         self.assertTrue(diagnostics.worker_connected)
         self.assertTrue(diagnostics.desired_running)
         self.assertTrue(diagnostics.recognition_running)
+        self.assertEqual(diagnostics.provider_name, "browser_google")
+        self.assertTrue(diagnostics.active_recognition)
+        self.assertFalse(diagnostics.active_media_stream)
+        self.assertEqual(diagnostics.last_result_index, 9)
+        self.assertEqual(diagnostics.last_result_at_ms, 1234)
+        self.assertEqual(diagnostics.last_session_started_at_ms, 1000)
+        self.assertEqual(diagnostics.browser_session_age_ms, 234)
+        self.assertTrue(diagnostics.browser_cycle_pending)
+        self.assertEqual(diagnostics.browser_cycle_count, 3)
+        self.assertEqual(diagnostics.browser_minimum_reconnect_suppressed_count, 2)
+        self.assertEqual(diagnostics.browser_forced_final_on_interruption_count, 1)
         self.assertEqual(diagnostics.last_error, "temporary glitch")
         self.assertEqual(diagnostics.error_type, "network")
         self.assertEqual(diagnostics.degraded_reason, "document_hidden")
@@ -81,6 +109,11 @@ class BrowserAsrGatewayTests(unittest.TestCase):
         self.assertAlmostEqual(diagnostics.mic_rms or 0.0, 0.021, places=3)
         self.assertEqual(diagnostics.mic_active_recent_ms, 320)
         self.assertEqual(diagnostics.last_mic_activity_at, 1234567890)
+        self.assertEqual(diagnostics.get_user_media_count, 4)
+        self.assertEqual(diagnostics.get_user_media_last_error, "permission dismissed")
+        self.assertTrue(diagnostics.mic_stream_active)
+        self.assertEqual(diagnostics.media_tracks_stopped_count, 6)
+        self.assertEqual(diagnostics.media_track_leak_guard_count, 2)
         self.assertEqual(diagnostics.last_partial_age_ms, 0)
         self.assertEqual(diagnostics.last_final_age_ms, 0)
         self.assertIsNotNone(diagnostics.last_partial_at_utc)
@@ -131,6 +164,41 @@ class BrowserAsrGatewayTests(unittest.TestCase):
             }
         )
         self.assertIn("browser_recognition_started", [record["event"] for record in logger.records])
+
+    def test_identical_status_uses_compact_heartbeat_instead_of_full_snapshot(self) -> None:
+        logger = _RecordingStructuredLogger()
+        gateway = BrowserAsrGateway(structured_logger=logger)
+
+        gateway.worker_connected()
+        gateway.update_status(
+            {
+                "reason": "heartbeat",
+                "desired_running": True,
+                "recognition_running": True,
+                "recognition_state": "running",
+                "generation_id": 7,
+                "browser_cycle_count": 2,
+                "last_partial_age_ms": 30,
+            }
+        )
+
+        logger.records.clear()
+        gateway._last_status_heartbeat_at_ms = gateway._now_ms() - 6000  # noqa: SLF001
+        gateway.update_status(
+            {
+                "reason": "heartbeat",
+                "desired_running": True,
+                "recognition_running": True,
+                "recognition_state": "running",
+                "generation_id": 7,
+                "browser_cycle_count": 2,
+                "last_partial_age_ms": 95,
+            }
+        )
+
+        events = [record["event"] for record in logger.records]
+        self.assertNotIn("browser_worker_status", events)
+        self.assertIn("browser_worker_heartbeat", events)
 
     def test_samples_repeated_no_speech_errors_but_keeps_critical_status(self) -> None:
         logger = _RecordingStructuredLogger()

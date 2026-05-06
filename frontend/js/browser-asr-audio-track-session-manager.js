@@ -70,15 +70,23 @@
         this.state.audioTrackReused = false;
         this.state.micTrackReadyState = "missing";
         this.state.micTrackMuted = false;
+        this.state.micStreamActive = false;
         return;
       }
       this.state.lastAudioTrackError = "";
       this.state.audioTrackReused = Boolean(this.state.audioTrackReused);
       this.state.micTrackReadyState = String(track.readyState || "unknown");
       this.state.micTrackMuted = Boolean(track.muted);
+      this.state.micStreamActive = Boolean(this.state.mediaStream);
     }
 
     async _openAudioTrack() {
+      if (this.state.browserSupervisorState === "stopping") {
+        this.state.mediaTrackLeakGuardCount = Number(this.state.mediaTrackLeakGuardCount || 0) + 1;
+        this._appendLog("experimental audio track open skipped while stopping");
+        return this.state.audioTrack || null;
+      }
+      this.state.getUserMediaCount = Number(this.state.getUserMediaCount || 0) + 1;
       this._emitWorkerStatus("audio-track-permission-requested");
       this._appendLog("experimental audio track: requesting microphone permission");
       try {
@@ -112,6 +120,8 @@
         this.state.mediaStream = stream;
         this.state.audioTrack = audioTrack;
         this.state.audioTrackReused = false;
+        this.state.getUserMediaLastError = null;
+        this.state.micStreamActive = true;
         if (this.state.audioTrackOpenedOnce) {
           this.state.audioTrackReopenCount = Number(this.state.audioTrackReopenCount || 0) + 1;
         }
@@ -131,6 +141,7 @@
             : "Could not open microphone audio track."
         );
         this.state.lastAudioTrackError = message;
+        this.state.getUserMediaLastError = message;
         this._setLastError("audio-capture", message);
         this._appendLog(`experimental audio track open failed: ${message}`);
         this._emitWorkerStatus("audio-track-permission-denied");
@@ -205,6 +216,10 @@
         if (!this.state.desiredRunning) {
           return;
         }
+        if (this.state.browserSupervisorState === "stopping") {
+          this.state.mediaTrackLeakGuardCount = Number(this.state.mediaTrackLeakGuardCount || 0) + 1;
+          return;
+        }
         try {
           await this._openAudioTrack();
           this._setHealthDegradedReason(null);
@@ -233,7 +248,9 @@
     _releaseAudioTrack(reason) {
       const stream = this.state.mediaStream;
       if (stream && typeof stream.getTracks === "function") {
-        stream.getTracks().forEach((track) => {
+        const tracks = stream.getTracks();
+        this.state.mediaTracksStoppedCount = Number(this.state.mediaTracksStoppedCount || 0) + tracks.length;
+        tracks.forEach((track) => {
           try {
             track.stop();
           } catch (_error) {
@@ -241,6 +258,7 @@
           }
         });
       } else if (this.state.audioTrack) {
+        this.state.mediaTracksStoppedCount = Number(this.state.mediaTracksStoppedCount || 0) + 1;
         try {
           this.state.audioTrack.stop();
         } catch (_error) {
@@ -251,6 +269,7 @@
       this.state.audioTrack = null;
       this.state.audioTrackReused = false;
       this._boundAudioTrack = null;
+      this.state.micStreamActive = false;
       this.state.micTrackReadyState = reason === "stop" || reason === "destroy" ? null : "ended";
       this.state.micTrackMuted = false;
       if (reason === "stop" || reason === "destroy") {

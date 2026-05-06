@@ -145,28 +145,9 @@ class ConfigTranslationProviderTests(unittest.TestCase):
         normalized = self.manager._normalize({"asr": {"mode": "browser_google_beta"}})
         self.assertEqual(normalized["asr"]["mode"], "local")
 
-    def test_google_legacy_http_provider_preference_round_trips(self) -> None:
-        saved = self.manager.save(
-            {
-                "asr": {
-                    "mode": "local",
-                    "provider_preference": "google_legacy_http_experimental",
-                    "google_legacy_http": {
-                        "enabled": True,
-                        "language": "ru-RU",
-                        "endpoint_host": " https://example.test ",
-                        "pair_id_prefix": " sst-live ",
-                        "max_queue_depth": 60,
-                    },
-                }
-            }
-        )
-
-        self.assertEqual(saved["asr"]["provider_preference"], "google_legacy_http_experimental")
-        self.assertTrue(saved["asr"]["google_legacy_http"]["enabled"])
-        self.assertEqual(saved["asr"]["google_legacy_http"]["endpoint_host"], "https://example.test")
-        self.assertEqual(saved["asr"]["google_legacy_http"]["pair_id_prefix"], "sst-live")
-        self.assertEqual(saved["asr"]["google_legacy_http"]["max_queue_depth"], 60)
+    def test_invalid_local_provider_preference_falls_back_to_low_latency_parakeet(self) -> None:
+        normalized = self.manager._normalize({"asr": {"provider_preference": "unsupported_provider"}})
+        self.assertEqual(normalized["asr"]["provider_preference"], "official_eu_parakeet_low_latency")
 
     def test_main_settings_groups_round_trip_through_save_and_load(self) -> None:
         payload = {
@@ -175,7 +156,7 @@ class ConfigTranslationProviderTests(unittest.TestCase):
             "audio": {"input_device_id": "mic-2"},
             "asr": {
                 "mode": "browser_google",
-                "provider_preference": "official_eu_parakeet_realtime",
+                "provider_preference": "official_eu_parakeet",
                 "prefer_gpu": False,
                 "rnnoise_enabled": True,
                 "rnnoise_strength": 42,
@@ -221,6 +202,7 @@ class ConfigTranslationProviderTests(unittest.TestCase):
                 "pause_to_finalize_ms": 420,
                 "allow_early_replace_on_next_final": False,
                 "sync_source_and_translation_expiry": False,
+                "keep_completed_translation_during_active_partial": True,
                 "hard_max_phrase_ms": 6200,
             },
             "obs_closed_captions": {
@@ -283,6 +265,7 @@ class ConfigTranslationProviderTests(unittest.TestCase):
         self.assertEqual(loaded["ui"]["language"], "ru")
         self.assertEqual(loaded["audio"]["input_device_id"], "mic-2")
         self.assertEqual(loaded["asr"]["mode"], "browser_google")
+        self.assertEqual(loaded["asr"]["provider_preference"], "official_eu_parakeet")
         self.assertFalse(loaded["asr"]["prefer_gpu"])
         self.assertEqual(loaded["asr"]["browser"]["recognition_language"], "en-US")
         self.assertFalse(loaded["asr"]["browser"]["continuous_results"])
@@ -293,6 +276,7 @@ class ConfigTranslationProviderTests(unittest.TestCase):
         self.assertFalse(loaded["subtitle_output"]["show_source"])
         self.assertEqual(loaded["subtitle_lifecycle"]["pause_to_finalize_ms"], 420)
         self.assertFalse(loaded["subtitle_lifecycle"]["allow_early_replace_on_next_final"])
+        self.assertTrue(loaded["subtitle_lifecycle"]["keep_completed_translation_during_active_partial"])
         self.assertTrue(loaded["obs_closed_captions"]["enabled"])
         self.assertEqual(loaded["obs_closed_captions"]["output_mode"], "translation_1")
         self.assertEqual(loaded["obs_closed_captions"]["debug_mirror"]["input_name"], "CC_DEBUG_ALT")
@@ -303,6 +287,7 @@ class ConfigTranslationProviderTests(unittest.TestCase):
         self.assertEqual(loaded["updates"]["github_repo"], "kiriuru/stream_sub_translator")
         self.assertEqual(loaded["updates"]["latest_known_version"], "0.2.9.9")
         self.assertEqual(saved, loaded)
+
 
 if __name__ == "__main__":
     unittest.main()

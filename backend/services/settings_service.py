@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from copy import deepcopy
 from typing import Any
 
 from fastapi import FastAPI
 
+from backend.core.asr_provider_selection import resolve_effective_asr_provider
 from backend.core.redaction import redact_data, redact_mapping
 from backend.models import (
     RemoteWorkerSettingsSyncResponse,
@@ -33,6 +36,53 @@ class SettingsService:
             payload=payload or None,
         )
 
+    def _settings_summary(self, payload: dict[str, Any], *, previous_payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        config = payload if isinstance(payload, dict) else {}
+        resolved_asr = resolve_effective_asr_provider(config)
+        translation = config.get("translation", {}) if isinstance(config, dict) else {}
+        target_languages = translation.get("target_languages", []) if isinstance(translation, dict) else []
+        changed_sections: list[str] = []
+        if isinstance(previous_payload, dict):
+            for section in ("asr", "translation", "subtitle_output", "subtitle_lifecycle", "audio", "remote", "overlay"):
+                if previous_payload.get(section) != config.get(section):
+                    changed_sections.append(section)
+        config_hash = hashlib.sha256(
+            json.dumps(redact_data(config), ensure_ascii=False, sort_keys=True).encode("utf-8")
+        ).hexdigest()[:16]
+        summary = {
+            "config_version": config.get("config_version"),
+            "asr.mode": resolved_asr.get("mode"),
+            "provider_preference": resolved_asr.get("provider_preference"),
+            "effective_provider": resolved_asr.get("effective_provider"),
+            "translation.enabled": bool(translation.get("enabled")) if isinstance(translation, dict) else False,
+            "translation.provider": translation.get("provider") if isinstance(translation, dict) else None,
+            "target_languages_count": len([item for item in target_languages if str(item).strip()]) if isinstance(target_languages, list) else 0,
+            "changed_sections": changed_sections,
+            "config_hash": config_hash,
+        }
+        redacted_fields = self._sensitive_field_markers(config)
+        if redacted_fields:
+            summary["redacted_fields"] = redacted_fields
+        return summary
+
+    def _sensitive_field_markers(self, payload: Any, *, prefix: str = "") -> dict[str, str]:
+        markers: dict[str, str] = {}
+        if isinstance(payload, dict):
+            for key, value in payload.items():
+                normalized_key = str(key or "").strip()
+                if not normalized_key:
+                    continue
+                path = f"{prefix}.{normalized_key}" if prefix else normalized_key
+                lowered = normalized_key.lower()
+                if lowered in {"api_key", "key", "token", "authorization", "password", "secret"}:
+                    markers[path] = "[redacted]"
+                    continue
+                markers.update(self._sensitive_field_markers(value, prefix=path))
+        elif isinstance(payload, list):
+            for index, item in enumerate(payload):
+                markers.update(self._sensitive_field_markers(item, prefix=f"{prefix}[{index}]"))
+        return markers
+
     def _sync_remote_pairing_session(self) -> None:
         manager = getattr(self._app.state, "remote_session_manager", None)
         if manager is None:
@@ -54,7 +104,7 @@ class SettingsService:
             "settings_loaded",
             payload={
                 "config_path": str(self._app.state.app_settings.config_path),
-                "payload": redact_data(payload),
+                "settings_summary": self._settings_summary(payload),
             },
         )
         return SettingsLoadResponse(
@@ -66,6 +116,7 @@ class SettingsService:
 
     async def save(self, payload: SettingsSaveRequest) -> SettingsSaveResponse:
         config_manager = self._app.state.config_manager
+        previous_payload = deepcopy(self._config_payload())
         saved_payload = config_manager.save(payload.payload)
         self._app.state.config = saved_payload
         self._sync_remote_pairing_session()
@@ -73,7 +124,7 @@ class SettingsService:
             "settings_saved",
             payload={
                 "config_path": str(self._app.state.app_settings.config_path),
-                "payload": redact_data(saved_payload),
+                "settings_summary": self._settings_summary(saved_payload, previous_payload=previous_payload),
             },
         )
         live_applied = False

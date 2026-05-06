@@ -46,6 +46,17 @@ class AsrBrowserConfig(SchemaModel):
     continuous_results: bool = True
     force_finalization_enabled: bool = True
     force_finalization_timeout_ms: int = 1600
+    minimum_reconnect_interval_ms: int = 500
+    normal_restart_delay_ms: int = 350
+    no_speech_restart_delay_ms: int = 350
+    network_reconnect_initial_ms: int = 1000
+    network_reconnect_max_ms: int = 30000
+    stuck_stopping_timeout_ms: int = 2500
+    max_browser_session_age_ms: int = 240000
+    prepare_cycle_before_ms: int = 15000
+    force_final_on_interruption: bool = True
+    force_final_min_chars: int = 3
+    force_final_min_stable_ms: int = 700
     experimental: AsrBrowserExperimentalConfig = Field(default_factory=AsrBrowserExperimentalConfig)
 
 
@@ -66,35 +77,15 @@ class AsrRealtimeConfig(SchemaModel):
     partial_coalescing_ms: int = 160
 
 
-class GoogleLegacyHttpConfig(SchemaModel):
-    enabled: bool = False
-    language: str = "ru-RU"
-    profanity_filter: bool = False
-    connect_timeout_ms: int = 10000
-    send_timeout_ms: int = 10000
-    recv_timeout_ms: int = 30000
-    max_queue_depth: int = 50
-    reconnect_initial_ms: int = 1000
-    reconnect_max_ms: int = 30000
-    endpoint_host: str = ""
-    pair_id_prefix: str = "sst"
-
-
 class AsrConfig(SchemaModel):
     mode: Literal["local", "browser_google", "browser_google_experimental"] = "local"
-    provider_preference: Literal[
-        "auto",
-        "official_eu_parakeet",
-        "official_eu_parakeet_low_latency",
-        "google_legacy_http_experimental",
-    ] = (
+    provider_preference: Literal["official_eu_parakeet", "official_eu_parakeet_low_latency"] = (
         "official_eu_parakeet_low_latency"
     )
     prefer_gpu: bool = True
     rnnoise_enabled: bool = False
     rnnoise_strength: int = 70
     browser: AsrBrowserConfig = Field(default_factory=AsrBrowserConfig)
-    google_legacy_http: GoogleLegacyHttpConfig = Field(default_factory=GoogleLegacyHttpConfig)
     realtime: AsrRealtimeConfig = Field(default_factory=AsrRealtimeConfig)
 
 
@@ -280,6 +271,7 @@ class SubtitleLifecycleConfig(SchemaModel):
     pause_to_finalize_ms: int = 350
     allow_early_replace_on_next_final: bool = True
     sync_source_and_translation_expiry: bool = True
+    keep_completed_translation_during_active_partial: bool = True
     hard_max_phrase_ms: int = 5500
 
 

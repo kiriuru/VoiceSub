@@ -99,9 +99,9 @@
                 <label>
                   <span class="label" data-i18n="overview.recognition.mode">Recognition method</span>
                   <select id="recognition-mode-select">
-                    <option value="local" data-i18n="overview.recognition.mode.local">Local Parakeet</option>
-                    <option value="browser_google" data-i18n="overview.recognition.mode.browser_google">Browser Speech</option>
-                    <option value="browser_google_experimental" data-i18n="overview.recognition.mode.browser_google_experimental">Browser Speech (Experimental)</option>
+                    <option value="local" data-i18n="overview.recognition.mode.local">Local Parakeet ASR</option>
+                    <option value="browser_google" data-i18n="overview.recognition.mode.browser_google">Browser Google Speech</option>
+                    <option value="browser_google_experimental" data-i18n="overview.recognition.mode.browser_google_experimental">Browser Google Speech Experimental</option>
                   </select>
                 </label>
                 <label id="recognition-language-row" hidden>
@@ -109,60 +109,13 @@
                   <select id="recognition-language-select"></select>
                 </label>
                 <label id="local-asr-provider-row">
-                  <span class="label" data-i18n="overview.recognition.provider">Local ASR provider</span>
+                  <span class="label" data-i18n="overview.recognition.provider">Backend ASR provider</span>
                   <select id="local-asr-provider-select">
                     <option value="official_eu_parakeet_low_latency" data-i18n="overview.recognition.provider.parakeet_low_latency">Official EU Parakeet Low Latency</option>
                     <option value="official_eu_parakeet" data-i18n="overview.recognition.provider.parakeet">Official EU Parakeet</option>
-                    <option value="auto" data-i18n="overview.recognition.provider.auto">Auto</option>
-                    <option value="google_legacy_http_experimental" data-i18n="overview.recognition.provider.google_legacy_http">Google Legacy HTTP Speech Experimental</option>
                   </select>
                 </label>
-                <p id="local-asr-provider-hint" class="muted" data-i18n="overview.recognition.provider.hint">Local backend providers are configured here. To use Google Legacy HTTP Speech Experimental, switch Recognition method to Local Parakeet.</p>
-                <p id="google-legacy-http-warning" class="muted" hidden data-i18n="overview.recognition.provider.google_legacy_http.warning">Experimental legacy Google speech endpoint. Sends audio to Google. Unofficial/unsupported and may stop working.</p>
-                <div id="google-legacy-http-settings" hidden>
-                  <div class="toggle-row">
-                    <label class="checkbox-row">
-                      <input id="google-legacy-http-enabled" type="checkbox" />
-                      <span data-i18n="overview.recognition.provider.google_legacy_http.enabled">Enable this backend provider</span>
-                    </label>
-                  </div>
-                  <div class="actions">
-                    <label class="stack-field grow">
-                      <span data-i18n="overview.recognition.provider.google_legacy_http.language">Recognition language</span>
-                      <input id="google-legacy-http-language" type="text" placeholder="ru-RU" />
-                    </label>
-                    <label class="stack-field grow">
-                      <span data-i18n="overview.recognition.provider.google_legacy_http.endpoint_host">Endpoint host</span>
-                      <input id="google-legacy-http-endpoint-host" type="text" placeholder="https://www.google.com" />
-                    </label>
-                  </div>
-                  <div class="toggle-row">
-                    <label class="checkbox-row">
-                      <input id="google-legacy-http-profanity-filter" type="checkbox" />
-                      <span data-i18n="overview.recognition.provider.google_legacy_http.profanity_filter">Enable profanity filter flag</span>
-                    </label>
-                  </div>
-                  <div class="actions">
-                    <label class="inline-field">
-                      <span data-i18n="overview.recognition.provider.google_legacy_http.connect_timeout_ms">Connect timeout (ms)</span>
-                      <input id="google-legacy-http-connect-timeout-ms" type="number" min="1000" step="100" />
-                    </label>
-                    <label class="inline-field">
-                      <span data-i18n="overview.recognition.provider.google_legacy_http.send_timeout_ms">Send timeout (ms)</span>
-                      <input id="google-legacy-http-send-timeout-ms" type="number" min="1000" step="100" />
-                    </label>
-                  </div>
-                  <div class="actions">
-                    <label class="inline-field">
-                      <span data-i18n="overview.recognition.provider.google_legacy_http.recv_timeout_ms">Receive timeout (ms)</span>
-                      <input id="google-legacy-http-recv-timeout-ms" type="number" min="1000" step="100" />
-                    </label>
-                    <label class="inline-field">
-                      <span data-i18n="overview.recognition.provider.google_legacy_http.max_queue_depth">Max audio queue depth</span>
-                      <input id="google-legacy-http-max-queue-depth" type="number" min="1" step="1" />
-                    </label>
-                  </div>
-                </div>
+                <p id="local-asr-provider-hint" class="muted" data-i18n="overview.recognition.provider.hint">Backend providers are configured here for local microphone capture. Browser Speech modes use the separate browser recognition window.</p>
               </div>
               <p id="recognition-mode-hint" class="muted" data-i18n="overview.recognition.hint.local">Local mode uses the built-in microphone capture, VAD, and Parakeet runtime on this machine.</p>
             </article>

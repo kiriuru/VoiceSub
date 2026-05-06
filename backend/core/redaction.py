@@ -9,6 +9,9 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 REDACTED_VALUE = "[redacted]"
 SENSITIVE_KEYS = {
     "api_key",
+    "key",
+    "q",
+    "text",
     "token",
     "secret",
     "password",
@@ -32,7 +35,7 @@ SENSITIVE_KEY_FRAGMENTS = (
 )
 _BEARER_PATTERN = re.compile(r"(?i)\bbearer\s+([^\s,;]+)")
 _QUERY_PARAM_PATTERN = re.compile(
-    r"(?i)\b(api_key|token|secret|password|authorization|credential|credentials|pair_code|local_admin_token|bearer)=([^&\s]+)"
+    r"(?i)\b(api_key|key|q|text|token|secret|password|authorization|credential|credentials|pair_code|local_admin_token|bearer)=([^&\s]+)"
 )
 
 

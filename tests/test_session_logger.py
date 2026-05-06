@@ -10,7 +10,7 @@ from backend.core.session_logger import SessionLogManager
 
 
 class SessionLogManagerTests(unittest.TestCase):
-    def test_repeated_messages_collapse_even_when_timestamps_differ(self) -> None:
+    def test_repeated_messages_remain_raw_even_when_timestamps_differ(self) -> None:
         with TemporaryDirectory() as temp_dir:
             manager = SessionLogManager(Path(temp_dir))
             manager.log("browser_worker", "recognition.onend", source="browser-worker")
@@ -19,13 +19,11 @@ class SessionLogManagerTests(unittest.TestCase):
             manager.flush()
 
             lines = (Path(temp_dir) / "session-latest.jsonl").read_text(encoding="utf-8").splitlines()
-            self.assertEqual(len(lines), 2)
-            first = json.loads(lines[0])
-            second = json.loads(lines[1])
-            self.assertEqual(first["message"], "recognition.onend")
-            self.assertEqual(first["channel"], "browser_worker")
-            self.assertEqual(second["type"], "repeat")
-            self.assertEqual(second["repeat_count"], 2)
+            self.assertEqual(len(lines), 3)
+            records = [json.loads(line) for line in lines]
+            self.assertTrue(all(record["message"] == "recognition.onend" for record in records))
+            self.assertTrue(all(record["channel"] == "browser_worker" for record in records))
+            self.assertTrue(all(record.get("type") != "repeat" for record in records))
 
     def test_details_are_part_of_deduplication_key(self) -> None:
         with TemporaryDirectory() as temp_dir:

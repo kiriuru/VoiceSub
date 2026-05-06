@@ -102,6 +102,56 @@ class BrowserAsrServiceTests(unittest.TestCase):
 
         asyncio.run(scenario())
 
+    def test_status_snapshot_keeps_cycle_and_media_diagnostics(self) -> None:
+        async def scenario() -> None:
+            app = SimpleNamespace(state=SimpleNamespace(runtime_orchestrator=_FakeRuntimeOrchestrator()))
+            service = BrowserAsrService(app)
+            websocket = _FakeWebSocket()
+            transport_id = await service.register_connection(websocket)
+
+            accepted = await service.handle_status(
+                transport_id,
+                {
+                    "type": "browser_asr_status",
+                    "session_id": "session-cycle",
+                    "generation_id": 6,
+                    "provider_name": "browser_google_experimental",
+                    "recognition_state": "running",
+                    "active_recognition": True,
+                    "active_media_stream": True,
+                    "last_result_index": 11,
+                    "browser_session_age_ms": 2500,
+                    "browser_cycle_pending": True,
+                    "browser_cycle_count": 2,
+                    "browser_minimum_reconnect_suppressed_count": 1,
+                    "browser_forced_final_on_interruption_count": 1,
+                    "get_user_media_count": 3,
+                    "get_user_media_last_error": "device busy",
+                    "mic_stream_active": True,
+                    "media_tracks_stopped_count": 4,
+                    "media_track_leak_guard_count": 2,
+                },
+            )
+
+            self.assertTrue(accepted)
+            snapshot = service.diagnostics()
+            self.assertEqual(snapshot["provider_name"], "browser_google_experimental")
+            self.assertTrue(snapshot["active_recognition"])
+            self.assertTrue(snapshot["active_media_stream"])
+            self.assertEqual(snapshot["last_result_index"], 11)
+            self.assertEqual(snapshot["browser_session_age_ms"], 2500)
+            self.assertTrue(snapshot["browser_cycle_pending"])
+            self.assertEqual(snapshot["browser_cycle_count"], 2)
+            self.assertEqual(snapshot["browser_minimum_reconnect_suppressed_count"], 1)
+            self.assertEqual(snapshot["browser_forced_final_on_interruption_count"], 1)
+            self.assertEqual(snapshot["get_user_media_count"], 3)
+            self.assertEqual(snapshot["get_user_media_last_error"], "device busy")
+            self.assertTrue(snapshot["mic_stream_active"])
+            self.assertEqual(snapshot["media_tracks_stopped_count"], 4)
+            self.assertEqual(snapshot["media_track_leak_guard_count"], 2)
+
+        asyncio.run(scenario())
+
 
 if __name__ == "__main__":
     unittest.main()

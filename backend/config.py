@@ -177,6 +177,17 @@ class LocalConfigManager:
                     "continuous_results": True,
                     "force_finalization_enabled": True,
                     "force_finalization_timeout_ms": 1600,
+                    "minimum_reconnect_interval_ms": 500,
+                    "normal_restart_delay_ms": 350,
+                    "no_speech_restart_delay_ms": 350,
+                    "network_reconnect_initial_ms": 1000,
+                    "network_reconnect_max_ms": 30000,
+                    "stuck_stopping_timeout_ms": 2500,
+                    "max_browser_session_age_ms": 240000,
+                    "prepare_cycle_before_ms": 15000,
+                    "force_final_on_interruption": True,
+                    "force_final_min_chars": 3,
+                    "force_final_min_stable_ms": 700,
                     "experimental": {
                         "start_with_audio_track": True,
                         "fallback_to_default_start": True,
@@ -187,19 +198,6 @@ class LocalConfigManager:
                             "autoGainControl": False,
                         },
                     },
-                },
-                "google_legacy_http": {
-                    "enabled": False,
-                    "language": "ru-RU",
-                    "profanity_filter": False,
-                    "connect_timeout_ms": 10000,
-                    "send_timeout_ms": 10000,
-                    "recv_timeout_ms": 30000,
-                    "max_queue_depth": 50,
-                    "reconnect_initial_ms": 1000,
-                    "reconnect_max_ms": 30000,
-                    "endpoint_host": "",
-                    "pair_id_prefix": "sst",
                 },
                 "realtime": {
                     "vad_mode": 3,
@@ -354,6 +352,7 @@ class LocalConfigManager:
                 "pause_to_finalize_ms": 350,
                 "allow_early_replace_on_next_final": True,
                 "sync_source_and_translation_expiry": True,
+                "keep_completed_translation_during_active_partial": True,
                 "hard_max_phrase_ms": 5500,
             },
         }
@@ -464,12 +463,7 @@ class LocalConfigManager:
         if asr_mode not in {"local", "browser_google", "browser_google_experimental"}:
             asr_mode = "local"
         provider_preference = str(asr.get("provider_preference", "official_eu_parakeet_low_latency")).strip().lower()
-        if provider_preference not in {
-            "auto",
-            "official_eu_parakeet",
-            "official_eu_parakeet_low_latency",
-            "google_legacy_http_experimental",
-        }:
+        if provider_preference not in {"official_eu_parakeet", "official_eu_parakeet_low_latency"}:
             provider_preference = "official_eu_parakeet_low_latency"
         browser = asr.get("browser", {})
         if not isinstance(browser, dict):
@@ -479,25 +473,21 @@ class LocalConfigManager:
             force_finalization_timeout_ms = int(browser.get("force_finalization_timeout_ms", 1600) or 1600)
         except (TypeError, ValueError):
             force_finalization_timeout_ms = 1600
+        browser_defaults = self.default_config()["asr"]["browser"]
+
+        def clamp_browser_int(key: str, minimum: int, maximum: int) -> int:
+            try:
+                value = int(browser.get(key, browser_defaults[key]) or browser_defaults[key])
+            except (TypeError, ValueError):
+                value = int(browser_defaults[key])
+            return max(minimum, min(maximum, value))
+
         experimental_browser = browser.get("experimental", {})
         if not isinstance(experimental_browser, dict):
             experimental_browser = {}
         audio_track_constraints = experimental_browser.get("audio_track_constraints", {})
         if not isinstance(audio_track_constraints, dict):
             audio_track_constraints = {}
-        google_legacy_http = asr.get("google_legacy_http", {})
-        if not isinstance(google_legacy_http, dict):
-            google_legacy_http = {}
-        google_legacy_http_defaults = self.default_config()["asr"]["google_legacy_http"]
-
-        def clamp_google_legacy_http_int(key: str, minimum: int, maximum: int) -> int:
-            try:
-                value = int(
-                    google_legacy_http.get(key, google_legacy_http_defaults[key]) or google_legacy_http_defaults[key]
-                )
-            except (TypeError, ValueError):
-                value = int(google_legacy_http_defaults[key])
-            return max(minimum, min(maximum, value))
 
         try:
             rnnoise_strength = int(asr.get("rnnoise_strength", 70) or 70)
@@ -517,6 +507,19 @@ class LocalConfigManager:
                 "continuous_results": bool(browser.get("continuous_results", True)),
                 "force_finalization_enabled": bool(browser.get("force_finalization_enabled", True)),
                 "force_finalization_timeout_ms": max(300, min(15000, force_finalization_timeout_ms)),
+                "minimum_reconnect_interval_ms": clamp_browser_int("minimum_reconnect_interval_ms", 100, 60000),
+                "normal_restart_delay_ms": clamp_browser_int("normal_restart_delay_ms", 0, 60000),
+                "no_speech_restart_delay_ms": clamp_browser_int("no_speech_restart_delay_ms", 0, 60000),
+                "network_reconnect_initial_ms": clamp_browser_int("network_reconnect_initial_ms", 100, 120000),
+                "network_reconnect_max_ms": clamp_browser_int("network_reconnect_max_ms", 100, 300000),
+                "stuck_stopping_timeout_ms": clamp_browser_int("stuck_stopping_timeout_ms", 500, 30000),
+                "max_browser_session_age_ms": clamp_browser_int("max_browser_session_age_ms", 10000, 3600000),
+                "prepare_cycle_before_ms": clamp_browser_int("prepare_cycle_before_ms", 0, 600000),
+                "force_final_on_interruption": bool(
+                    browser.get("force_final_on_interruption", browser_defaults["force_final_on_interruption"])
+                ),
+                "force_final_min_chars": clamp_browser_int("force_final_min_chars", 1, 256),
+                "force_final_min_stable_ms": clamp_browser_int("force_final_min_stable_ms", 0, 60000),
                 "experimental": {
                     "start_with_audio_track": bool(experimental_browser.get("start_with_audio_track", True)),
                     "fallback_to_default_start": bool(
@@ -529,31 +532,6 @@ class LocalConfigManager:
                         "autoGainControl": bool(audio_track_constraints.get("autoGainControl", False)),
                     },
                 },
-            },
-            "google_legacy_http": {
-                "enabled": bool(google_legacy_http.get("enabled", google_legacy_http_defaults["enabled"])),
-                "language": (
-                    str(google_legacy_http.get("language", google_legacy_http_defaults["language"]) or "ru-RU").strip()
-                    or "ru-RU"
-                ),
-                "profanity_filter": bool(
-                    google_legacy_http.get("profanity_filter", google_legacy_http_defaults["profanity_filter"])
-                ),
-                "connect_timeout_ms": clamp_google_legacy_http_int("connect_timeout_ms", 1000, 120000),
-                "send_timeout_ms": clamp_google_legacy_http_int("send_timeout_ms", 1000, 120000),
-                "recv_timeout_ms": clamp_google_legacy_http_int("recv_timeout_ms", 1000, 300000),
-                "max_queue_depth": clamp_google_legacy_http_int("max_queue_depth", 1, 512),
-                "reconnect_initial_ms": clamp_google_legacy_http_int("reconnect_initial_ms", 100, 120000),
-                "reconnect_max_ms": clamp_google_legacy_http_int("reconnect_max_ms", 100, 300000),
-                "endpoint_host": normalize_provider_text_value(
-                    google_legacy_http.get("endpoint_host", google_legacy_http_defaults["endpoint_host"])
-                ),
-                "pair_id_prefix": (
-                    normalize_provider_text_value(
-                        google_legacy_http.get("pair_id_prefix", google_legacy_http_defaults["pair_id_prefix"])
-                    )
-                    or "sst"
-                ),
             },
             "realtime": self._normalize_realtime_asr_config(asr.get("realtime", {})),
         }
@@ -850,6 +828,12 @@ class LocalConfigManager:
             ),
             "sync_source_and_translation_expiry": bool(
                 current.get("sync_source_and_translation_expiry", defaults["sync_source_and_translation_expiry"])
+            ),
+            "keep_completed_translation_during_active_partial": bool(
+                current.get(
+                    "keep_completed_translation_during_active_partial",
+                    defaults["keep_completed_translation_during_active_partial"],
+                )
             ),
             "hard_max_phrase_ms": clamp_int_value(
                 current.get("hard_max_phrase_ms", hard_max_default),

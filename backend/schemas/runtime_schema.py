@@ -48,6 +48,10 @@ class RuntimeMetrics(SchemaModel):
     browser_worker_event_coalesced: int = 0
     overlay_stale_translation_suppressed: int = 0
     overlay_payload_mismatch_count: int = 0
+    asr_queue_depth: int = 0
+    asr_partial_jobs_dropped: int = 0
+    asr_stale_results_ignored: int = 0
+    in_flight_transcribe_count: int = 0
     client_log_events_received: int = 0
     client_log_events_written: int = 0
     client_log_events_dropped: int = 0
@@ -55,6 +59,25 @@ class RuntimeMetrics(SchemaModel):
     ws_events_broadcast_count: int = 0
     ws_events_send_failures: int = 0
     ws_events_dead_connections_removed: int = 0
+    asr_result_to_backend_ms: float | None = None
+    backend_to_router_ms: float | None = None
+    router_to_ws_ms: float | None = None
+    ws_to_dashboard_ms: float | None = None
+    asr_result_to_dashboard_ms: float | None = None
+    final_to_translation_enqueue_ms: float | None = None
+    translation_queue_wait_ms: float | None = None
+    translation_processing_ms: float | None = None
+    final_to_translation_publish_ms: float | None = None
+    browser_transcripts_received: int = 0
+    browser_partials_published: int = 0
+    browser_finals_published: int = 0
+    browser_transcript_stale_dropped: int = 0
+    browser_transcript_publish_latency_ms: float | None = None
+    browser_worker_status_suppressed: int = 0
+    browser_worker_status_full_written: int = 0
+    browser_worker_heartbeat_written: int = 0
+    settings_payload_compacted: int = 0
+    runtime_events_bytes_written: int = 0
 
 
 class RuntimeStatus(SchemaModel):

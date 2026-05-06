@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from datetime import datetime, timezone
 from typing import Any
 
@@ -26,13 +27,18 @@ class BrowserAsrGateway:
     _NOISY_ERROR_TYPES = {"no-speech"}
     _ROUTINE_LOG_SAMPLE_EVERY = 25
     _ROUTINE_LOG_VERBOSE_LIMIT = 3
+    _STATUS_HEARTBEAT_INTERVAL_MS = 5000
 
     def __init__(self, *, structured_logger: StructuredRuntimeLogger | None = None) -> None:
         self._state = BrowserAsrDiagnostics()
         self._structured_logger = structured_logger
+        self._last_status_heartbeat_at_ms = 0
+        self._heartbeat_counter_baseline = self._counter_snapshot(self._state)
 
     def reset(self) -> None:
         self._state = BrowserAsrDiagnostics()
+        self._last_status_heartbeat_at_ms = 0
+        self._heartbeat_counter_baseline = self._counter_snapshot(self._state)
 
     def worker_connected(self, *, browser_mode: str | None = None) -> None:
         normalized_mode = self._normalize_browser_mode(browser_mode) or self._state.browser_mode
@@ -41,6 +47,7 @@ class BrowserAsrGateway:
             update={
                 "worker_connected": True,
                 "browser_mode": normalized_mode,
+                "provider_name": normalized_mode,
                 "experimental": experimental,
                 "last_error": None,
             }
@@ -71,6 +78,7 @@ class BrowserAsrGateway:
             update={
                 "worker_connected": False,
                 "browser_mode": normalized_mode,
+                "provider_name": normalized_mode,
                 "experimental": experimental,
                 "recognition_running": False,
                 "recognition_state": "disconnected",
@@ -89,7 +97,13 @@ class BrowserAsrGateway:
         )
 
     def note_partial(self, *, text_len: int | None = None, source_lang: str | None = None, sequence: int | None = None) -> None:
-        self._state = self._state.model_copy(update={"last_partial_at_utc": _utc_now(), "last_partial_age_ms": 0})
+        self._state = self._state.model_copy(
+            update={
+                "last_partial_at_utc": _utc_now(),
+                "last_partial_age_ms": 0,
+                "browser_session_age_ms": self._state.browser_session_age_ms,
+            }
+        )
         self._log_event(
             "browser_external_partial",
             worker_connected=self._state.worker_connected,
@@ -100,7 +114,13 @@ class BrowserAsrGateway:
         )
 
     def note_final(self, *, text_len: int | None = None, source_lang: str | None = None, sequence: int | None = None) -> None:
-        self._state = self._state.model_copy(update={"last_final_at_utc": _utc_now(), "last_final_age_ms": 0})
+        self._state = self._state.model_copy(
+            update={
+                "last_final_at_utc": _utc_now(),
+                "last_final_age_ms": 0,
+                "browser_session_age_ms": self._state.browser_session_age_ms,
+            }
+        )
         self._log_event(
             "browser_external_final",
             worker_connected=self._state.worker_connected,
@@ -123,6 +143,10 @@ class BrowserAsrGateway:
             "recognition_continuous": "recognition_continuous",
             "websocket_ready": "websocket_ready",
             "forced_final": "forced_final",
+            "active_recognition": "active_recognition",
+            "active_media_stream": "active_media_stream",
+            "browser_cycle_pending": "browser_cycle_pending",
+            "mic_stream_active": "mic_stream_active",
             "audio_track_enabled": "audio_track_enabled",
             "audio_track_live": "audio_track_live",
             "audio_track_muted": "audio_track_muted",
@@ -140,9 +164,11 @@ class BrowserAsrGateway:
             "browser_supervisor_state": "supervisor_state",
             "supervisor_state": "supervisor_state",
             "effective_continuous_mode": "effective_continuous_mode",
+            "provider_name": "provider_name",
             "last_error": "last_error",
             "last_start_error": "last_start_error",
             "last_audio_track_error": "last_audio_track_error",
+            "get_user_media_last_error": "get_user_media_last_error",
             "degraded_reason": "degraded_reason",
             "visibility_state": "visibility_state",
             "reason": "last_status_reason",
@@ -175,11 +201,22 @@ class BrowserAsrGateway:
             "generation_id": "generation_id",
             "no_speech_count": "no_speech_count",
             "network_error_count": "network_error_count",
+            "last_result_index": "last_result_index",
+            "last_result_at_ms": "last_result_at_ms",
+            "last_session_started_at_ms": "last_session_started_at_ms",
+            "last_session_ended_at_ms": "last_session_ended_at_ms",
+            "browser_session_age_ms": "browser_session_age_ms",
+            "browser_cycle_count": "browser_cycle_count",
+            "browser_minimum_reconnect_suppressed_count": "browser_minimum_reconnect_suppressed_count",
+            "browser_forced_final_on_interruption_count": "browser_forced_final_on_interruption_count",
             "duplicate_partial_suppressed": "duplicate_partial_suppressed",
             "duplicate_final_suppressed": "duplicate_final_suppressed",
             "late_forced_final_suppressed": "late_forced_final_suppressed",
             "mic_active_recent_ms": "mic_active_recent_ms",
             "last_mic_activity_at": "last_mic_activity_at",
+            "get_user_media_count": "get_user_media_count",
+            "media_tracks_stopped_count": "media_tracks_stopped_count",
+            "media_track_leak_guard_count": "media_track_leak_guard_count",
             "stopping_since_ms": "stopping_since_ms",
             "last_seen_at_ms": "last_seen_at_ms",
             "stale_worker_events_ignored": "stale_worker_events_ignored",
@@ -202,6 +239,10 @@ class BrowserAsrGateway:
         mapped_event = self._map_reason_to_event(reason)
         if self._should_log_status_snapshot(previous_state=previous_state, reason=reason, mapped_event=mapped_event):
             self._log_event("browser_worker_status", **status_payload)
+            self._mark_status_activity()
+        elif self._should_log_status_heartbeat():
+            self._log_event("browser_worker_heartbeat", **self._heartbeat_payload())
+            self._mark_status_activity()
         if mapped_event is not None:
             event_payload = {
                 "worker_connected": self._state.worker_connected,
@@ -210,14 +251,26 @@ class BrowserAsrGateway:
                 "desired_running": self._state.desired_running,
                 "recognition_state": self._state.recognition_state,
                 "supervisor_state": self._state.supervisor_state,
+                "provider_name": self._state.provider_name,
                 "start_mode": self._state.start_mode,
                 "visibility_state": self._state.visibility_state,
                 "session_id": self._state.session_id,
                 "client_segment_id": self._state.client_segment_id,
                 "generation_id": self._state.generation_id,
+                "active_recognition": self._state.active_recognition,
+                "active_media_stream": self._state.active_media_stream,
                 "pending_start": self._state.pending_start,
                 "effective_continuous_mode": self._state.effective_continuous_mode,
                 "recognition_continuous": self._state.recognition_continuous,
+                "last_result_index": self._state.last_result_index,
+                "last_result_at_ms": self._state.last_result_at_ms,
+                "last_session_started_at_ms": self._state.last_session_started_at_ms,
+                "last_session_ended_at_ms": self._state.last_session_ended_at_ms,
+                "browser_session_age_ms": self._state.browser_session_age_ms,
+                "browser_cycle_pending": self._state.browser_cycle_pending,
+                "browser_cycle_count": self._state.browser_cycle_count,
+                "browser_minimum_reconnect_suppressed_count": self._state.browser_minimum_reconnect_suppressed_count,
+                "browser_forced_final_on_interruption_count": self._state.browser_forced_final_on_interruption_count,
                 "rearm_count": self._state.rearm_count,
                 "watchdog_rearm_count": self._state.watchdog_rearm_count,
                 "rearm_delay_ms": self._state.last_rearm_delay_ms,
@@ -234,6 +287,11 @@ class BrowserAsrGateway:
                 "mic_rms": self._state.mic_rms,
                 "mic_active_recent_ms": self._state.mic_active_recent_ms,
                 "last_mic_activity_at": self._state.last_mic_activity_at,
+                "get_user_media_count": self._state.get_user_media_count,
+                "get_user_media_last_error": self._state.get_user_media_last_error,
+                "mic_stream_active": self._state.mic_stream_active,
+                "media_tracks_stopped_count": self._state.media_tracks_stopped_count,
+                "media_track_leak_guard_count": self._state.media_track_leak_guard_count,
                 "audio_track_enabled": self._state.audio_track_enabled,
                 "audio_track_live": self._state.audio_track_live,
                 "audio_track_kind": self._state.audio_track_kind,
@@ -323,15 +381,27 @@ class BrowserAsrGateway:
             "recognition_running": self._state.recognition_running,
             "recognition_state": self._state.recognition_state,
             "supervisor_state": self._state.supervisor_state,
+            "provider_name": self._state.provider_name,
             "websocket_ready": self._state.websocket_ready,
             "start_mode": self._state.start_mode,
             "session_id": self._state.session_id,
             "client_segment_id": self._state.client_segment_id,
             "generation_id": self._state.generation_id,
+            "active_recognition": self._state.active_recognition,
+            "active_media_stream": self._state.active_media_stream,
             "pending_start": self._state.pending_start,
             "effective_continuous_mode": self._state.effective_continuous_mode,
             "recognition_continuous": self._state.recognition_continuous,
             "forced_final": self._state.forced_final,
+            "last_result_index": self._state.last_result_index,
+            "last_result_at_ms": self._state.last_result_at_ms,
+            "last_session_started_at_ms": self._state.last_session_started_at_ms,
+            "last_session_ended_at_ms": self._state.last_session_ended_at_ms,
+            "browser_session_age_ms": self._state.browser_session_age_ms,
+            "browser_cycle_pending": self._state.browser_cycle_pending,
+            "browser_cycle_count": self._state.browser_cycle_count,
+            "browser_minimum_reconnect_suppressed_count": self._state.browser_minimum_reconnect_suppressed_count,
+            "browser_forced_final_on_interruption_count": self._state.browser_forced_final_on_interruption_count,
             "audio_track_enabled": self._state.audio_track_enabled,
             "audio_track_live": self._state.audio_track_live,
             "audio_track_kind": self._state.audio_track_kind,
@@ -359,6 +429,11 @@ class BrowserAsrGateway:
             "mic_rms": self._state.mic_rms,
             "mic_active_recent_ms": self._state.mic_active_recent_ms,
             "last_mic_activity_at": self._state.last_mic_activity_at,
+            "get_user_media_count": self._state.get_user_media_count,
+            "get_user_media_last_error": self._state.get_user_media_last_error,
+            "mic_stream_active": self._state.mic_stream_active,
+            "media_tracks_stopped_count": self._state.media_tracks_stopped_count,
+            "media_track_leak_guard_count": self._state.media_track_leak_guard_count,
             "stopping_since_ms": self._state.stopping_since_ms,
             "last_partial_age_ms": self._state.last_partial_age_ms,
             "last_final_age_ms": self._state.last_final_age_ms,
@@ -397,20 +472,34 @@ class BrowserAsrGateway:
             state.websocket_ready,
             state.browser_mode,
             state.start_mode,
+            state.provider_name,
             state.session_id,
             state.client_segment_id,
             state.generation_id,
+            state.active_recognition,
+            state.active_media_stream,
             state.pending_start,
             state.effective_continuous_mode,
             state.recognition_continuous,
             state.forced_final,
+            state.last_result_index,
+            state.last_session_started_at_ms,
+            state.last_session_ended_at_ms,
+            state.browser_cycle_pending,
+            state.browser_cycle_count,
+            state.browser_minimum_reconnect_suppressed_count,
+            state.browser_forced_final_on_interruption_count,
             state.duplicate_partial_suppressed,
             state.duplicate_final_suppressed,
             state.late_forced_final_suppressed,
             state.mic_track_ready_state,
             state.mic_track_muted,
             state.mic_rms,
-            state.mic_active_recent_ms,
+            state.get_user_media_count,
+            state.get_user_media_last_error,
+            state.mic_stream_active,
+            state.media_tracks_stopped_count,
+            state.media_track_leak_guard_count,
             state.audio_track_live,
             state.audio_track_ready_state,
             state.audio_track_muted,
@@ -423,6 +512,54 @@ class BrowserAsrGateway:
             state.network_error_count,
             state.stale_worker_events_ignored,
         )
+
+    def _should_log_status_heartbeat(self) -> bool:
+        if not (self._state.worker_connected or self._state.desired_running):
+            return False
+        return (self._now_ms() - self._last_status_heartbeat_at_ms) >= self._STATUS_HEARTBEAT_INTERVAL_MS
+
+    def _heartbeat_payload(self) -> dict[str, Any]:
+        current_counters = self._counter_snapshot(self._state)
+        previous_counters = self._heartbeat_counter_baseline
+        counters_delta = {
+            key: value - previous_counters.get(key, 0)
+            for key, value in current_counters.items()
+            if (value - previous_counters.get(key, 0)) != 0
+        }
+        return {
+            "state": self._state.recognition_state or self._state.supervisor_state or "idle",
+            "generation_id": self._state.generation_id,
+            "last_result_age_ms": self._last_result_age_ms(),
+            "counters_delta": counters_delta,
+        }
+
+    def _mark_status_activity(self) -> None:
+        self._last_status_heartbeat_at_ms = self._now_ms()
+        self._heartbeat_counter_baseline = self._counter_snapshot(self._state)
+
+    def _last_result_age_ms(self) -> int | None:
+        ages = [age for age in (self._state.last_partial_age_ms, self._state.last_final_age_ms) if age is not None]
+        if not ages:
+            return None
+        return min(ages)
+
+    @staticmethod
+    def _counter_snapshot(state: BrowserAsrDiagnostics) -> dict[str, int]:
+        return {
+            "rearm_count": max(0, int(state.rearm_count or 0)),
+            "restart_count": max(0, int(state.restart_count or 0)),
+            "watchdog_rearm_count": max(0, int(state.watchdog_rearm_count or 0)),
+            "no_speech_count": max(0, int(state.no_speech_count or 0)),
+            "network_error_count": max(0, int(state.network_error_count or 0)),
+            "duplicate_partial_suppressed": max(0, int(state.duplicate_partial_suppressed or 0)),
+            "duplicate_final_suppressed": max(0, int(state.duplicate_final_suppressed or 0)),
+            "late_forced_final_suppressed": max(0, int(state.late_forced_final_suppressed or 0)),
+            "stale_worker_events_ignored": max(0, int(state.stale_worker_events_ignored or 0)),
+        }
+
+    @staticmethod
+    def _now_ms() -> int:
+        return int(time.time() * 1000)
 
     def _should_log_mapped_event(self, event: str) -> bool:
         if event in self._ROUTINE_RESTART_EVENTS:

@@ -18,6 +18,7 @@ import wave
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
+from contextlib import nullcontext
 
 import numpy as np
 
@@ -420,6 +421,7 @@ class BaseOfficialEuParakeetNemoProvider(BaseAsrProvider):
         self._runtime_note: str | None = None
         self._cpu_fallback_reason: str | None = None
         self._runtime_status_callback = runtime_status_callback
+        self.inference_mode_enabled: bool = False
 
     def _report_runtime_status(self, message: str) -> None:
         if self._runtime_status_callback is None:
@@ -824,6 +826,26 @@ class BaseOfficialEuParakeetNemoProvider(BaseAsrProvider):
             return str(first.text).strip()
         return str(first).strip()
 
+    def _torch_inference_context(self) -> Any:
+        try:
+            torch = importlib.import_module("torch")
+        except Exception:
+            self.inference_mode_enabled = False
+            return nullcontext()
+
+        inference_mode = getattr(torch, "inference_mode", None)
+        if callable(inference_mode):
+            self.inference_mode_enabled = True
+            return inference_mode()
+
+        no_grad = getattr(torch, "no_grad", None)
+        if callable(no_grad):
+            self.inference_mode_enabled = False
+            return no_grad()
+
+        self.inference_mode_enabled = False
+        return nullcontext()
+
 
 class OfficialEuParakeetProvider(BaseOfficialEuParakeetNemoProvider):
     provider_name = ASR_PROVIDER_OFFICIAL
@@ -845,7 +867,8 @@ class OfficialEuParakeetProvider(BaseOfficialEuParakeetNemoProvider):
             wav_path = Path(tmp_file.name)
         try:
             self._write_wav(wav_path, audio_segment, sample_rate)
-            hypotheses = model.transcribe([str(wav_path)], batch_size=1, verbose=False)
+            with self._torch_inference_context():
+                hypotheses = model.transcribe([str(wav_path)], batch_size=1, verbose=False)
             text = self._extract_text(hypotheses)
             if not text:
                 return AsrResult()
@@ -1155,12 +1178,13 @@ class OfficialEuParakeetRealtimeProvider(BaseOfficialEuParakeetNemoProvider):
                 audio_array = audio_array[-partial_window_samples:]
 
         try:
-            hypotheses = model.transcribe(
-                [audio_array],
-                batch_size=1,
-                return_hypotheses=True,
-                verbose=False,
-            )
+            with self._torch_inference_context():
+                hypotheses = model.transcribe(
+                    [audio_array],
+                    batch_size=1,
+                    return_hypotheses=True,
+                    verbose=False,
+                )
         except Exception as exc:
             raise AsrProviderError(f"Official EU Parakeet realtime transcription failed: {exc}") from exc
 

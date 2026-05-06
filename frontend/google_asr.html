@@ -481,6 +481,19 @@
           generationId: 0,
           browserSupervisorState: "idle",
           effectiveContinuousMode: "native_continuous",
+          browserLifecycleConfig: {
+            minimumReconnectIntervalMs: 500,
+            normalRestartDelayMs: 350,
+            noSpeechRestartDelayMs: 350,
+            networkReconnectInitialMs: 1000,
+            networkReconnectMaxMs: 30000,
+            stuckStoppingTimeoutMs: 2500,
+            maxBrowserSessionAgeMs: 240000,
+            prepareCycleBeforeMs: 15000,
+            forceFinalOnInterruption: true,
+            forceFinalMinChars: 3,
+            forceFinalMinStableMs: 700,
+          },
           currentConfigPayload: null,
           microphoneMonitor: null,
           micTrackReadyState: null,
@@ -489,6 +502,10 @@
           micActiveRecentMs: null,
           lastMicActivityAt: 0,
           micHealthUpdatedAt: 0,
+          getUserMediaCount: 0,
+          getUserMediaLastError: null,
+          micStreamActive: false,
+          mediaTracksStoppedCount: 0,
         };
         const clientLogState = new Map();
 
@@ -498,6 +515,19 @@
           continuousResults: true,
           forceFinalizationEnabled: true,
           forceFinalizationTimeoutMs: 1600,
+        });
+        const browserLifecycleDefaults = Object.freeze({
+          minimumReconnectIntervalMs: 500,
+          normalRestartDelayMs: 350,
+          noSpeechRestartDelayMs: 350,
+          networkReconnectInitialMs: 1000,
+          networkReconnectMaxMs: 30000,
+          stuckStoppingTimeoutMs: 2500,
+          maxBrowserSessionAgeMs: 240000,
+          prepareCycleBeforeMs: 15000,
+          forceFinalOnInterruption: true,
+          forceFinalMinChars: 3,
+          forceFinalMinStableMs: 700,
         });
 
         function getContinuousResultsEnabled() {
@@ -673,6 +703,63 @@
           };
         }
 
+        function resolveBrowserLifecycleConfig(backendBrowserConfig) {
+          const backend = backendBrowserConfig && typeof backendBrowserConfig === "object" ? backendBrowserConfig : {};
+          return {
+            minimumReconnectIntervalMs: Math.max(
+              100,
+              Number.parseInt(String(backend.minimum_reconnect_interval_ms || browserLifecycleDefaults.minimumReconnectIntervalMs), 10)
+                || browserLifecycleDefaults.minimumReconnectIntervalMs
+            ),
+            normalRestartDelayMs: Math.max(
+              0,
+              Number.parseInt(String(backend.normal_restart_delay_ms || browserLifecycleDefaults.normalRestartDelayMs), 10)
+                || browserLifecycleDefaults.normalRestartDelayMs
+            ),
+            noSpeechRestartDelayMs: Math.max(
+              0,
+              Number.parseInt(String(backend.no_speech_restart_delay_ms || browserLifecycleDefaults.noSpeechRestartDelayMs), 10)
+                || browserLifecycleDefaults.noSpeechRestartDelayMs
+            ),
+            networkReconnectInitialMs: Math.max(
+              100,
+              Number.parseInt(String(backend.network_reconnect_initial_ms || browserLifecycleDefaults.networkReconnectInitialMs), 10)
+                || browserLifecycleDefaults.networkReconnectInitialMs
+            ),
+            networkReconnectMaxMs: Math.max(
+              100,
+              Number.parseInt(String(backend.network_reconnect_max_ms || browserLifecycleDefaults.networkReconnectMaxMs), 10)
+                || browserLifecycleDefaults.networkReconnectMaxMs
+            ),
+            stuckStoppingTimeoutMs: Math.max(
+              500,
+              Number.parseInt(String(backend.stuck_stopping_timeout_ms || browserLifecycleDefaults.stuckStoppingTimeoutMs), 10)
+                || browserLifecycleDefaults.stuckStoppingTimeoutMs
+            ),
+            maxBrowserSessionAgeMs: Math.max(
+              10000,
+              Number.parseInt(String(backend.max_browser_session_age_ms || browserLifecycleDefaults.maxBrowserSessionAgeMs), 10)
+                || browserLifecycleDefaults.maxBrowserSessionAgeMs
+            ),
+            prepareCycleBeforeMs: Math.max(
+              0,
+              Number.parseInt(String(backend.prepare_cycle_before_ms || browserLifecycleDefaults.prepareCycleBeforeMs), 10)
+                || browserLifecycleDefaults.prepareCycleBeforeMs
+            ),
+            forceFinalOnInterruption: backend.force_final_on_interruption !== false,
+            forceFinalMinChars: Math.max(
+              1,
+              Number.parseInt(String(backend.force_final_min_chars || browserLifecycleDefaults.forceFinalMinChars), 10)
+                || browserLifecycleDefaults.forceFinalMinChars
+            ),
+            forceFinalMinStableMs: Math.max(
+              0,
+              Number.parseInt(String(backend.force_final_min_stable_ms || browserLifecycleDefaults.forceFinalMinStableMs), 10)
+                || browserLifecycleDefaults.forceFinalMinStableMs
+            ),
+          };
+        }
+
         function applyResolvedWorkerSettings(resolvedWorkerSettings) {
           const effectiveBrowserConfig = resolveWorkerSettings(resolvedWorkerSettings, null);
           state.configuredLanguage = String(
@@ -702,6 +789,7 @@
           state.currentConfigPayload = cloneConfigPayload(payload);
           const asrConfig = payload.asr && typeof payload.asr === "object" ? payload.asr : {};
           const browserConfig = asrConfig.browser && typeof asrConfig.browser === "object" ? asrConfig.browser : {};
+          state.browserLifecycleConfig = resolveBrowserLifecycleConfig(browserConfig);
           return applyResolvedWorkerSettings(resolveWorkerSettings(browserConfig, storedWorkerSettings));
         }
 
@@ -864,10 +952,12 @@
             if (storedWorkerSettings) {
               applyResolvedWorkerSettings(resolveWorkerSettings(workerDefaults, storedWorkerSettings));
               state.currentConfigPayload = cloneConfigPayload({ asr: { browser: workerDefaults } });
+              state.browserLifecycleConfig = { ...browserLifecycleDefaults };
               appendLog("settings load failed; using localStorage fallback");
             } else {
               applyResolvedWorkerSettings(workerDefaults);
               state.currentConfigPayload = cloneConfigPayload({ asr: { browser: workerDefaults } });
+              state.browserLifecycleConfig = { ...browserLifecycleDefaults };
               appendLog("settings load failed; using defaults");
             }
             updateCounters();
@@ -882,7 +972,14 @@
             return existingStream;
           }
           appendLog("requesting microphone permission via getUserMedia");
-          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          state.getUserMediaCount = Number(state.getUserMediaCount || 0) + 1;
+          let stream = null;
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          } catch (error) {
+            state.getUserMediaLastError = error instanceof Error ? error.message : String(error || "");
+            throw error;
+          }
           const [track] = stream.getAudioTracks();
           if (!track) {
             throw new Error("No audio track returned by getUserMedia.");
@@ -958,6 +1055,8 @@
             intervalId: null,
           };
           state.microphoneMonitor = monitor;
+          state.micStreamActive = true;
+          state.getUserMediaLastError = null;
           state.micTrackReadyState = String(track.readyState || "unknown");
           state.micTrackMuted = Boolean(track.muted);
           updateMicHealth();
@@ -975,6 +1074,7 @@
           const monitor = state.microphoneMonitor;
           state.microphoneMonitor = null;
           if (!monitor) {
+            state.micStreamActive = false;
             return;
           }
           if (monitor.intervalId) {
@@ -986,7 +1086,9 @@
             // best effort
           }
           try {
-            monitor.stream?.getTracks?.().forEach((track) => {
+            const tracks = monitor.stream?.getTracks?.() || [];
+            state.mediaTracksStoppedCount = Number(state.mediaTracksStoppedCount || 0) + tracks.length;
+            tracks.forEach((track) => {
               try {
                 track.stop();
               } catch (_error) {
@@ -1001,6 +1103,7 @@
           } catch (_error) {
             // best effort
           }
+          state.micStreamActive = false;
         }
 
         function setPartialText(value) {
@@ -1023,6 +1126,8 @@
             language: state.configuredLanguage,
             interimResults: interimResultsToggle.checked,
             continuous: getContinuousResultsEnabled(),
+            providerName: state.browserMode,
+            ...state.browserLifecycleConfig,
           }),
           isForceFinalizationEnabled: () => forceFinalizationToggle.checked,
           setPartialText,

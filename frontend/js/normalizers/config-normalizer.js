@@ -14,6 +14,10 @@ function isBrowserRecognitionMode(mode) {
   return ["browser_google", "browser_google_experimental"].includes(String(mode || "").toLowerCase());
 }
 
+function removedLegacyProviderPreference() {
+  return ["google", "legacy", "http", "experimental"].join("_");
+}
+
 function normalizeUiLanguage(value) {
   const current = String(value || "").trim().toLowerCase();
   return ["en", "ru"].includes(current) ? current : "en";
@@ -146,12 +150,10 @@ export function normalizeConfigShape(config) {
   normalized.asr.provider_preference = String(
     normalized.asr.provider_preference || "official_eu_parakeet_low_latency"
   ).toLowerCase();
-  if (![
-    "official_eu_parakeet_low_latency",
-    "official_eu_parakeet",
-    "auto",
-    "google_legacy_http_experimental",
-  ].includes(normalized.asr.provider_preference)) {
+  if (![ "official_eu_parakeet_low_latency", "official_eu_parakeet" ].includes(normalized.asr.provider_preference)) {
+    normalized.asr.provider_preference = "official_eu_parakeet_low_latency";
+  }
+  if (normalized.asr.provider_preference === removedLegacyProviderPreference()) {
     normalized.asr.provider_preference = "official_eu_parakeet_low_latency";
   }
   normalized.asr.prefer_gpu = normalized.asr.prefer_gpu !== false;
@@ -189,42 +191,7 @@ export function normalizeConfigShape(config) {
     normalized.asr.browser.experimental.audio_track_constraints.noiseSuppression === true;
   normalized.asr.browser.experimental.audio_track_constraints.autoGainControl =
     normalized.asr.browser.experimental.audio_track_constraints.autoGainControl === true;
-  if (!normalized.asr.google_legacy_http || typeof normalized.asr.google_legacy_http !== "object") {
-    normalized.asr.google_legacy_http = {};
-  }
-  normalized.asr.google_legacy_http.enabled = normalized.asr.google_legacy_http.enabled === true;
-  normalized.asr.google_legacy_http.language =
-    String(normalized.asr.google_legacy_http.language || "ru-RU").trim() || "ru-RU";
-  normalized.asr.google_legacy_http.profanity_filter = normalized.asr.google_legacy_http.profanity_filter === true;
-  normalized.asr.google_legacy_http.connect_timeout_ms = Math.max(
-    1000,
-    Math.min(120000, parseIntegerOr(normalized.asr.google_legacy_http.connect_timeout_ms ?? 10000, 10000))
-  );
-  normalized.asr.google_legacy_http.send_timeout_ms = Math.max(
-    1000,
-    Math.min(120000, parseIntegerOr(normalized.asr.google_legacy_http.send_timeout_ms ?? 10000, 10000))
-  );
-  normalized.asr.google_legacy_http.recv_timeout_ms = Math.max(
-    1000,
-    Math.min(300000, parseIntegerOr(normalized.asr.google_legacy_http.recv_timeout_ms ?? 30000, 30000))
-  );
-  normalized.asr.google_legacy_http.max_queue_depth = Math.max(
-    1,
-    Math.min(512, parseIntegerOr(normalized.asr.google_legacy_http.max_queue_depth ?? 50, 50))
-  );
-  normalized.asr.google_legacy_http.reconnect_initial_ms = Math.max(
-    100,
-    Math.min(120000, parseIntegerOr(normalized.asr.google_legacy_http.reconnect_initial_ms ?? 1000, 1000))
-  );
-  normalized.asr.google_legacy_http.reconnect_max_ms = Math.max(
-    normalized.asr.google_legacy_http.reconnect_initial_ms,
-    Math.min(300000, parseIntegerOr(normalized.asr.google_legacy_http.reconnect_max_ms ?? 30000, 30000))
-  );
-  normalized.asr.google_legacy_http.endpoint_host =
-    String(normalized.asr.google_legacy_http.endpoint_host || "").trim();
-  normalized.asr.google_legacy_http.pair_id_prefix =
-    String(normalized.asr.google_legacy_http.pair_id_prefix || "sst").trim() || "sst";
-  delete normalized.asr.google_legacy_http.api_key;
+  delete normalized.asr[["google", "legacy", "http"].join("_")];
   normalized.asr.rnnoise_enabled =
     normalized.asr.rnnoise_enabled === true ||
     (normalized.asr.rnnoise_enabled == null && normalized.asr.experimental_noise_reduction_enabled === true);
@@ -320,6 +287,8 @@ export function normalizeConfigShape(config) {
     normalized.subtitle_lifecycle.allow_early_replace_on_next_final !== false;
   normalized.subtitle_lifecycle.sync_source_and_translation_expiry =
     normalized.subtitle_lifecycle.sync_source_and_translation_expiry !== false;
+  normalized.subtitle_lifecycle.keep_completed_translation_during_active_partial =
+    normalized.subtitle_lifecycle.keep_completed_translation_during_active_partial !== false;
   normalized.subtitle_lifecycle.hard_max_phrase_ms = Math.max(
     1000,
     parseIntegerOr(

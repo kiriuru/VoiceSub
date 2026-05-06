@@ -28,6 +28,10 @@ class TranslationEvent(SchemaModel):
     used_default_prompt: bool = False
     status_message: str | None = None
     is_complete: bool = True
+    translation_enqueued_at_ms: int | None = None
+    translation_started_at_ms: int | None = None
+    translation_done_at_ms: int | None = None
+    translation_published_at_ms: int | None = None
 
 
 class TranslationDiagnostics(SchemaModel):

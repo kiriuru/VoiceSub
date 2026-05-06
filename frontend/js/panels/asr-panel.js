@@ -26,16 +26,6 @@ export function mountAsrPanel(root, { store, actions, logger }) {
     modeHint: root.querySelector("#recognition-mode-hint"),
     localAsrProviderRow: root.querySelector("#local-asr-provider-row"),
     localAsrProviderSelect: root.querySelector("#local-asr-provider-select"),
-    googleLegacyWarning: root.querySelector("#google-legacy-http-warning"),
-    googleLegacySettings: root.querySelector("#google-legacy-http-settings"),
-    googleLegacyEnabled: root.querySelector("#google-legacy-http-enabled"),
-    googleLegacyLanguage: root.querySelector("#google-legacy-http-language"),
-    googleLegacyEndpointHost: root.querySelector("#google-legacy-http-endpoint-host"),
-    googleLegacyProfanityFilter: root.querySelector("#google-legacy-http-profanity-filter"),
-    googleLegacyConnectTimeoutMs: root.querySelector("#google-legacy-http-connect-timeout-ms"),
-    googleLegacySendTimeoutMs: root.querySelector("#google-legacy-http-send-timeout-ms"),
-    googleLegacyRecvTimeoutMs: root.querySelector("#google-legacy-http-recv-timeout-ms"),
-    googleLegacyMaxQueueDepth: root.querySelector("#google-legacy-http-max-queue-depth"),
     audioInputSelect: root.querySelector("#audio-input-select"),
     audioInputMeta: root.querySelector("#audio-input-meta"),
     simpleAppearanceSpeed: root.querySelector("#simple-appearance-speed"),
@@ -125,20 +115,6 @@ export function mountAsrPanel(root, { store, actions, logger }) {
     });
   }
 
-  function mutateGoogleLegacyFromControls() {
-    actions.mutateConfig((draft) => {
-      const provider = draft.asr.google_legacy_http;
-      provider.enabled = Boolean(elements.googleLegacyEnabled?.checked);
-      provider.language = String(elements.googleLegacyLanguage?.value || "ru-RU").trim() || "ru-RU";
-      provider.endpoint_host = String(elements.googleLegacyEndpointHost?.value || "").trim();
-      provider.profanity_filter = Boolean(elements.googleLegacyProfanityFilter?.checked);
-      provider.connect_timeout_ms = Number(elements.googleLegacyConnectTimeoutMs?.value || 10000);
-      provider.send_timeout_ms = Number(elements.googleLegacySendTimeoutMs?.value || 10000);
-      provider.recv_timeout_ms = Number(elements.googleLegacyRecvTimeoutMs?.value || 30000);
-      provider.max_queue_depth = Number(elements.googleLegacyMaxQueueDepth?.value || 50);
-    });
-  }
-
   function render(snapshot) {
     fillRecognitionLanguages();
     if (elements.partialTranscript) {
@@ -156,8 +132,6 @@ export function mountAsrPanel(root, { store, actions, logger }) {
     const mode = config.asr?.mode || "local";
     const browserMode = isBrowserRecognitionMode(mode);
     const localProvider = config.asr?.provider_preference || "official_eu_parakeet_low_latency";
-    const googleLegacyProvider = config.asr?.google_legacy_http || {};
-    const googleLegacySelected = localProvider === "google_legacy_http_experimental";
     if (elements.modeSelect) {
       elements.modeSelect.value = mode;
     }
@@ -165,43 +139,15 @@ export function mountAsrPanel(root, { store, actions, logger }) {
       elements.languageSelect.value = config.asr?.browser?.recognition_language || "ru-RU";
     }
     setElementVisibility(elements.languageRow, browserMode);
-    setElementVisibility(elements.localAsrProviderRow, true);
-    setElementVisibility(elements.googleLegacyWarning, googleLegacySelected);
-    setElementVisibility(elements.googleLegacySettings, googleLegacySelected);
+    setElementVisibility(elements.localAsrProviderRow, !browserMode);
     if (elements.localAsrProviderSelect) {
       elements.localAsrProviderSelect.value = localProvider;
-    }
-    if (elements.googleLegacyEnabled) {
-      elements.googleLegacyEnabled.checked = Boolean(googleLegacyProvider.enabled);
-    }
-    if (elements.googleLegacyLanguage) {
-      elements.googleLegacyLanguage.value = googleLegacyProvider.language || "ru-RU";
-    }
-    if (elements.googleLegacyEndpointHost) {
-      elements.googleLegacyEndpointHost.value = googleLegacyProvider.endpoint_host || "";
-    }
-    if (elements.googleLegacyProfanityFilter) {
-      elements.googleLegacyProfanityFilter.checked = Boolean(googleLegacyProvider.profanity_filter);
-    }
-    if (elements.googleLegacyConnectTimeoutMs) {
-      elements.googleLegacyConnectTimeoutMs.value = String(googleLegacyProvider.connect_timeout_ms ?? 10000);
-    }
-    if (elements.googleLegacySendTimeoutMs) {
-      elements.googleLegacySendTimeoutMs.value = String(googleLegacyProvider.send_timeout_ms ?? 10000);
-    }
-    if (elements.googleLegacyRecvTimeoutMs) {
-      elements.googleLegacyRecvTimeoutMs.value = String(googleLegacyProvider.recv_timeout_ms ?? 30000);
-    }
-    if (elements.googleLegacyMaxQueueDepth) {
-      elements.googleLegacyMaxQueueDepth.value = String(googleLegacyProvider.max_queue_depth ?? 50);
     }
     if (elements.modeHint) {
       if (browserMode) {
         elements.modeHint.textContent = mode === "browser_google_experimental"
           ? t("overview.recognition.hint.browser_google_experimental")
           : t("overview.recognition.hint.browser_google");
-      } else if (googleLegacySelected) {
-        elements.modeHint.textContent = t("overview.recognition.hint.google_legacy_http");
       } else {
         elements.modeHint.textContent = t("overview.recognition.hint.local");
       }
@@ -298,7 +244,8 @@ export function mountAsrPanel(root, { store, actions, logger }) {
 
   elements.modeSelect?.addEventListener("change", () => {
     actions.mutateConfig((draft) => {
-      draft.asr.mode = elements.modeSelect.value || "local";
+      const nextMode = elements.modeSelect.value || "local";
+      draft.asr.mode = nextMode;
     });
     logger(`[asr] mode -> ${getRecognitionModeLabel(elements.modeSelect.value)}`);
   });
@@ -310,32 +257,15 @@ export function mountAsrPanel(root, { store, actions, logger }) {
   });
   elements.localAsrProviderSelect?.addEventListener("change", () => {
     actions.mutateConfig((draft) => {
-      draft.asr.provider_preference = elements.localAsrProviderSelect.value || "official_eu_parakeet_low_latency";
+      const nextProvider = elements.localAsrProviderSelect.value || "official_eu_parakeet_low_latency";
+      draft.asr.provider_preference = nextProvider;
+      draft.asr.mode = "local";
     });
-    logger(`[asr] local provider -> ${elements.localAsrProviderSelect.value}`);
+    logger(`[asr] backend provider -> ${elements.localAsrProviderSelect.value}`);
   });
   elements.audioInputSelect?.addEventListener("change", () => {
     actions.setSelectedAudioInput(elements.audioInputSelect.value || null);
   });
-  [
-    elements.googleLegacyEnabled,
-    elements.googleLegacyLanguage,
-    elements.googleLegacyEndpointHost,
-    elements.googleLegacyProfanityFilter,
-    elements.googleLegacyConnectTimeoutMs,
-    elements.googleLegacySendTimeoutMs,
-    elements.googleLegacyRecvTimeoutMs,
-    elements.googleLegacyMaxQueueDepth,
-  ]
-    .filter(Boolean)
-    .forEach((element) => {
-      const eventName = element.type === "checkbox" ? "change" : "input";
-      element.addEventListener(eventName, mutateGoogleLegacyFromControls);
-      element.addEventListener("change", () => {
-        mutateGoogleLegacyFromControls();
-        logger("[asr] google legacy http provider settings updated locally");
-      });
-    });
   [elements.simpleAppearanceSpeed, elements.simpleFinishSpeed, elements.simpleStability]
     .filter(Boolean)
     .forEach((element) => {

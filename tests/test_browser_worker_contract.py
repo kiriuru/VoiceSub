@@ -50,18 +50,39 @@ class BrowserWorkerContractTests(unittest.TestCase):
         self.assertIn('this._setSupervisorState("fatal")', self.manager_js)
 
     def test_supervisor_uses_controlled_restart_and_watchdog_exists(self) -> None:
-        self.assertIn("normal_onend: 200", self.manager_js)
-        self.assertIn("settings_change: 200", self.manager_js)
-        self.assertIn("websocket_reconnect: 300", self.manager_js)
+        self.assertIn("normal_onend: 350", self.manager_js)
+        self.assertIn("settings_change: 350", self.manager_js)
+        self.assertIn("websocket_reconnect: 350", self.manager_js)
         self.assertIn("watchdog_stall: 750", self.manager_js)
-        self.assertIn("initialNoSpeechDelayMs = 1200", self.manager_js)
+        self.assertIn("session_cycle: 350", self.manager_js)
+        self.assertIn("initialNoSpeechDelayMs = 350", self.manager_js)
         self.assertIn("maxNoSpeechDelayMs = 5000", self.manager_js)
         self.assertIn("initialNetworkBackoffMs = 1000", self.manager_js)
-        self.assertIn("maxNetworkBackoffMs = 10000", self.manager_js)
+        self.assertIn("maxNetworkBackoffMs = 30000", self.manager_js)
         self.assertIn('"normal_onend"', self.manager_js)
         self.assertIn("watchdog forced rearm", self.manager_js)
         self.assertIn("_runWatchdog()", self.manager_js)
         self.assertIn("recognition.start deferred: recognition is stopping", self.manager_js)
+
+    def test_supervisor_keeps_pending_start_generation_and_visibility_guards(self) -> None:
+        self.assertIn("pendingStart", self.manager_js)
+        self.assertIn("generationId", self.manager_js)
+        self.assertIn("_isActiveGeneration(generationId)", self.manager_js)
+        self.assertIn("capturedGeneration !== Number(this.state.generationId || 0)", self.manager_js)
+        self.assertIn("document.hidden", self.manager_js)
+        self.assertIn("maxStoppingMs = 2500", self.manager_js)
+        self.assertIn("watchdog-stop", self.manager_js)
+        self.assertIn("lastResultIndex", self.manager_js)
+        self.assertIn("browserCyclePending", self.manager_js)
+        self.assertIn("browserCycleCount", self.manager_js)
+        self.assertIn("browserMinimumReconnectSuppressedCount", self.manager_js)
+        self.assertIn("browserForcedFinalOnInterruptionCount", self.manager_js)
+        self.assertIn("_forceFinalizeOnInterruption(", self.manager_js)
+        self.assertIn("browser session age limit reached; controlled cycle requested", self.manager_js)
+        self.assertIn("browser_recognition_interrupted", self.manager_js)
+        self.assertIn("minimumReconnectIntervalMs = 500", self.manager_js)
+        self.assertIn("maxBrowserSessionAgeMs = 240000", self.manager_js)
+        self.assertIn("prepareCycleBeforeMs = 15000", self.manager_js)
 
     def test_worker_keeps_socket_reconnect_loop_and_backend_status_bridge(self) -> None:
         self.assertIn("ensureSocketConnected()", self.manager_js)
@@ -70,6 +91,9 @@ class BrowserWorkerContractTests(unittest.TestCase):
         self.assertIn('"browser_asr_control"', self.manager_js)
         self.assertIn("session_id", self.manager_js)
         self.assertIn("generation_id", self.manager_js)
+        self.assertIn("provider_name", self.manager_js)
+        self.assertIn("last_result_index", self.manager_js)
+        self.assertIn("browser_session_age_ms", self.manager_js)
         self.assertIn('"reload_settings"', self.manager_js)
 
     def test_google_asr_worker_prioritizes_local_storage_settings_but_mirrors_backend(self) -> None:
@@ -112,20 +136,34 @@ class BrowserWorkerContractTests(unittest.TestCase):
         self.assertIn("async _performControlledStart(reason)", self.experimental_manager_js)
         self.assertIn("super.destroy();", self.experimental_manager_js)
 
+    def test_experimental_manager_releases_tracks_on_stop_and_restart(self) -> None:
+        self.assertIn("navigator.mediaDevices.getUserMedia", self.experimental_manager_js)
+        self.assertIn("track.stop()", self.experimental_manager_js)
+        self.assertIn('_releaseAudioTrack("stop")', self.experimental_manager_js)
+        self.assertIn("pendingStart = true", self.experimental_manager_js)
+        self.assertIn("experimental audio track open skipped while stopping", self.experimental_manager_js)
+        self.assertIn("mediaTrackLeakGuardCount", self.experimental_manager_js)
+        self.assertIn("getUserMediaCount", self.experimental_manager_js)
+        self.assertIn("mediaTracksStoppedCount", self.experimental_manager_js)
+
     def test_experimental_page_mentions_audio_track_mode_and_fallback_behavior(self) -> None:
         self.assertIn("SpeechRecognition.start(audioTrack)", self.experimental_html)
         self.assertIn("fall back to normal start()", self.experimental_html)
         self.assertIn("loadBackendSettings: loadSettings", self.experimental_html)
         self.assertIn('window.addEventListener("pagehide"', self.experimental_html)
+        self.assertIn("resolveBrowserLifecycleConfig(browserConfig)", self.experimental_html)
+        self.assertIn("providerName: state.browserMode", self.experimental_html)
 
-    def test_local_google_legacy_provider_is_available_without_changing_browser_worker_start_gate(self) -> None:
-        self.assertIn('value="google_legacy_http_experimental"', self.index_html)
+    def test_local_provider_selector_only_lists_parakeet_variants(self) -> None:
         self.assertIn('id="local-asr-provider-hint"', self.index_html)
-        self.assertIn("To use Google Legacy HTTP Speech Experimental, switch Recognition method to Local Parakeet.", self.index_html)
-        self.assertNotIn('id="google-legacy-http-api-key"', self.index_html)
-        self.assertIn("setElementVisibility(elements.localAsrProviderRow, true)", self.asr_panel_js)
+        self.assertIn("Backend providers are configured here for local microphone capture. Browser Speech modes use the separate browser recognition window.", self.index_html)
+        self.assertNotIn('value="auto"', self.index_html)
+        self.assertNotIn("_".join(["google", "legacy", "http"]), self.index_html)
+        self.assertIn("setElementVisibility(elements.localAsrProviderRow, !browserMode)", self.asr_panel_js)
+        self.assertIn('draft.asr.mode = "local";', self.asr_panel_js)
+        self.assertNotIn("_".join(["google", "legacy", "http"]), self.asr_panel_js)
         self.assertIn("if (result?.runtime && mode !== \"local\")", self.runtime_panel_js)
-        self.assertNotIn("google_legacy_http_experimental &&", self.runtime_panel_js)
+        self.assertNotIn("_".join(["google", "legacy", "http", "experimental"]), self.runtime_panel_js)
 
 
 if __name__ == "__main__":

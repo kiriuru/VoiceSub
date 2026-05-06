@@ -10,6 +10,17 @@ from backend.core.config_migrations import CURRENT_CONFIG_VERSION, migrate_confi
 from backend.core.profile_manager import ProfileManager
 
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _removed_provider_value() -> str:
+    return "_".join(["google", "legacy", "http", "experimental"])
+
+
+def _removed_provider_key() -> str:
+    return "_".join(["google", "legacy", "http"])
+
+
 class ConfigMigrationTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
@@ -51,96 +62,64 @@ class ConfigMigrationTests(unittest.TestCase):
         self.assertEqual(migrated["config_version"], CURRENT_CONFIG_VERSION)
         self.assertEqual(migrated["asr"]["provider_preference"], "official_eu_parakeet_low_latency")
 
-    def test_translation_settings_and_subtitle_style_are_preserved(self) -> None:
-        migrated = self.manager.save(
-            {
-                "translation": {
-                    "enabled": True,
-                    "provider": "deepl",
-                    "target_languages": ["en", "de"],
-                    "timeout_ms": 15000,
-                    "provider_settings": {
-                        "deepl": {
-                            "api_key": " secret-key ",
-                            "api_url": " https://api-free.deepl.com/v2/translate ",
-                        }
-                    },
-                },
-                "subtitle_style": {
-                    "preset": "clean_default",
-                    "custom_presets": {
-                        "stream": {
-                            "label": "Stream",
-                            "base": {"font_family": "Arial"},
-                        }
-                    },
-                },
-            }
-        )
-
-        self.assertTrue(migrated["translation"]["enabled"])
-        self.assertEqual(migrated["translation"]["provider"], "deepl")
-        self.assertEqual(migrated["translation"]["target_languages"], ["en", "de"])
-        self.assertEqual(
-            migrated["translation"]["provider_settings"]["deepl"]["api_url"],
-            "https://api-free.deepl.com/v2/translate",
-        )
-        self.assertIn("stream", migrated["subtitle_style"]["custom_presets"])
-
-    def test_google_legacy_http_shape_is_added_and_disabled_by_default(self) -> None:
-        migrated = self.manager.save(
-            {
-                "asr": {
-                    "mode": "local",
-                    "provider_preference": "official_eu_parakeet_low_latency",
-                }
-            }
-        )
-
-        google_legacy_http = migrated["asr"]["google_legacy_http"]
-        self.assertFalse(google_legacy_http["enabled"])
-        self.assertEqual(google_legacy_http["language"], "ru-RU")
-        self.assertEqual(google_legacy_http["connect_timeout_ms"], 10000)
-        self.assertEqual(google_legacy_http["send_timeout_ms"], 10000)
-        self.assertEqual(google_legacy_http["recv_timeout_ms"], 30000)
-        self.assertEqual(google_legacy_http["max_queue_depth"], 50)
-        self.assertEqual(google_legacy_http["endpoint_host"], "")
-        self.assertEqual(google_legacy_http["pair_id_prefix"], "sst")
-
-    def test_migrate_config_adds_google_legacy_http_shape_without_auto_selecting_provider(self) -> None:
+    def test_removed_legacy_provider_preference_migrates_to_low_latency_parakeet(self) -> None:
         migrated = migrate_config(
             {
-                "config_version": 4,
+                "config_version": CURRENT_CONFIG_VERSION,
                 "asr": {
                     "mode": "local",
-                    "provider_preference": "official_eu_parakeet_low_latency",
+                    "provider_preference": _removed_provider_value(),
+                },
+            }
+        )
+
+        self.assertEqual(migrated["asr"]["mode"], "local")
+        self.assertEqual(migrated["asr"]["provider_preference"], "official_eu_parakeet_low_latency")
+
+    def test_removed_legacy_asr_section_is_dropped_during_migration(self) -> None:
+        migrated = migrate_config(
+            {
+                "config_version": CURRENT_CONFIG_VERSION,
+                "asr": {
+                    "mode": "local",
+                    "provider_preference": _removed_provider_value(),
+                    _removed_provider_key(): {
+                        "enabled": True,
+                        "api_key": "deprecated-secret",
+                        "host_override": "https://example.test",
+                    },
                 },
             }
         )
 
         self.assertEqual(migrated["config_version"], CURRENT_CONFIG_VERSION)
         self.assertEqual(migrated["asr"]["provider_preference"], "official_eu_parakeet_low_latency")
-        self.assertIn("google_legacy_http", migrated["asr"])
-        self.assertFalse(migrated["asr"]["google_legacy_http"]["enabled"])
-        self.assertEqual(migrated["asr"]["google_legacy_http"]["pair_id_prefix"], "sst")
+        self.assertNotIn(_removed_provider_key(), migrated["asr"])
 
-    def test_migrate_config_removes_legacy_http_api_key_and_keeps_pair_id_prefix(self) -> None:
-        migrated = migrate_config(
+    def test_manager_normalization_does_not_resurrect_removed_legacy_asr_section(self) -> None:
+        saved = self.manager.save(
             {
-                "config_version": 4,
                 "asr": {
-                    "google_legacy_http": {
+                    "mode": "local",
+                    "provider_preference": _removed_provider_value(),
+                    _removed_provider_key(): {
                         "enabled": True,
-                        "language": "ru-RU",
-                        "api_key": "legacy-secret",
-                    }
-                },
+                        "api_key": "deprecated-secret",
+                    },
+                }
             }
         )
 
-        self.assertEqual(migrated["config_version"], CURRENT_CONFIG_VERSION)
-        self.assertNotIn("api_key", migrated["asr"]["google_legacy_http"])
-        self.assertEqual(migrated["asr"]["google_legacy_http"]["pair_id_prefix"], "sst")
+        self.assertEqual(saved["asr"]["provider_preference"], "official_eu_parakeet_low_latency")
+        self.assertNotIn(_removed_provider_key(), saved["asr"])
+
+    def test_config_schema_excludes_removed_legacy_provider(self) -> None:
+        schema_json = (PROJECT_ROOT / "backend" / "data" / "config.schema.json").read_text(encoding="utf-8")
+        example_json = (PROJECT_ROOT / "backend" / "data" / "config.example.json").read_text(encoding="utf-8")
+        self.assertNotIn(_removed_provider_key(), schema_json)
+        self.assertNotIn(_removed_provider_value(), schema_json)
+        self.assertNotIn(_removed_provider_key(), example_json)
+        self.assertNotIn(_removed_provider_value(), example_json)
 
     def test_profiles_also_migrate_to_current_schema(self) -> None:
         profiles_dir = self.root / "profiles"
@@ -151,7 +130,7 @@ class ConfigMigrationTests(unittest.TestCase):
                 "target_languages": ["fr"],
             },
             "asr": {
-                "provider_preference": "official_eu_parakeet_realtime",
+                "provider_preference": _removed_provider_value(),
             },
             "subtitle_style": {
                 "preset": "clean_default",

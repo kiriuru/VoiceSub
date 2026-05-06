@@ -12,6 +12,7 @@ class AsrWorkItem:
     kind: Literal["partial", "final"]
     audio: bytes
     duration_ms: int
+    generation: int = 0
     segment_id: str = ""
     revision: int = 0
     vad_ms: float = 0.0
@@ -19,9 +20,12 @@ class AsrWorkItem:
 
 
 class SegmentQueue:
-    def __init__(self) -> None:
+    def __init__(self, *, maxsize: int = 64) -> None:
         self._items: deque[AsrWorkItem] = deque()
         self._condition = threading.Condition()
+        self._maxsize = max(1, int(maxsize or 1))
+        self._partial_jobs_dropped = 0
+        self._wake_counter = 0
 
     def _prune_redundant_partials_locked(self, item: AsrWorkItem) -> None:
         if not self._items:
@@ -38,6 +42,19 @@ class SegmentQueue:
             retained.append(existing)
         self._items = retained
 
+    def _drop_oldest_partial_locked(self) -> bool:
+        retained: deque[AsrWorkItem] = deque()
+        removed = False
+        while self._items:
+            existing = self._items.popleft()
+            if not removed and existing.kind == "partial":
+                removed = True
+                self._partial_jobs_dropped += 1
+                continue
+            retained.append(existing)
+        self._items = retained
+        return removed
+
     def push(self, item: AsrWorkItem) -> None:
         if item.created_at_monotonic <= 0:
             item.created_at_monotonic = time.perf_counter()
@@ -46,19 +63,51 @@ class SegmentQueue:
                 self._prune_redundant_partials_locked(item)
             elif item.kind == "final" and item.segment_id:
                 self._prune_redundant_partials_locked(item)
+            if len(self._items) >= self._maxsize:
+                dropped_existing_partial = self._drop_oldest_partial_locked()
+                if not dropped_existing_partial:
+                    if item.kind == "partial":
+                        self._partial_jobs_dropped += 1
+                        self._condition.notify_all()
+                        return
+                    self._items.popleft()
             self._items.append(item)
             self._condition.notify()
 
     def pop(self, timeout: float = 0.25) -> AsrWorkItem | None:
         deadline = time.perf_counter() + max(0.0, timeout)
         with self._condition:
+            wake_counter = self._wake_counter
             while not self._items:
+                if wake_counter != self._wake_counter:
+                    return None
                 remaining = deadline - time.perf_counter()
                 if remaining <= 0:
                     return None
                 self._condition.wait(timeout=remaining)
             return self._items.popleft()
 
-    def clear(self) -> None:
+    def clear(self, *, notify: bool = True) -> None:
         with self._condition:
             self._items.clear()
+            if notify:
+                self._wake_counter += 1
+                self._condition.notify_all()
+
+    def wake(self) -> None:
+        with self._condition:
+            self._wake_counter += 1
+            self._condition.notify_all()
+
+    def qsize(self) -> int:
+        with self._condition:
+            return len(self._items)
+
+    @property
+    def maxsize(self) -> int:
+        return self._maxsize
+
+    @property
+    def partial_jobs_dropped(self) -> int:
+        with self._condition:
+            return self._partial_jobs_dropped
