@@ -428,6 +428,7 @@ export function createDashboardActions({ store, api, logger }) {
     const snapshot = store.getState();
     const mode = snapshot.config?.asr?.mode || "local";
     const deviceId = isBrowserRecognitionMode(mode) ? null : snapshot.ui.selectedAudioInputId;
+    const configPayload = normalizeConfigShape(clone(snapshot.config || {}));
     store.updateState({
       runtime: {
         ...(snapshot.runtime || {}),
@@ -443,7 +444,7 @@ export function createDashboardActions({ store, api, logger }) {
         last_error: null,
       },
     });
-    const data = await api.startRuntime(deviceId);
+    const data = await api.startRuntime(deviceId, configPayload);
     setRuntime(data.runtime);
     logger(`[ui] runtime start -> ${data.runtime?.status || "unknown"}`);
     return data;

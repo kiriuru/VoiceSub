@@ -13,7 +13,7 @@ from backend.core.remote_signaling import RemoteSignalingManager
 from backend.core.remote_session import RemoteSessionManager
 from backend.core.session_logger import SessionLogManager
 from backend.core.structured_runtime_logger import StructuredRuntimeLogger
-from backend.core.subtitle_router import RuntimeOrchestrator
+from backend.core.runtime_orchestrator import RuntimeOrchestrator
 from backend.services import (
     AsrService,
     BrowserAsrService,

@@ -9,6 +9,7 @@ This branch introduces a LAN-only remote mode without breaking the existing loca
 3. No cloud/SaaS/account/auth features are added.
 4. Controller and Worker responsibilities are separated.
 5. Existing local API/UI/overlay behavior must remain unchanged when remote mode is off.
+6. Desktop launcher must expose remote roles only as explicit secondary profiles, never as the default startup path.
 
 ## Folder Lock
 
@@ -23,6 +24,7 @@ This branch introduces a LAN-only remote mode without breaking the existing loca
 4. Keep subtitle routing on Controller side.
 5. Keep ASR+translation execution on Worker side in remote mode.
 6. Add reconnect and heartbeat for LAN instability.
+7. Keep controller bootstrap lightweight and keep worker bootstrap on local AI only.
 
 ## Exit Criteria For Remote Work
 

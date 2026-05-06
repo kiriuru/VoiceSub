@@ -181,8 +181,12 @@ export function createDashboardApi(client) {
     getAudioInputs() {
       return client.apiGet("/api/devices/audio-inputs");
     },
-    startRuntime(deviceId) {
-      return client.apiPost("/api/runtime/start", { device_id: deviceId || null }, { busyKey: "runtime" });
+    startRuntime(deviceId, configPayload = null) {
+      return client.apiPost(
+        "/api/runtime/start",
+        { device_id: deviceId || null, config_payload: configPayload || null },
+        { busyKey: "runtime" }
+      );
     },
     stopRuntime() {
       return client.apiPost("/api/runtime/stop", null, { busyKey: "runtime" });

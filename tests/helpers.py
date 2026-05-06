@@ -28,6 +28,12 @@ class FakeConfigManager:
         self.saved_payloads.append(dict(payload))
         return dict(self.payload)
 
+    def normalize_profile_payload(self, payload: dict[str, Any], *, profile_name: str | None = None) -> dict[str, Any]:
+        normalized = dict(payload)
+        if profile_name:
+            normalized["profile"] = profile_name
+        return normalized
+
     def subtitle_style_presets(self, payload: dict[str, Any]) -> dict[str, Any]:
         _ = payload
         return {}

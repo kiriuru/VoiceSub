@@ -16,6 +16,7 @@ Managed payload scope today:
 - hidden internal runtime executable extracted next to the public launcher
 - `app-runtime/` extracted next to the public launcher
 - user data and logs stay outside managed payload and are preserved
+- launcher profiles now also include explicit `Remote Controller` and `Remote Worker` secondary flows without changing the default local-first startup.
 
 ## Existing Version/Release Scaffold
 
@@ -23,7 +24,7 @@ There is already version/update groundwork in:
 
 - [backend/versioning.py](F:/AI/stream-sub-translator/backend/versioning.py)
 - [backend/api/routes_version.py](F:/AI/stream-sub-translator/backend/api/routes_version.py)
-- `updates` config section in [backend/config.py](F:/AI/stream-sub-translator/backend/config.py)
+- `updates` config section in [backend/config/__init__.py](F:/AI/stream-sub-translator/backend/config/__init__.py) plus [backend/config/defaults.py](F:/AI/stream-sub-translator/backend/config/defaults.py)
 
 That scaffold should be reused for later live release sync instead of starting another parallel version system.
 

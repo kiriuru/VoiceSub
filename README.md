@@ -2,7 +2,7 @@
 
 SST Desktop is a local Windows application for real-time speech recognition, optional translation, subtitle routing, and OBS-ready output.
 
-This README describes the desktop release surface for `0.3.0`.
+This README describes the current desktop product surface for the `0.3.0` code line, including the current main-branch follow-up changes that are not yet cut as a separate release.
 
 ## Language
 
@@ -13,6 +13,7 @@ This README describes the desktop release surface for `0.3.0`.
 - Full technical architecture document: [docs/TECHNICAL_ARCHITECTURE.md](./docs/TECHNICAL_ARCHITECTURE.md)
 - Unified changelog: [docs/CHANGELOG.md](./docs/CHANGELOG.md)
 - `0.3.0` delta notes: [docs/DESKTOP_RELEASE_CHANGELOG_0.3.0.md](./docs/DESKTOP_RELEASE_CHANGELOG_0.3.0.md)
+- Current branch follow-up notes: `docs/CHANGELOG.md` -> `Unreleased`
 
 ## Release Highlights
 
@@ -43,8 +44,10 @@ On first launch the bootstrap launcher extracts the managed runtime next to itse
 4. Wait for the bootstrap launcher to extract the managed runtime on first start.
 5. In the splash launcher choose one startup profile:
    - `Quick Start (Browser Speech)`
-   - `Local AI (NVIDIA GPU)`
-   - `Local AI (CPU)`
+   - `NVIDIA GPU (CUDA)`
+   - `CPU-only`
+   - `Remote Controller`
+   - `Remote Worker`
 6. Wait for the local dashboard to open.
 
 ## Bootstrap Launcher
@@ -80,12 +83,20 @@ Bootstrap output:
   - fastest startup path;
   - keeps recognition in the browser worker window;
   - skips local AI dependency installation.
-- `Local AI (NVIDIA GPU)`:
+- `NVIDIA GPU (CUDA)`:
   - provisions the local CUDA PyTorch stack;
   - intended for NVIDIA systems.
-- `Local AI (CPU)`:
+- `CPU-only`:
   - provisions the CPU-only PyTorch stack;
   - intended for AMD, Intel, or no-GPU systems.
+- `Remote Controller`:
+  - keeps startup lightweight;
+  - defaults to controller role with local AI bootstrap skipped;
+  - is intended to pair with a LAN worker while keeping the local dashboard and overlay on the controller machine.
+- `Remote Worker`:
+  - starts the local AI worker role with LAN bind enabled;
+  - keeps Browser Speech disabled on the worker side;
+  - reuses the local AI runtime profile that matches the detected or selected CPU/GPU environment.
 
 ## First Launch Behavior
 
@@ -127,7 +138,11 @@ Backend:
 
 - `backend/api/routes/` style separation for HTTP endpoints;
 - `backend/services/` for route-facing orchestration;
-- `backend/core/` for runtime, bootstrap, shared lifecycle, WS, config, logging, and provider internals;
+- `backend/config/` for defaults, secrets, and normalization helpers;
+- `backend/core/` for bootstrap, shared lifecycle, WS, subtitle routing, and runtime coordination;
+- `backend/core/runtime/` for extracted runtime controllers and status builders;
+- `backend/asr/parakeet/` for local AI runtime installation, diagnostics, and provider adapters;
+- `backend/translation/` for provider registry, readiness checks, engine wiring, and provider-specific clients;
 - `backend/schemas/` for typed config/runtime/diagnostics payloads.
 
 Frontend:
@@ -163,6 +178,8 @@ The main window includes:
   - subtitle output preview
   - local overlay URL
   - diagnostics/event feed
+
+`Start` now sends the current in-memory config snapshot to `/api/runtime/start`, so unsaved dashboard changes can take effect immediately in the runtime without forcing a disk save first.
 
 Visual layout was not redesigned in `0.3.0`; the major change is the internal modular architecture and runtime robustness.
 
@@ -325,8 +342,10 @@ Overlay remains a separate lightweight page for OBS Browser Source and auto-reco
 `0.3.0` introduces a more explicit config contract:
 
 - config is versioned and migrated through explicit steps;
+- config normalization now lives under `backend/config/` instead of one monolithic `backend/config.py`;
 - profiles use the same migration/normalization pipeline;
 - generated schema lives at `backend/data/config.schema.json`;
+- `/api/runtime/start` can apply an optional normalized `config_payload` snapshot for runtime-only changes without persisting `user-data/config.json`;
 - `backend/versioning.py` remains the single source of truth for the app version.
 
 ## Remote Notes
@@ -336,7 +355,7 @@ The repository still contains optional LAN remote controller/worker support:
 - default desktop launch stays on `127.0.0.1`;
 - `Remote Controller` and `Remote Worker` remain explicit secondary flows;
 - remote worker runtime is AI-only and must not run browser speech modes;
-- remote worker sync also prevents drift into the experimental legacy HTTP provider path.
+- remote worker sync also prevents drift into browser-worker paths during controller -> worker settings sync.
 
 ## Local Data and Logs
 

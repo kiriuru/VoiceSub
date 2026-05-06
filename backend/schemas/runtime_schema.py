@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -115,6 +115,7 @@ class RuntimeActionResponse(SchemaModel):
 
 class RuntimeStartRequest(SchemaModel):
     device_id: str | None = None
+    config_payload: dict[str, Any] | None = None
 
 
 class ObsUrlResponse(SchemaModel):

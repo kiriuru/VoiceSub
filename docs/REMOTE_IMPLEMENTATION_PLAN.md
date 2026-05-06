@@ -62,6 +62,11 @@ Implemented in this step:
 - Main dashboard recognition mode now enforces AI-only policy for remote worker role:
   - `Browser Speech` option is disabled when effective remote role is `worker`.
   - If config still contains `browser_google` in worker role, UI normalizes it to `local`.
+- Desktop launcher now exposes explicit secondary startup profiles:
+  - `Remote Controller`
+  - `Remote Worker`
+  - controller stays lightweight and skips local AI bootstrap by design
+  - worker startup keeps LAN bind explicit and stays on the local AI path
 - `Remote LAN` panel now auto-refreshes:
   - remote pairing/session state
   - worker runtime status

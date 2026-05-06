@@ -1,6 +1,6 @@
 # SST Desktop 0.3.0 - Technical Architecture
 
-Актуально для кода, где `backend/versioning.py` содержит `PROJECT_VERSION = "0.3.0"`.
+Актуально для линии кода, где `backend/versioning.py` содержит `PROJECT_VERSION = "0.3.0"`, включая текущие post-release follow-up изменения в `main`.
 
 ## 1. Назначение и границы системы
 
@@ -60,7 +60,9 @@ flowchart LR
 - `backend/run.py`
 - `backend/run_controller.py`
 - `backend/run_worker.py`
-- `backend/config.py`
+- `backend/config/`
+- `backend/asr/`
+- `backend/translation/`
 - `backend/models.py`
 - `backend/versioning.py`
 
@@ -101,10 +103,18 @@ flowchart LR
 
 ### 4.4 Core
 
-`backend/core/` содержит shared runtime infrastructure:
+`backend/core/` содержит shared runtime infrastructure, subtitle lifecycle logic и совместимые entrypoints поверх новых подмодулей:
 
 - bootstrap:
   - `app_bootstrap.py`
+- runtime entrypoint and extracted controllers:
+  - `runtime_orchestrator.py`
+  - `runtime/asr_runtime_controller.py`
+  - `runtime/audio_runtime_controller.py`
+  - `runtime/output_fanout_coordinator.py`
+  - `runtime/runtime_metrics_collector.py`
+  - `runtime/runtime_status_builder.py`
+  - `runtime/translation_runtime_coordinator.py`
 - paths / logging / errors:
   - `paths.py`
   - `logging_setup.py`
@@ -128,7 +138,59 @@ flowchart LR
   - `remote_signaling.py`
   - `remote_diagnostics.py`
 
-### 4.5 Schemas
+Практически это означает:
+
+- `RuntimeOrchestrator` по-прежнему импортируется стабильно через `backend/core/runtime_orchestrator.py`;
+- orchestration responsibilities постепенно выносятся из одного большого runtime hub в domain-specific helpers под `backend/core/runtime/`;
+- `subtitle_router.py` остаётся high-risk lifecycle surface и по-прежнему держит ключевую completed/partial subtitle state machine.
+
+### 4.5 Config package
+
+`backend/config/` теперь содержит config loading/normalization surface:
+
+- `__init__.py`
+- `defaults.py`
+- `secrets.py`
+- `normalizers/asr.py`
+- `normalizers/browser.py`
+- `normalizers/obs.py`
+- `normalizers/remote.py`
+- `normalizers/subtitles.py`
+- `normalizers/translation.py`
+
+Назначение:
+
+- убрать риск дальнейшего роста одного монолитного `backend/config.py`;
+- держать defaults, secret normalization и domain normalization раздельно;
+- дать `LocalConfigManager` и тестам стабильные import entrypoints.
+
+### 4.6 ASR and Translation packages
+
+Новые domain packages:
+
+- `backend/asr/parakeet/`
+  - `model_installer.py`
+  - `runtime_loader.py`
+  - `device_diagnostics.py`
+  - `providers/base.py`
+  - `providers/official.py`
+  - `providers/realtime.py`
+  - `mock_provider.py`
+- `backend/translation/`
+  - `engine.py`
+  - `registry.py`
+  - `readiness.py`
+  - `providers/google_v2.py`
+  - `providers/google_v3.py`
+  - `providers/azure.py`
+  - `providers/deepl.py`
+  - `providers/libretranslate.py`
+  - `providers/openai_compatible.py`
+  - `providers/experimental_google_web.py`
+
+Это не меняет product surface, но делает локальный AI и translation wiring более явными для тестов, docs и следующих этапов декомпозиции.
+
+### 4.7 Schemas
 
 `backend/schemas/` теперь содержит typed payload definitions вместо разрастания ad hoc dict contracts:
 
@@ -157,6 +219,23 @@ flowchart LR
 - тесты могут стабильно ожидать `app.state.*` dependencies;
 - следующий этап декомпозиции не требует повторного переписывания entrypoint.
 
+### 5.1 Desktop launcher profiles
+
+Пакетный desktop launcher сейчас явно показывает пять профилей:
+
+- `Quick Start (Browser Speech)`
+- `NVIDIA GPU (CUDA)`
+- `CPU-only`
+- `Remote Controller`
+- `Remote Worker`
+
+Ожидаемое поведение:
+
+- Browser Speech quick start intentionally skips local AI bootstrap;
+- Remote Controller remains lightweight and does not force local AI model installation;
+- Remote Worker enables LAN bind and keeps the worker on the local AI path only;
+- default behavior remains local-first because remote roles are explicit profile choices, not implicit startup drift.
+
 ## 6. Config and Migrations
 
 Главный config path:
@@ -165,6 +244,7 @@ flowchart LR
 
 В `0.3.0`:
 
+- config code now lives under `backend/config/` instead of one `backend/config.py`;
 - config проходит через явные migration steps;
 - profiles используют тот же migration/normalization pipeline;
 - generated JSON Schema lives at `backend/data/config.schema.json`.
@@ -181,6 +261,10 @@ flowchart LR
 - reproducible tests
 - future UI evolution without legacy config drift.
 
+Дополнительный current-branch contract:
+
+- `LocalConfigManager.normalize_profile_payload()` используется не только для save/load, но и для runtime-start normalization of unsaved dashboard snapshots.
+
 ## 7. HTTP Surface
 
 Primary local endpoints:
@@ -194,7 +278,20 @@ Primary local endpoints:
 - `/api/devices/audio-inputs`
 - `/api/obs/url`
 - `/api/version`
+- `/api/profiles`
+- `/api/profiles/{name}`
+- `/api/exports`
+- `/api/exports/diagnostics`
 - `/api/logs/client-event`
+
+`POST /api/runtime/start` current contract:
+
+- accepts `device_id`;
+- accepts optional `config_payload`;
+- normalizes that payload through the config manager when available;
+- applies it to `app.state.config` for the current runtime start only;
+- may preload remote session fields from `remote.session_id` and `remote.pair_code`;
+- does not persist `user-data/config.json` unless the user later saves settings explicitly.
 
 Remote endpoints:
 

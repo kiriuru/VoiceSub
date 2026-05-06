@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import audioop
 import asyncio
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -15,7 +14,6 @@ from backend.core.asr_provider_selection import (
     BROWSER_GOOGLE_MODE,
     DEFAULT_PARAKEET_PROVIDER,
     LOCAL_ASR_MODE as RESOLVED_LOCAL_ASR_MODE,
-    resolve_effective_asr_provider,
 )
 from backend.core.browser_asr_gateway import BrowserAsrGateway
 from backend.core.exporter import Exporter
@@ -23,11 +21,38 @@ from backend.core.obs_caption_output import ObsCaptionOutput
 from backend.core.overlay_broadcaster import OverlayBroadcaster
 from backend.core.parakeet_provider import AsrProviderStatus, OFFICIAL_EU_PARAKEET_REPO
 from backend.core.remote_mode import (
-    REMOTE_ROLE_CONTROLLER,
     REMOTE_ROLE_WORKER,
-    resolve_configured_remote_state,
-    resolve_effective_remote_role,
 )
+from backend.core.runtime.asr_runtime_controller import (
+    BROWSER_ASR_MODES,
+    browser_asr_config,
+    browser_asr_source_lang,
+    browser_worker_provider_name,
+    current_asr_mode,
+    current_local_provider_preference,
+    current_remote_role,
+    is_browser_asr_mode,
+    is_remote_enabled,
+    resolved_asr_provider,
+    uses_remote_audio_source,
+    uses_remote_event_source,
+)
+from backend.core.runtime.audio_runtime_controller import (
+    pcm16_rms_level,
+    prepare_recognition_audio,
+)
+from backend.core.runtime.output_fanout_coordinator import broadcast_event, publish_subtitle_payload
+from backend.core.runtime.runtime_metrics_collector import (
+    apply_translation_dispatcher_metrics,
+    enrich_event_payload,
+    increment_counter_metric,
+    increment_metric,
+    next_event_sequence,
+    record_metrics,
+    runtime_material_status_snapshot,
+)
+from backend.core.runtime.runtime_status_builder import build_overlay_runtime_status, build_runtime_state
+from backend.core.runtime.translation_runtime_coordinator import summarize_translation_diagnostics
 from backend.core.segment_queue import AsrWorkItem, SegmentQueue
 from backend.core.structured_runtime_logger import StructuredRuntimeLogger
 from backend.core.subtitle_style import resolve_effective_subtitle_style
@@ -36,9 +61,7 @@ from backend.core.translation_engine import TranslationEngine
 from backend.core.vad import VadEngine
 from backend.models import (
     AsrDiagnostics,
-    AsrRuntimeStatus,
     ObsCaptionDiagnostics,
-    ObsCaptionsStatus,
     OverlayRuntimeStatus,
     RuntimeMetrics,
     RuntimeState,
@@ -49,7 +72,6 @@ from backend.models import (
     TranslationDiagnostics,
     TranslationEvent,
     TranslationItem,
-    TranslationRuntimeStatus,
 )
 from backend.ws_manager import WebSocketManager
 
@@ -1075,61 +1097,48 @@ class RuntimeOrchestrator:
         )
 
     def _current_asr_mode(self) -> str:
-        resolved = self._resolved_asr_provider()
-        return str(resolved.get("mode", LOCAL_ASR_MODE) or LOCAL_ASR_MODE)
+        return current_asr_mode(self._resolved_asr_provider())
 
     def _is_browser_asr_mode(self, mode: str | None = None) -> bool:
-        current_mode = str(mode or self._current_asr_mode()).strip().lower()
-        return current_mode in BROWSER_ASR_MODES
+        return is_browser_asr_mode(mode or self._current_asr_mode())
 
     def _resolved_asr_provider(self) -> dict[str, Any]:
-        config = self.config_getter()
-        if self._state.is_running and self._active_runtime_mode in {LOCAL_ASR_MODE, *BROWSER_ASR_MODES}:
-            config = dict(config if isinstance(config, dict) else {})
-            asr = dict(config.get("asr", {}) if isinstance(config, dict) else {})
-            asr["mode"] = self._active_runtime_mode
-            if self._active_local_provider_preference is not None:
-                asr["provider_preference"] = self._active_local_provider_preference
-            config["asr"] = asr
-        return resolve_effective_asr_provider(config)
+        return resolved_asr_provider(
+            config_getter=self.config_getter,
+            state_is_running=self._state.is_running,
+            active_runtime_mode=self._active_runtime_mode,
+            active_local_provider_preference=self._active_local_provider_preference,
+        )
 
     def _current_local_provider_preference(self) -> str:
-        resolved = self._resolved_asr_provider()
-        return str(resolved.get("provider_preference", DEFAULT_PARAKEET_PROVIDER) or DEFAULT_PARAKEET_PROVIDER)
+        return current_local_provider_preference(self._resolved_asr_provider())
 
     def _browser_asr_config(self) -> dict[str, object]:
-        config = self.config_getter()
-        asr = config.get("asr", {}) if isinstance(config, dict) else {}
-        browser = asr.get("browser", {}) if isinstance(asr, dict) else {}
-        return browser if isinstance(browser, dict) else {}
+        return browser_asr_config(self.config_getter())
 
     def _browser_asr_source_lang(self) -> str:
-        language = str(self._browser_asr_config().get("recognition_language", "ru-RU") or "ru-RU").strip()
-        primary = language.split("-", 1)[0].strip().lower()
-        return primary or "auto"
+        return browser_asr_source_lang(self.config_getter())
 
     def _browser_worker_provider_name(self) -> str:
-        mode = self._current_asr_mode()
-        return mode if self._is_browser_asr_mode(mode) else BROWSER_ASR_MODE
+        return browser_worker_provider_name(self._current_asr_mode())
 
     def _current_remote_role(self) -> str:
-        try:
-            return resolve_effective_remote_role(self.config_getter())
-        except Exception:
-            return "disabled"
+        return current_remote_role(self.config_getter)
 
     def _uses_remote_audio_source(self) -> bool:
-        return not self._is_browser_asr_mode() and self._current_remote_role() == REMOTE_ROLE_WORKER
+        return uses_remote_audio_source(
+            mode=self._current_asr_mode(),
+            remote_role=self._current_remote_role(),
+        )
 
     def _is_remote_enabled(self) -> bool:
-        enabled, _ = resolve_configured_remote_state(self.config_getter())
-        return enabled
+        return is_remote_enabled(self.config_getter)
 
     def _uses_remote_event_source(self) -> bool:
-        return (
-            not self._is_browser_asr_mode()
-            and self._is_remote_enabled()
-            and self._current_remote_role() == REMOTE_ROLE_CONTROLLER
+        return uses_remote_event_source(
+            mode=self._current_asr_mode(),
+            remote_enabled=self._is_remote_enabled(),
+            remote_role=self._current_remote_role(),
         )
 
     async def _broadcast_runtime(self) -> None:
@@ -1156,27 +1165,24 @@ class RuntimeOrchestrator:
         )
 
     async def _broadcast_transcript(self, event: TranscriptEvent) -> None:
-        await self.ws_manager.broadcast(
-            {
-                "type": "transcript_update",
-                "payload": self._enrich_event_payload("transcript_update", event.model_dump()),
-            }
+        await broadcast_event(
+            self.ws_manager,
+            channel="transcript_update",
+            payload=self._enrich_event_payload("transcript_update", event.model_dump()),
         )
 
     async def _broadcast_transcript_segment_event(self, event: TranscriptEvent) -> None:
-        await self.ws_manager.broadcast(
-            {
-                "type": "transcript_segment_event",
-                "payload": self._enrich_event_payload("transcript_segment_event", event.model_dump()),
-            }
+        await broadcast_event(
+            self.ws_manager,
+            channel="transcript_segment_event",
+            payload=self._enrich_event_payload("transcript_segment_event", event.model_dump()),
         )
 
     async def _broadcast_translation(self, event: TranslationEvent) -> None:
-        await self.ws_manager.broadcast(
-            {
-                "type": "translation_update",
-                "payload": self._enrich_event_payload("translation_update", event.model_dump()),
-            }
+        await broadcast_event(
+            self.ws_manager,
+            channel="translation_update",
+            payload=self._enrich_event_payload("translation_update", event.model_dump()),
         )
 
     async def _publish_translation_dispatch_event(self, event: TranslationEvent) -> None:
@@ -1186,7 +1192,7 @@ class RuntimeOrchestrator:
         await self._broadcast_runtime()
 
     async def _handle_obs_caption_payload(self, payload: SubtitlePayloadEvent) -> None:
-        await self._obs_caption_output.publish_subtitle_payload(payload)
+        await publish_subtitle_payload(self._obs_caption_output, payload)
 
     def _reset_export_session(self) -> None:
         self._session_id = None
@@ -1266,18 +1272,7 @@ class RuntimeOrchestrator:
         await self._broadcast_runtime()
 
     def _overlay_runtime_status(self) -> OverlayRuntimeStatus:
-        config = self.config_getter()
-        overlay = config.get("overlay", {}) if isinstance(config, dict) else {}
-        subtitle_output = config.get("subtitle_output", {}) if isinstance(config, dict) else {}
-        return OverlayRuntimeStatus(
-            preset=str(overlay.get("preset", "single")) if isinstance(overlay, dict) else "single",
-            compact=bool(overlay.get("compact", False)) if isinstance(overlay, dict) else False,
-            show_source=bool(subtitle_output.get("show_source", True)) if isinstance(subtitle_output, dict) else True,
-            show_translations=bool(subtitle_output.get("show_translations", True))
-            if isinstance(subtitle_output, dict)
-            else True,
-            display_order=list(subtitle_output.get("display_order", [])) if isinstance(subtitle_output, dict) else [],
-        )
+        return build_overlay_runtime_status(self.config_getter())
 
     def _build_runtime_state(
         self,
@@ -1288,78 +1283,22 @@ class RuntimeOrchestrator:
         last_error: str | None = None,
         status_message: str | None = None,
     ) -> RuntimeState:
-        asr_diagnostics = self.asr_diagnostics()
-        translation_diagnostics = self.translation_diagnostics()
-        obs_caption_diagnostics = self.obs_caption_diagnostics()
-        resolved_asr = self._resolved_asr_provider()
-        asr_runtime = AsrRuntimeStatus(
-            active_mode=str(resolved_asr.get("mode", self._current_asr_mode()) or self._current_asr_mode()),
-            provider_preference=str(
-                resolved_asr.get("provider_preference", self._current_local_provider_preference())
-                or self._current_local_provider_preference()
-            ),
-            effective_provider=str(resolved_asr.get("effective_provider", asr_diagnostics.provider) or asr_diagnostics.provider),
-            provider=asr_diagnostics.provider,
-            provider_label=asr_diagnostics.provider_label or asr_diagnostics.provider,
-            provider_kind=str(resolved_asr.get("provider_kind", "") or "") or asr_diagnostics.provider_kind,
-            uses_browser_worker=bool(resolved_asr.get("uses_browser_worker", False)),
-            uses_backend_audio_capture=bool(resolved_asr.get("uses_backend_audio_capture", False)),
-            provider_phase=asr_diagnostics.provider_phase or asr_diagnostics.provider_state,
-            provider_message=asr_diagnostics.provider_message or asr_diagnostics.message,
-            provider_error_kind=asr_diagnostics.provider_error_kind or asr_diagnostics.last_error_kind,
-            provider_last_error=asr_diagnostics.provider_last_error or asr_diagnostics.last_error,
-            ready=bool(asr_diagnostics.runtime_initialized or self._is_browser_asr_mode()),
-            true_streaming=bool(asr_diagnostics.true_streaming),
-            supports_partials=bool(asr_diagnostics.supports_partials or asr_diagnostics.partials_supported),
-            degraded_mode=bool(asr_diagnostics.degraded_mode),
-            fallback_reason=asr_diagnostics.fallback_reason or asr_diagnostics.cpu_fallback_reason,
-            diagnostics=asr_diagnostics,
-        )
-        translation_runtime = TranslationRuntimeStatus(
-            enabled=translation_diagnostics.enabled,
-            provider=translation_diagnostics.provider,
-            ready=translation_diagnostics.ready,
-            degraded_mode=translation_diagnostics.degraded,
-            status=translation_diagnostics.status,
-            summary=translation_diagnostics.summary,
-            target_languages=list(translation_diagnostics.target_languages),
-            diagnostics=translation_diagnostics,
-        )
-        obs_runtime = ObsCaptionsStatus(
-            enabled=obs_caption_diagnostics.enabled,
-            active=obs_caption_diagnostics.active,
-            connected=obs_caption_diagnostics.connected,
-            connection_state=obs_caption_diagnostics.connection_state,
-            output_mode=obs_caption_diagnostics.output_mode,
-            diagnostics=obs_caption_diagnostics,
-        )
-        degraded_mode = bool(asr_runtime.degraded_mode or translation_runtime.degraded_mode)
-        fallback_reason = (
-            asr_runtime.fallback_reason
-            or translation_diagnostics.reason
-            or translation_diagnostics.last_runtime_reason
-            or last_error
-        )
-        return RuntimeState(
-            running=is_running,
-            starting=status == "starting",
-            stopping=False,
-            degraded_mode=degraded_mode,
-            fallback_reason=fallback_reason,
-            phase=status,
+        return build_runtime_state(
+            config=self.config_getter(),
             is_running=is_running,
             status=status,
             started_at_utc=started_at_utc,
             last_error=last_error,
             status_message=status_message,
-            asr=asr_runtime,
-            translation=translation_runtime,
-            overlay=self._overlay_runtime_status(),
-            obs_captions=obs_runtime,
-            metrics=self._metrics.model_copy(update=self.subtitle_router.diagnostic_counters()),
-            asr_diagnostics=asr_diagnostics,
-            translation_diagnostics=translation_diagnostics,
-            obs_caption_diagnostics=obs_caption_diagnostics,
+            metrics=self._metrics,
+            subtitle_router_counters=self.subtitle_router.diagnostic_counters(),
+            asr_diagnostics=self.asr_diagnostics(),
+            translation_diagnostics=self.translation_diagnostics(),
+            obs_caption_diagnostics=self.obs_caption_diagnostics(),
+            resolved_asr=self._resolved_asr_provider(),
+            current_asr_mode=self._current_asr_mode(),
+            current_local_provider_preference=self._current_local_provider_preference(),
+            is_browser_asr_mode=self._is_browser_asr_mode(),
         )
 
     def _set_state(
@@ -1380,77 +1319,38 @@ class RuntimeOrchestrator:
         )
 
     def _record_metrics(self, **values: float | int | None) -> None:
-        updates: dict[str, float | int] = {}
-        for key, value in values.items():
-            if value is None:
-                continue
-            if isinstance(value, int) and not isinstance(value, bool):
-                updates[key] = int(value)
-            else:
-                updates[key] = round(float(value), 2)
-        self._metrics = self._metrics.model_copy(update=updates)
+        self._metrics = record_metrics(self._metrics, **values)
 
     def _runtime_material_status_snapshot(self, payload: dict[str, Any]) -> tuple[Any, ...]:
-        asr = payload.get("asr", {}) if isinstance(payload.get("asr"), dict) else {}
-        asr_diagnostics = payload.get("asr_diagnostics", {}) if isinstance(payload.get("asr_diagnostics"), dict) else {}
-        browser_worker = asr_diagnostics.get("browser_worker", {}) if isinstance(asr_diagnostics.get("browser_worker"), dict) else {}
-        return (
-            payload.get("is_running"),
-            payload.get("status"),
-            payload.get("last_error"),
-            payload.get("status_message"),
-            asr.get("active_mode"),
-            asr.get("effective_provider"),
-            asr.get("provider"),
-            asr.get("provider_phase"),
-            asr.get("provider_message"),
-            asr.get("provider_error_kind"),
-            browser_worker.get("worker_connected"),
-            browser_worker.get("recognition_state"),
-            browser_worker.get("supervisor_state"),
-            browser_worker.get("degraded_reason"),
-            browser_worker.get("last_error"),
-            browser_worker.get("generation_id"),
-        )
+        return runtime_material_status_snapshot(payload)
 
     def _next_event_sequence(self, event_type: str) -> int:
-        self._runtime_event_sequence += 1
-        self._runtime_event_sequence_by_type[event_type] = self._runtime_event_sequence
-        self._record_metrics(
-            runtime_events_emitted=int(self._metrics.runtime_events_emitted or 0) + 1,
-            runtime_events_last_sequence=self._runtime_event_sequence,
+        self._metrics, self._runtime_event_sequence = next_event_sequence(
+            self._metrics,
+            runtime_event_sequence=self._runtime_event_sequence,
+            runtime_event_sequence_by_type=self._runtime_event_sequence_by_type,
+            event_type=event_type,
         )
         return self._runtime_event_sequence
 
     def _enrich_event_payload(self, event_type: str, payload: dict[str, Any]) -> dict[str, Any]:
-        enriched = dict(payload)
-        enriched.setdefault("event_type", event_type)
-        enriched["created_at_ms"] = int(time.time() * 1000)
-        enriched["event_sequence"] = self._next_event_sequence(event_type)
+        self._metrics, self._runtime_event_sequence, enriched = enrich_event_payload(
+            self._metrics,
+            payload=payload,
+            event_type=event_type,
+            runtime_event_sequence=self._runtime_event_sequence,
+            runtime_event_sequence_by_type=self._runtime_event_sequence_by_type,
+        )
         return enriched
 
     def _apply_translation_dispatcher_metrics(self, metrics: dict) -> None:
         if not isinstance(metrics, dict):
             return
         self._translation_dispatcher_snapshot = dict(metrics)
-        updates: dict[str, float | int | None] = {}
-        for key in (
-            "translation_queue_depth",
-            "translation_jobs_started",
-            "translation_jobs_cancelled",
-            "translation_stale_results_dropped",
-            "translation_queue_latency_ms",
-            "translation_provider_latency_ms",
-        ):
-            if key in metrics:
-                updates[key] = metrics.get(key)
-        if metrics.get("translation_provider_latency_ms") is not None:
-            updates["translation_ms"] = metrics.get("translation_provider_latency_ms")
-        self._record_metrics(**updates)
+        self._metrics = apply_translation_dispatcher_metrics(self._metrics, snapshot=metrics)
 
     def _increment_metric(self, key: Literal["partial_updates_emitted", "finals_emitted", "suppressed_partial_updates"]) -> None:
-        current = getattr(self._metrics, key, 0) or 0
-        self._record_metrics(**{key: int(current) + 1})
+        self._metrics = increment_metric(self._metrics, key)
 
     def _increment_counter_metric(
         self,
@@ -1471,19 +1371,11 @@ class RuntimeOrchestrator:
         ],
         amount: int = 1,
     ) -> None:
-        current = getattr(self._metrics, key, 0) or 0
-        self._record_metrics(**{key: int(current) + int(amount)})
+        self._metrics = increment_counter_metric(self._metrics, key, amount)
 
     @staticmethod
     def _pcm16_rms_level(audio: bytes) -> float:
-        payload = bytes(audio or b"")
-        if not payload or len(payload) < 2:
-            return 0.0
-        try:
-            rms = float(audioop.rms(payload, 2))
-        except Exception:
-            return 0.0
-        return max(0.0, min(1.0, rms / 32768.0))
+        return pcm16_rms_level(audio)
 
     def _resolve_realtime_settings(self) -> dict[str, int | float | bool]:
         config = self.config_getter()
@@ -1555,7 +1447,11 @@ class RuntimeOrchestrator:
         )
 
     def _prepare_recognition_audio(self, audio: bytes) -> bytes:
-        return self._rnnoise_processor.process(audio)
+        return prepare_recognition_audio(
+            audio,
+            rnnoise_enabled=bool(self.config_getter().get("asr", {}).get("rnnoise_enabled", False)),
+            rnnoise_processor=self._rnnoise_processor,
+        )
 
     def _apply_vad_tuning(self) -> None:
         settings = self._resolve_realtime_settings()
@@ -2576,33 +2472,11 @@ class RuntimeOrchestrator:
         return self._asr_engine.status()
 
     def translation_diagnostics(self) -> TranslationDiagnostics:
-        try:
-            config = self.config_getter()
-            translation_config = config.get("translation", {}) if isinstance(config, dict) else {}
-            diagnostics = self._translation_engine.summarize_readiness(
-                translation_config if isinstance(translation_config, dict) else {}
-            )
-            snapshot = self._translation_dispatcher_snapshot if isinstance(self._translation_dispatcher_snapshot, dict) else {}
-            runtime_reason = snapshot.get("translation_last_runtime_reason")
-            return diagnostics.model_copy(
-                update={
-                    "queue_depth": int(snapshot.get("translation_queue_depth", 0) or 0),
-                    "jobs_started": int(snapshot.get("translation_jobs_started", 0) or 0),
-                    "jobs_cancelled": int(snapshot.get("translation_jobs_cancelled", 0) or 0),
-                    "stale_results_dropped": int(snapshot.get("translation_stale_results_dropped", 0) or 0),
-                    "last_queue_latency_ms": snapshot.get("translation_queue_latency_ms"),
-                    "last_provider_latency_ms": snapshot.get("translation_provider_latency_ms"),
-                    "last_runtime_reason": str(runtime_reason).strip() or None if runtime_reason is not None else None,
-                }
-            )
-        except Exception as exc:
-            return TranslationDiagnostics(
-                enabled=False,
-                status="error",
-                summary="Translation diagnostics unavailable.",
-                reason=str(exc),
-                degraded=True,
-            )
+        return summarize_translation_diagnostics(
+            config_getter=self.config_getter,
+            translation_engine=self._translation_engine,
+            translation_dispatcher_snapshot=self._translation_dispatcher_snapshot,
+        )
 
     def obs_caption_diagnostics(self) -> ObsCaptionDiagnostics:
         return self._obs_caption_output.diagnostics()

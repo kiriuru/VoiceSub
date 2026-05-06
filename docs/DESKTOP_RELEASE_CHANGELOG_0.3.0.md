@@ -5,6 +5,8 @@ Delta changelog относительно `0.2.9.2`.
 Предыдущий delta changelog:
 - [DESKTOP_RELEASE_CHANGELOG_0.2.9.2.md](./DESKTOP_RELEASE_CHANGELOG_0.2.9.2.md)
 
+Post-release follow-up for the current `main` branch now lives in [CHANGELOG.md](./CHANGELOG.md) under `Unreleased` so the shipped `0.3.0` notes stay release-specific.
+
 ## Кратко
 
 `0.3.0` — это не patch-релиз, а крупный архитектурный релиз desktop-продукта.

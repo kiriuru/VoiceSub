@@ -195,6 +195,47 @@ class ApiAndWebSocketTests(unittest.TestCase):
                 ],
             )
 
+    def test_runtime_start_uses_unsaved_config_payload_without_persisting_settings(self) -> None:
+        persisted_config = {
+            "source_lang": "ru",
+            "ui": {"language": "en"},
+            "asr": {
+                "mode": "local",
+                "provider_preference": "official_eu_parakeet_low_latency",
+                "browser": {
+                    "recognition_language": "ru-RU",
+                    "interim_results": True,
+                    "continuous_results": True,
+                    "force_finalization_enabled": True,
+                    "force_finalization_timeout_ms": 1600,
+                },
+            },
+            "translation": {"enabled": False, "target_languages": []},
+            "subtitle_output": {"show_source": True, "show_translations": False},
+            "remote": {"enabled": False, "role": "disabled"},
+        }
+        unsaved_runtime_config = {
+            **persisted_config,
+            "asr": {
+                **persisted_config["asr"],
+                "mode": "browser_google",
+                "provider_preference": "official_eu_parakeet_low_latency",
+            },
+        }
+        with AppStateSandbox(config=persisted_config) as sandbox, TestClient(app_module.app) as client:
+            response = client.post(
+                "/api/runtime/start",
+                json={"device_id": None, "config_payload": unsaved_runtime_config},
+            )
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json()["runtime"]["status"], "listening")
+            self.assertEqual(app_module.app.state.config["asr"]["mode"], "browser_google")
+            self.assertEqual(app_module.app.state.config["asr"]["provider_preference"], "official_eu_parakeet_low_latency")
+            self.assertEqual(sandbox.config_manager.payload["asr"]["mode"], "local")
+            self.assertEqual(sandbox.config_manager.saved_payloads, [])
+            self.assertEqual(sandbox.runtime_orchestrator.start_calls[-1]["device_id"], None)
+
     def test_client_event_logging_returns_ok_when_logger_reports_write_failure(self) -> None:
         with AppStateSandbox() as sandbox, TestClient(app_module.app) as client:
             with mock.patch.object(

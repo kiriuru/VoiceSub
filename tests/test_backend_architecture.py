@@ -2,9 +2,13 @@ from __future__ import annotations
 
 import json
 import unittest
+from pathlib import Path
 
 from backend import app as app_module
 from backend.core.api_errors import build_error_response
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 class BackendArchitectureTests(unittest.TestCase):
@@ -39,6 +43,52 @@ class BackendArchitectureTests(unittest.TestCase):
         self.assertEqual(body["error"]["message"], "Parakeet model checksum mismatch.")
         self.assertEqual(body["error"]["details"]["expected_sha256"], "abc123")
         self.assertEqual(body["error"]["recommended_action"], "Run model repair.")
+
+    def test_runtime_and_config_refactor_entrypoints_exist(self) -> None:
+        expected_paths = [
+            PROJECT_ROOT / "backend" / "config" / "__init__.py",
+            PROJECT_ROOT / "backend" / "config" / "defaults.py",
+            PROJECT_ROOT / "backend" / "config" / "secrets.py",
+            PROJECT_ROOT / "backend" / "config" / "normalizers" / "asr.py",
+            PROJECT_ROOT / "backend" / "config" / "normalizers" / "browser.py",
+            PROJECT_ROOT / "backend" / "config" / "normalizers" / "translation.py",
+            PROJECT_ROOT / "backend" / "config" / "normalizers" / "obs.py",
+            PROJECT_ROOT / "backend" / "config" / "normalizers" / "remote.py",
+            PROJECT_ROOT / "backend" / "config" / "normalizers" / "subtitles.py",
+            PROJECT_ROOT / "backend" / "core" / "runtime_orchestrator.py",
+            PROJECT_ROOT / "backend" / "core" / "runtime" / "audio_runtime_controller.py",
+            PROJECT_ROOT / "backend" / "core" / "runtime" / "asr_runtime_controller.py",
+            PROJECT_ROOT / "backend" / "core" / "runtime" / "translation_runtime_coordinator.py",
+            PROJECT_ROOT / "backend" / "core" / "runtime" / "output_fanout_coordinator.py",
+            PROJECT_ROOT / "backend" / "core" / "runtime" / "runtime_metrics_collector.py",
+            PROJECT_ROOT / "backend" / "core" / "runtime" / "runtime_status_builder.py",
+            PROJECT_ROOT / "backend" / "translation" / "engine.py",
+            PROJECT_ROOT / "backend" / "translation" / "registry.py",
+            PROJECT_ROOT / "backend" / "translation" / "readiness.py",
+            PROJECT_ROOT / "backend" / "translation" / "providers" / "google_v2.py",
+            PROJECT_ROOT / "backend" / "translation" / "providers" / "google_v3.py",
+            PROJECT_ROOT / "backend" / "translation" / "providers" / "azure.py",
+            PROJECT_ROOT / "backend" / "translation" / "providers" / "deepl.py",
+            PROJECT_ROOT / "backend" / "translation" / "providers" / "libretranslate.py",
+            PROJECT_ROOT / "backend" / "translation" / "providers" / "openai_compatible.py",
+            PROJECT_ROOT / "backend" / "translation" / "providers" / "experimental_google_web.py",
+            PROJECT_ROOT / "backend" / "asr" / "parakeet" / "model_installer.py",
+            PROJECT_ROOT / "backend" / "asr" / "parakeet" / "runtime_loader.py",
+            PROJECT_ROOT / "backend" / "asr" / "parakeet" / "device_diagnostics.py",
+            PROJECT_ROOT / "backend" / "asr" / "parakeet" / "providers" / "base.py",
+            PROJECT_ROOT / "backend" / "asr" / "parakeet" / "providers" / "official.py",
+            PROJECT_ROOT / "backend" / "asr" / "parakeet" / "providers" / "realtime.py",
+            PROJECT_ROOT / "backend" / "asr" / "parakeet" / "mock_provider.py",
+        ]
+        missing = [str(path.relative_to(PROJECT_ROOT)) for path in expected_paths if not path.exists()]
+        self.assertEqual(missing, [])
+
+    def test_translation_and_parakeet_shim_entrypoints_import(self) -> None:
+        from backend.asr.parakeet.model_installer import ensure_official_eu_parakeet_model
+        from backend.translation.registry import build_default_provider_registry
+
+        self.assertTrue(callable(ensure_official_eu_parakeet_model))
+        self.assertIn("google_translate_v2", build_default_provider_registry())
 
 
 if __name__ == "__main__":

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any
 
 import httpx
@@ -29,6 +30,26 @@ class RuntimeService:
     def _current_config(self) -> dict[str, Any]:
         payload = getattr(self._app.state, "config", {})
         return payload if isinstance(payload, dict) else {}
+
+    def _apply_runtime_start_config(self, payload: dict[str, Any] | None) -> None:
+        if not isinstance(payload, dict) or not payload:
+            return
+        config_manager = getattr(self._app.state, "config_manager", None)
+        if config_manager is not None and hasattr(config_manager, "normalize_profile_payload"):
+            normalized = config_manager.normalize_profile_payload(deepcopy(payload))
+        else:
+            normalized = deepcopy(payload)
+        self._app.state.config = normalized
+        remote_session_manager = getattr(self._app.state, "remote_session_manager", None)
+        if remote_session_manager is None:
+            return
+        remote = normalized.get("remote", {})
+        if not isinstance(remote, dict):
+            remote = {}
+        remote_session_manager.preload(
+            session_id=str(remote.get("session_id", "") or "").strip() or None,
+            pair_code=str(remote.get("pair_code", "") or "").strip() or None,
+        )
 
     def _remote_config(self) -> dict[str, Any]:
         remote = self._current_config().get("remote", {})
@@ -91,6 +112,7 @@ class RuntimeService:
 
     async def start(self, body: RuntimeStartRequest | None = None) -> RuntimeActionResponse:
         payload = body or RuntimeStartRequest()
+        self._apply_runtime_start_config(payload.config_payload)
         devices = self._app.state.audio_device_manager.list_input_devices()
         state = await self._runtime_orchestrator.start(
             has_audio_inputs=bool(devices),
