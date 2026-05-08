@@ -49,6 +49,26 @@ class ConfigStateService:
     def set_runtime_start_snapshot(self, payload: dict[str, Any]) -> dict[str, Any]:
         return self._apply_payload(payload, source="runtime_start_snapshot", persisted=False, normalize=True)
 
+    def update_active_updates_metadata(self, *, latest_version: str | None, checked_utc: str) -> dict[str, Any]:
+        """
+        Patch only updates.* in the current active payload while preserving active_config_state.source.
+
+        This is used by UpdateService to reflect the latest known version / check time in-memory
+        without persisting an entire runtime_start_snapshot payload to disk.
+        """
+        with self._lock:
+            state = self.current_state()
+            payload = self._copy_payload(state.payload)
+            updates = payload.get("updates", {})
+            if not isinstance(updates, dict):
+                updates = {}
+            updates["latest_known_version"] = latest_version or ""
+            updates["last_checked_utc"] = str(checked_utc or "").strip()
+            payload["updates"] = updates
+            patched = self._build_state(payload, source=state.source, persisted=state.persisted)
+            self._store_state(patched)
+            return patched.payload
+
     def _apply_payload(
         self,
         payload: dict[str, Any],

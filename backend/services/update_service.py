@@ -57,6 +57,27 @@ class UpdateService:
 
     def _persist_updates(self, *, latest_version: str | None, checked_utc: str) -> dict[str, Any]:
         config_manager = self._app.state.config_manager
+        config_state_service = getattr(self._app.state, "config_state_service", None)
+
+        # Protect runtime_start_snapshot: never persist the whole active in-memory payload
+        # if it came from POST /api/runtime/start config_payload.
+        if config_state_service is not None:
+            state = config_state_service.current_state()
+            if state.source == "runtime_start_snapshot":
+                persisted_payload = config_manager.load()
+                updates = persisted_payload.get("updates", {})
+                if not isinstance(updates, dict):
+                    updates = {}
+                updates["latest_known_version"] = latest_version or ""
+                updates["last_checked_utc"] = checked_utc
+                persisted_payload["updates"] = updates
+                config_manager.save(persisted_payload)
+                # Keep the runtime snapshot active; only patch its updates metadata in-memory.
+                return config_state_service.update_active_updates_metadata(
+                    latest_version=latest_version,
+                    checked_utc=checked_utc,
+                )
+
         payload = deepcopy(self._config_payload())
         updates = payload.get("updates", {})
         if not isinstance(updates, dict):
@@ -65,8 +86,9 @@ class UpdateService:
         updates["last_checked_utc"] = checked_utc
         payload["updates"] = updates
         saved_payload = config_manager.save(payload)
-        config_state_service = getattr(self._app.state, "config_state_service", None)
-        active_payload = config_state_service.set_settings_saved(saved_payload) if config_state_service is not None else saved_payload
+        active_payload = (
+            config_state_service.set_settings_saved(saved_payload) if config_state_service is not None else saved_payload
+        )
         return active_payload
 
     async def check_now(self, *, force: bool = False) -> dict[str, Any]:
