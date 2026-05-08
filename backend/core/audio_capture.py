@@ -135,6 +135,10 @@ class RNNoiseRecognitionProcessor:
         )
         return restored.astype(np.int16, copy=False).tobytes()
 
+    def process_for_recognition(self, audio: bytes) -> bytes:
+        """Backward-compatible entrypoint used by runtime audio path."""
+        return self.process(audio)
+
     def _format_supported(self) -> bool:
         return self.channels == 1 and self.sample_rate > 0
 

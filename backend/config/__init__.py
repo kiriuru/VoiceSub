@@ -190,6 +190,9 @@ class LocalConfigManager:
         if not isinstance(overlay, dict):
             overlay = {}
         preset = overlay.get("preset", "single")
+        if preset == "compact":
+            overlay["compact"] = True
+            preset = "stacked"
         if preset not in {"single", "dual-line", "stacked"}:
             preset = "single"
         normalized["overlay"] = {

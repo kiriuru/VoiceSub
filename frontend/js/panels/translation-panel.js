@@ -131,11 +131,27 @@ function getOrderedSlots(config) {
 
 function getLineCards(config) {
   const lineMap = getLineMap(config?.translation?.lines);
-  return getOrderedSlots(config).map((slotId) => lineMap.get(slotId) || getVirtualLine(config, slotId));
+  const configuredLineSlotIds = Array.from(lineMap.values())
+    .filter((line) => line && String(line.slot_id || "").trim())
+    .map((line) => String(line.slot_id || "").toLowerCase());
+
+  // Only show lines that were explicitly added by the user.
+  // Empty slots remain available via the "Add Line" action, but should not render as cards.
+  const ordered = getOrderedSlots(config).filter((slotId) => configuredLineSlotIds.includes(slotId));
+  const remaining = configuredLineSlotIds.filter((slotId) => !ordered.includes(slotId));
+  return [...ordered, ...remaining].map((slotId) => lineMap.get(slotId)).filter(Boolean);
 }
 
 function getFieldLabel(fieldName) {
   return t(PROVIDER_SETTING_LABEL_KEYS[fieldName] || fieldName);
+}
+
+function getSlotDisplayLabel(slotId) {
+  const normalized = String(slotId || "").toLowerCase();
+  if (CANONICAL_TRANSLATION_SLOTS.includes(normalized)) {
+    return t(`obs.output.${normalized}`);
+  }
+  return normalized || "";
 }
 
 function getMissingProviderFields(providerName, providerSettings) {
@@ -319,7 +335,7 @@ export function mountTranslationPanel(root, { store, actions, logger }) {
           <div class="translation-line-title-block">
             <div class="translation-line-title-row">
               <strong class="translation-line-title">${escapeHtml(t("translation.line.title", { number: lineNumber }))}</strong>
-              <span class="translation-line-slot">${escapeHtml(slotId)}</span>
+              <span class="translation-line-slot">${escapeHtml(getSlotDisplayLabel(slotId))}</span>
             </div>
             <p class="translation-line-summary">${escapeHtml(summary)}</p>
           </div>
@@ -343,21 +359,24 @@ export function mountTranslationPanel(root, { store, actions, logger }) {
             <span>${escapeHtml(t("translation.line.provider"))}</span>
             <select data-role="provider">${providerOptions}</select>
           </label>
-          <label class="stack-field">
-            <span>${escapeHtml(t("translation.line.label"))}</span>
-            <input type="text" data-role="label" value="${escapeHtml(line.label || "")}" placeholder="${escapeHtml(t("translation.line.label.placeholder"))}" />
-          </label>
         </div>
         ${missingFields.length ? `<p class="muted translation-line-note">${escapeHtml(t("translation.line.missing_settings", { fields: missingFields.map(getFieldLabel).join(", ") }))}</p>` : ""}
       `;
-      row.addEventListener("click", () => {
+      row.addEventListener("click", (event) => {
+        const target = event?.target;
+        if (target instanceof Element) {
+          const interactive = target.closest("select, input, textarea, button, label, a");
+          if (interactive) {
+            return;
+          }
+        }
         actions.updateTranslationSelection(slotId);
       });
 
       const enabledInput = row.querySelector('[data-role="enabled"]');
       const targetLangInput = row.querySelector('[data-role="target_lang"]');
       const providerInput = row.querySelector('[data-role="provider"]');
-      const labelInput = row.querySelector('[data-role="label"]');
+      const labelInput = null;
 
       if (providerInput) {
         providerInput.value = providerName;
@@ -370,12 +389,12 @@ export function mountTranslationPanel(root, { store, actions, logger }) {
             enabled: false,
             target_lang: targetLangInput?.value || line.target_lang || "en",
             provider: providerInput?.value || providerName,
-            label: labelInput?.value || String(targetLangInput?.value || line.target_lang || "en").toUpperCase(),
+            label: String((line.label || targetLangInput?.value || line.target_lang || "en")).toUpperCase(),
           });
           currentLine.enabled = Boolean(enabledInput.checked);
           currentLine.target_lang = String(targetLangInput?.value || currentLine.target_lang || "en").toLowerCase();
           currentLine.provider = normalizeProviderName(providerInput?.value || currentLine.provider, draft.translation.provider);
-          currentLine.label = String(labelInput?.value || currentLine.label || currentLine.target_lang.toUpperCase());
+          currentLine.label = String(currentLine.label || currentLine.target_lang.toUpperCase());
           if (currentLine.enabled) {
             draft.subtitle_output.display_order = normalizeDisplayOrder([
               ...draft.subtitle_output.display_order,
@@ -394,7 +413,7 @@ export function mountTranslationPanel(root, { store, actions, logger }) {
             enabled: Boolean(enabledInput?.checked),
             target_lang: targetLangInput.value || "en",
             provider: providerInput?.value || providerName,
-            label: labelInput?.value || String(targetLangInput.value || "en").toUpperCase(),
+            label: String(line.label || targetLangInput.value || "en").toUpperCase(),
           });
           const previousTarget = String(currentLine.target_lang || "").toUpperCase();
           currentLine.target_lang = String(targetLangInput.value || "en").toLowerCase();
@@ -410,7 +429,7 @@ export function mountTranslationPanel(root, { store, actions, logger }) {
             enabled: Boolean(enabledInput?.checked),
             target_lang: targetLangInput?.value || line.target_lang || "en",
             provider: providerInput.value,
-            label: labelInput?.value || String(targetLangInput?.value || line.target_lang || "en").toUpperCase(),
+            label: String(line.label || targetLangInput?.value || line.target_lang || "en").toUpperCase(),
           });
           currentLine.provider = normalizeProviderName(providerInput.value, draft.translation.provider);
         });
@@ -418,18 +437,7 @@ export function mountTranslationPanel(root, { store, actions, logger }) {
           manualSettingsProvider = null;
         }
       });
-      labelInput?.addEventListener("change", (event) => {
-        event.stopPropagation();
-        actions.mutateConfig((draft) => {
-          const currentLine = ensureLine(draft, slotId, {
-            enabled: Boolean(enabledInput?.checked),
-            target_lang: targetLangInput?.value || line.target_lang || "en",
-            provider: providerInput?.value || providerName,
-            label: labelInput.value,
-          });
-          currentLine.label = String(labelInput.value || "");
-        });
-      });
+      // Note: line label is still supported in config/backend, but hidden in the UI for now.
 
       elements.languageOrder.appendChild(row);
     });
@@ -657,6 +665,7 @@ export function mountTranslationPanel(root, { store, actions, logger }) {
       line.enabled = false;
       draft.subtitle_output.display_order = draft.subtitle_output.display_order.filter((item) => item !== selectedSlotId);
     });
+    actions.updateTranslationSelection(null);
     logger(`[translation] disabled line ${selectedSlotId}`);
   });
   elements.upBtn?.addEventListener("click", () => {

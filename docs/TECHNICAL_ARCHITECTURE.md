@@ -30,7 +30,7 @@
 - Python 3.11+
 - FastAPI + Uvicorn
 - Pydantic schemas
-- WebSocket for runtime events and worker/controller bridges
+- WebSocket для runtime-событий и мостов worker/controller
 - `sounddevice`, `numpy`
 - AI/runtime provider stack for local ASR
 - plain HTML/CSS/JavaScript frontend
@@ -241,44 +241,65 @@ Current translation package state:
 
 Ожидаемое поведение:
 
-- Browser Speech quick start intentionally skips local AI bootstrap;
-- Remote Controller remains lightweight and does not force local AI model installation;
-- Remote Worker enables LAN bind and keeps the worker on the local AI path only;
-- default behavior remains local-first because remote roles are explicit profile choices, not implicit startup drift.
+- Browser Speech quick start намеренно пропускает установку/подготовку локального AI-runtime (быстрее старт);
+- Remote Controller остаётся «лёгким» и не должен форсировать установку локальных моделей/рантайма;
+- Remote Worker включает LAN bind (явный opt-in) и держит worker только на локальном AI пути;
+- поведение по умолчанию остаётся local-first, потому что remote роли — это явный профиль запуска, а не «дрейф» режима.
 
-## 6. Config and Migrations
+## 6. Конфигурация и миграции
 
 Главный config path:
 
-- persistent config lives under `user-data/config.json`
+- постоянная конфигурация хранится в `user-data/config.json`
 
 В `0.3.0`:
 
-- config code now lives under `backend/config/` instead of one `backend/config.py`;
-- config проходит через явные migration steps;
-- profiles используют тот же migration/normalization pipeline;
-- generated JSON Schema lives at `backend/data/config.schema.json`.
+- код конфигурации живёт в `backend/config/` вместо одного монолитного `backend/config.py`;
+- конфигурация проходит через явные шаги миграции;
+- профили используют тот же pipeline миграции/нормализации;
+- сгенерированная JSON Schema лежит в `backend/data/config.schema.json`.
 
 Ключевые migration steps:
 
-- provider rename to `official_eu_parakeet_low_latency`
-- cleanup path for removed backend ASR settings so old configs fall back to supported Parakeet defaults
-- translation config v6 adds `translation.lines` while preserving legacy `translation.provider` and `translation.target_languages`
-- legacy `subtitle_output.display_order` language entries are migrated to stable translation slot ids such as `translation_1`
+- переименование провайдера в `official_eu_parakeet_low_latency`;
+- очистка удалённых/устаревших backend ASR настроек, чтобы старые конфиги падали на поддерживаемые Parakeet-дефолты;
+- v6 переводческой конфигурации добавляет `translation.lines`, сохраняя legacy `translation.provider` и `translation.target_languages`;
+- legacy `subtitle_output.display_order` на основе кодов языков мигрируется в стабильные slot id вроде `translation_1`.
 
 Это важно для:
 
-- save/load stability
-- desktop/runtime compatibility
-- reproducible tests
-- future UI evolution without legacy config drift.
+- стабильности save/load;
+- совместимости desktop/runtime;
+- воспроизводимых тестов;
+- эволюции UI без «дрейфа» старых конфигов.
 
 Дополнительный current-branch contract:
 
-- `LocalConfigManager.normalize_profile_payload()` используется не только для save/load, но и для runtime-start normalization of unsaved dashboard snapshots.
-- active config state is tracked explicitly via `source`, `persisted`, and `hash` metadata.
+- `LocalConfigManager.normalize_profile_payload()` используется не только для save/load, но и для нормализации runtime-start snapshot (несохранённых изменений из UI).
+- активное состояние конфигурации отслеживается явно через метаданные `source`, `persisted`, `hash`.
 
-## 7. HTTP Surface
+### 6.1 Практический pipeline нормализации (как реально обрабатывается конфиг)
+
+1) При `load()`:
+- читается JSON из `user-data/config.json` (если файла нет — создаётся дефолтный конфиг);
+- выполняется `migrate_config()` (приведение shape/версии/legacy полей);
+- затем доменные normalizers приводят секции к безопасным дефолтам и диапазонам:
+  - `asr` (включая realtime и browser настройки),
+  - `translation` (слоты `translation_1..translation_5`, provider settings),
+  - `subtitle_output` (display order и max translation lines),
+  - `subtitle_style` (пресеты/перекрытия слотов),
+  - `subtitle_lifecycle` (TTL/паузы/инварианты),
+  - `obs_closed_captions`, `remote`, `updates`.
+
+2) При `save()`:
+- входной payload тоже проходит тот же pipeline;
+- на диск пишется уже нормализованный `ConfigSchema` (mode="json").
+
+3) При `POST /api/runtime/start`:
+- dashboard может передать `config_payload` snapshot (даже несохранённый);
+- snapshot проходит нормализацию, применяется только в памяти, и помечается как `persisted=false`.
+
+## 7. HTTP surface (локальный API)
 
 Primary local endpoints:
 
@@ -297,15 +318,24 @@ Primary local endpoints:
 - `/api/exports/diagnostics`
 - `/api/logs/client-event`
 
-`POST /api/runtime/start` current contract:
+Текущий контракт `POST /api/runtime/start`:
 
-- accepts `device_id`;
-- accepts optional `config_payload`;
-- normalizes that payload through the config manager when available;
-- applies it to the active in-memory config state for the current runtime start only;
-- may preload remote session fields from `remote.session_id` and `remote.pair_code`;
-- marks active config state as `runtime_start_snapshot` with `persisted = false`;
-- does not persist `user-data/config.json` unless the user later saves settings explicitly.
+- принимает `device_id`;
+- принимает опциональный `config_payload`;
+- нормализует этот payload через config manager (если он доступен);
+- применяет его в активное in-memory состояние только для текущего запуска runtime;
+- может заранее подхватить remote-поля `remote.session_id`/`remote.pair_code`;
+- помечает active config state как `runtime_start_snapshot` с `persisted = false`;
+- не пишет `user-data/config.json`, пока пользователь явно не сохранит настройки.
+
+### 7.1 События и контракты, важные для фронта
+
+Типы сообщений, которые приходят в `/ws/events`:
+- `runtime_update` (на фронте нормализуется в `runtime_status`);
+- `subtitle_payload_update` (на фронте нормализуется в `overlay_update` для унификации);
+- `overlay_update` (payload для overlay страницы, с `created_at_ms`).
+
+Важно: dashboard фильтрует stale события по `event_sequence`/`created_at_ms`. Overlay страница должна делать то же самое (иначе после реконнекта возможны откаты текста).
 
 Remote endpoints:
 
@@ -319,7 +349,7 @@ Remote endpoints:
 - `/api/remote/worker/runtime/status`
 - `/api/remote/worker/health`
 
-## 8. WebSocket Surface
+## 8. WebSocket surface
 
 - `/ws/events`
 - `/ws/asr_worker`
@@ -327,9 +357,9 @@ Remote endpoints:
 - `/ws/remote/audio_ingest`
 - `/ws/remote/result_ingest`
 
-## 9. WebSocket Manager and Event Resilience
+## 9. WebSocket manager и устойчивость событий
 
-`backend/ws_manager.py` в `0.3.0` отвечает за более безопасный broadcast lifecycle:
+`backend/ws_manager.py` в `0.3.0` отвечает за более безопасный lifecycle broadcast:
 
 - snapshot connections before broadcast;
 - remove dead sockets after failures;
@@ -344,15 +374,15 @@ Runtime/event expectations:
 - stale worker generations should be ignored;
 - dead sockets should be cleaned after failures rather than spam exceptions indefinitely.
 
-## 10. Frontend Structure
+## 10. Структура фронтенда
 
 ### 10.1 Dashboard
 
-`frontend/index.html` now boots:
+`frontend/index.html` загружает:
 
 - `frontend/js/main.js`
 
-Supporting module groups:
+Группы модулей:
 
 - `frontend/js/i18n.js`
 - `frontend/js/core/`
@@ -383,12 +413,12 @@ Supporting module groups:
   - overlay
   - model status
 
-### 10.2 Browser worker pages
+### 10.2 Страницы browser worker
 
 - `frontend/google_asr.html`
 - `frontend/google_asr_experimental.html`
 
-### 10.3 Remote bridge pages
+### 10.3 Страницы remote bridge
 
 - `frontend/remote_controller_bridge.html`
 - `frontend/remote_worker_bridge.html`
@@ -398,7 +428,7 @@ Supporting module groups:
 - `overlay/overlay.html`
 - related JS/CSS assets
 
-### 10.5 Current dashboard UX follow-up
+### 10.5 Текущее состояние UX (dashboard)
 
 - the Translation tab now renders stable `translation_1 .. translation_5` slot cards instead of one flat language-order list;
 - each slot card owns `enabled`, `target_lang`, `provider`, and `label` editing for that slot;
@@ -407,7 +437,7 @@ Supporting module groups:
 
 ## 11. Browser Speech Classic Path
 
-Classic browser worker route:
+Classic browser worker route (страница worker-а):
 
 - `/google-asr`
 
@@ -415,7 +445,7 @@ Core lifecycle module:
 
 - `frontend/js/browser-asr-session-manager.js`
 
-In `0.3.0` this manager owns the recognition FSM.
+В `0.3.0` этот менеджер является владельцем FSM распознавания.
 
 Supervisor states:
 
@@ -444,7 +474,7 @@ Settings behavior:
 
 ## 12. Browser Speech Experimental Path
 
-Experimental browser worker route:
+Experimental browser worker route (экспериментальная страница worker-а):
 
 - `/google-asr-experimental`
 
@@ -460,7 +490,7 @@ Behavior:
 
 `0.3.0` aligns this subclass with the base FSM contract so it no longer relies on removed legacy methods from the old manager API.
 
-## 13. Browser ASR Backend Integration
+## 13. Интеграция Browser ASR с backend
 
 Worker websocket:
 
@@ -481,7 +511,7 @@ Responsibilities:
 - expose browser worker diagnostics into runtime status;
 - feed transcript updates into the existing subtitle/translation pipeline.
 
-## 14. Logging and Client Event Handling
+## 14. Логи и client-event события
 
 Client event route:
 
@@ -491,7 +521,7 @@ Client event route:
 
 - log write failures must not crash backend routes.
 
-`SessionLogger` and related logging path now behave as best effort:
+`SessionLogger` и связанные пути логирования работают в best-effort режиме:
 
 - create directories proactively;
 - tolerate `PermissionError`/`OSError`/`IOError`;
@@ -499,6 +529,19 @@ Client event route:
 - avoid turning file lock problems into fatal runtime errors.
 
 `StructuredRuntimeLogger` writes JSONL-style runtime diagnostics and applies redaction to sensitive fields.
+
+## 14.1 Диагностический экспорт (Diagnostics Bundle)
+
+Экспорт `GET /api/exports/diagnostics` собирает локальный ZIP и кладёт туда:
+- `runtime_status.json` (runtime snapshot),
+- `preflight_report.json`,
+- `config_redacted.json` (конфиг с редактированием чувствительных полей),
+- `latest_session.jsonl` (bounded client-event лог),
+- `runtime-events.jsonl` (структурированный runtime лог),
+- `backend.log` (с редактированием по строкам),
+- `environment.txt` и `diagnostics-manifest.json`.
+
+Цель: чтобы пользователь мог отправить архив для разбора проблем, не раскрывая ключи/токены/пароли.
 
 ## 15. Overlay and Translation Routing
 

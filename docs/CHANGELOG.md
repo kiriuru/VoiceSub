@@ -23,6 +23,14 @@ Post-`0.3.0` branch follow-up focused on internal modularization and runtime sta
 - selecting a translation slot retargets the shared provider settings editor to that slot's provider, while the editor can still be switched manually when no slot is selected;
 - the dashboard now warns when enabled translation slots use providers with missing required settings;
 - i18n coverage was extended across runtime progress labels, style slot editor controls, remote LAN tools, diagnostics strings, and other previously hard-coded dashboard copy.
+- translation slot cards now render only for lines explicitly added to `translation.lines` (empty slots no longer appear until added);
+- the runtime progress card switches to a compact layout automatically in Browser Speech modes;
+- switching the dashboard UI language persists immediately without requiring the global Save button;
+- development iteration no longer requires hard refresh: frontend routes and static assets are served with no-store cache headers.
+
+### Subtitle style follow-up
+
+- added additional built-in subtitle entrance effects: `slide_up`, `zoom_in`, `blur_in`, and `glow` (shared by dashboard preview and OBS overlay).
 
 ### Desktop storage and release alignment
 

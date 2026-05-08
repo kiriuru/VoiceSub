@@ -301,13 +301,22 @@ class SubtitleRouter:
         record["source_text"] = event.source_text
         record["source_lang"] = event.source_lang
         record["provider"] = event.provider
+        config = self.config_getter()
+        translation_config = config.get("translation", {}) if isinstance(config, dict) else {}
+        language_to_slot = (
+            self._legacy_language_to_slot_map(translation_config) if isinstance(translation_config, dict) else {}
+        )
         translations = dict(record.get("translations", {}))
         for item in event.translations:
-            translation_key = str(item.slot_id or item.target_lang).strip().lower()
+            slot_id = str(item.slot_id or "").strip().lower()
+            if not slot_id:
+                target_lang = str(item.target_lang or "").strip().lower()
+                slot_id = language_to_slot.get(target_lang, "")
+            translation_key = str(slot_id or item.target_lang).strip().lower()
             if not translation_key:
                 continue
             translations[translation_key] = {
-                "slot_id": item.slot_id,
+                "slot_id": slot_id or item.slot_id,
                 "target_lang": item.target_lang,
                 "label": item.label,
                 "text": item.text,
@@ -316,8 +325,6 @@ class SubtitleRouter:
                 "error": item.error,
             }
         record["translations"] = translations
-        config = self.config_getter()
-        translation_config = config.get("translation", {}) if isinstance(config, dict) else {}
         required_slot_ids = list(self._translation_slot_map(translation_config).keys()) if isinstance(translation_config, dict) else []
         received_targets = {str(item).strip().lower() for item in translations.keys() if str(item).strip()}
         record["translation_received"] = bool(

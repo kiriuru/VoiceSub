@@ -1,6 +1,15 @@
 import { subscribe } from "../core/store.js";
 import { clone, getCurrentLocale } from "../dashboard/helpers.js";
 
+const FALLBACK_LINE_SLOTS = [
+  "source",
+  "translation_1",
+  "translation_2",
+  "translation_3",
+  "translation_4",
+  "translation_5",
+];
+
 function normalizeStyle(config, presets) {
   return window.SubtitleStyleRenderer
     ? window.SubtitleStyleRenderer.normalizeStyleConfig(config || {}, presets || {})
@@ -11,6 +20,74 @@ function buildStyleFromPreset(presets, presetName) {
   return window.SubtitleStyleRenderer
     ? window.SubtitleStyleRenderer.buildStyleFromPreset(presets || {}, presetName)
     : {};
+}
+
+function getLineSlotNames() {
+  if (window.SubtitleStyleRenderer?.LINE_SLOT_NAMES?.length) {
+    return window.SubtitleStyleRenderer.LINE_SLOT_NAMES.slice();
+  }
+  return FALLBACK_LINE_SLOTS.slice();
+}
+
+function buildFontCatalogSignature(fontCatalog) {
+  const entries = [];
+  if (fontCatalog?.project_local?.length) {
+    entries.push(...fontCatalog.project_local.map((item) => item?.id || item?.label || ""));
+  }
+  if (fontCatalog?.system?.length) {
+    entries.push(...fontCatalog.system.map((item) => item?.id || item?.label || ""));
+  }
+  if (fontCatalog?.fallback?.length) {
+    entries.push(...fontCatalog.fallback.map((item) => item?.id || item?.label || ""));
+  }
+  return entries.join("|");
+}
+
+function buildPresetCatalogSignature(presets) {
+  const catalog = presets && typeof presets === "object" ? presets : {};
+  return Object.keys(catalog).sort().join("|");
+}
+
+function setSelectOptions(select, options) {
+  if (!select) {
+    return;
+  }
+  const previousValue = select.value ?? "";
+  select.innerHTML = "";
+  options.forEach((optionConfig) => {
+    const option = document.createElement("option");
+    option.value = String(optionConfig.value ?? "");
+    option.textContent = String(optionConfig.label ?? option.value);
+    select.appendChild(option);
+  });
+  select.value = previousValue;
+}
+
+function styleSlotLabel(slotName) {
+  const normalized = String(slotName || "").toLowerCase();
+  if (normalized === "source") {
+    return "Source";
+  }
+  if (normalized.startsWith("translation_")) {
+    const index = Number.parseInt(normalized.split("_")[1] || "1", 10);
+    const safeIndex = Number.isFinite(index) ? index : 1;
+    return `Translation ${safeIndex}`;
+  }
+  return slotName;
+}
+
+function inheritLabel() {
+  return getCurrentLocale() === "ru" ? "(наследовать базовый стиль)" : "(inherit base style)";
+}
+
+function normalizeOverrideFieldValue(value) {
+  if (value === null || value === undefined) {
+    return "";
+  }
+  if (value === "null") {
+    return "";
+  }
+  return String(value);
 }
 
 export function mountStyleEditorPanel(root, { store, actions, logger }) {
@@ -46,7 +123,38 @@ export function mountStyleEditorPanel(root, { store, actions, logger }) {
       line_gap_px: root.querySelector("#style-line-gap"),
       effect: root.querySelector("#style-effect"),
     },
+    lineSlots: {
+      enabled: root.querySelector("#style-line-slot-enabled"),
+      tabs: root.querySelector("#style-line-slot-tabs"),
+      description: root.querySelector("#style-line-slot-description"),
+      fieldsContainer: root.querySelector("#style-line-slot-fields"),
+      details: root.querySelector("#style-line-slot-details"),
+      fields: {
+        font_family: root.querySelector("#style-line-slot-font-family"),
+        font_size_px: root.querySelector("#style-line-slot-font-size"),
+        font_weight: root.querySelector("#style-line-slot-font-weight"),
+        fill_color: root.querySelector("#style-line-slot-fill-color"),
+        stroke_color: root.querySelector("#style-line-slot-stroke-color"),
+        stroke_width_px: root.querySelector("#style-line-slot-stroke-width"),
+        shadow_color: root.querySelector("#style-line-slot-shadow-color"),
+        shadow_blur_px: root.querySelector("#style-line-slot-shadow-blur"),
+        shadow_offset_x_px: root.querySelector("#style-line-slot-shadow-offset-x"),
+        shadow_offset_y_px: root.querySelector("#style-line-slot-shadow-offset-y"),
+        background_color: root.querySelector("#style-line-slot-background-color"),
+        background_opacity: root.querySelector("#style-line-slot-background-opacity"),
+        background_padding_x_px: root.querySelector("#style-line-slot-background-padding-x"),
+        background_padding_y_px: root.querySelector("#style-line-slot-background-padding-y"),
+        background_radius_px: root.querySelector("#style-line-slot-background-radius"),
+        line_spacing_em: root.querySelector("#style-line-slot-line-spacing"),
+        letter_spacing_em: root.querySelector("#style-line-slot-letter-spacing"),
+        text_align: root.querySelector("#style-line-slot-text-align"),
+        effect: root.querySelector("#style-line-slot-effect"),
+      },
+    },
   };
+
+  let lastFontCatalogSignature = "";
+  let lastPresetCatalogSignature = "";
 
   function updateStyle(mutator) {
     actions.mutateConfig((draft) => {
@@ -57,20 +165,87 @@ export function mountStyleEditorPanel(root, { store, actions, logger }) {
     });
   }
 
+  function ensureSlotTabs(snapshot) {
+    const container = elements.lineSlots.tabs;
+    if (!container) {
+      return;
+    }
+    const activeSlot = snapshot.ui?.selectedStyleLineSlot || "source";
+    if (!container.childElementCount) {
+      getLineSlotNames().forEach((slotName) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "slot-tab";
+        button.dataset.slot = slotName;
+        button.textContent = styleSlotLabel(slotName);
+        button.classList.toggle("active", slotName === activeSlot);
+        button.addEventListener("click", () => {
+          actions.updateStyleSlot(slotName);
+        });
+        container.appendChild(button);
+      });
+      return;
+    }
+    [...container.querySelectorAll("button[data-slot]")].forEach((button) => {
+      button.classList.toggle("active", button.dataset.slot === activeSlot);
+    });
+  }
+
+  function ensureFontPickers(snapshot, style) {
+    const signature = buildFontCatalogSignature(snapshot.fontCatalog || {});
+    if (signature === lastFontCatalogSignature && elements.fields.font_family?.options?.length) {
+      return;
+    }
+    lastFontCatalogSignature = signature;
+    const fontCatalog = snapshot.fontCatalog || {};
+    const fontOptions = [
+      ...(Array.isArray(fontCatalog.project_local) ? fontCatalog.project_local : []),
+      ...(Array.isArray(fontCatalog.system) ? fontCatalog.system : []),
+      ...(Array.isArray(fontCatalog.fallback) ? fontCatalog.fallback : []),
+    ].filter((item) => item && item.family);
+
+    const baseOptions = fontOptions.map((entry) => ({
+      value: String(entry.family),
+      label: `${entry.label || entry.family}${entry.source ? ` (${entry.source})` : ""}`,
+    }));
+
+    setSelectOptions(elements.fields.font_family, baseOptions);
+    if (elements.fields.font_family && style.base?.font_family) {
+      elements.fields.font_family.value = String(style.base.font_family);
+    }
+
+    const slotOptions = [{ value: "", label: inheritLabel() }, ...baseOptions];
+    setSelectOptions(elements.lineSlots.fields.font_family, slotOptions);
+  }
+
   function render(snapshot) {
     const presets = snapshot.subtitleStylePresets || {};
     const style = normalizeStyle(snapshot.config?.subtitle_style, presets);
+    ensureSlotTabs(snapshot);
+    ensureFontPickers(snapshot, style);
     if (elements.preset) {
-      if (!elements.preset.options.length) {
-        const entries = Object.entries(presets);
-        entries.forEach(([presetName, preset]) => {
+      const presetSignature = buildPresetCatalogSignature(presets);
+      const shouldRebuildPresets = !elements.preset.options.length || presetSignature !== lastPresetCatalogSignature;
+      if (shouldRebuildPresets) {
+        lastPresetCatalogSignature = presetSignature;
+        const previousSelection = String(elements.preset.value || "").trim();
+        elements.preset.innerHTML = "";
+        Object.entries(presets).forEach(([presetName, preset]) => {
           const option = document.createElement("option");
           option.value = presetName;
-          option.textContent = preset.label || presetName;
+          option.textContent = preset?.label || presetName;
           elements.preset.appendChild(option);
         });
+        const desired = String(style.preset || "").trim() || "clean_default";
+        const fallback =
+          presets[desired] ? desired
+            : presets[previousSelection] ? previousSelection
+              : presets.clean_default ? "clean_default"
+                : Object.keys(presets)[0] || "clean_default";
+        elements.preset.value = fallback;
+      } else {
+        elements.preset.value = style.preset && presets[style.preset] ? style.preset : (elements.preset.value || "clean_default");
       }
-      elements.preset.value = style.preset || "clean_default";
     }
     if (elements.description) {
       elements.description.textContent = style.description || (getCurrentLocale() === "ru" ? "Выберите пресет и подстройте его локально." : "Choose a preset and tweak it locally.");
@@ -93,6 +268,43 @@ export function mountStyleEditorPanel(root, { store, actions, logger }) {
         return;
       }
       element.value = String(style.base?.[key] ?? "");
+    });
+
+    const activeSlot = snapshot.ui?.selectedStyleLineSlot || "source";
+    const slotStyle = style.line_slots?.[activeSlot] || { enabled: false };
+    const slotEnabled = Boolean(slotStyle.enabled);
+    if (elements.lineSlots.enabled) {
+      elements.lineSlots.enabled.checked = slotEnabled;
+    }
+    if (elements.lineSlots.description) {
+      elements.lineSlots.description.textContent = slotEnabled
+        ? (
+          getCurrentLocale() === "ru"
+            ? `Выбран слот: ${styleSlotLabel(activeSlot)}. Пустое значение означает "наследовать базовый стиль".`
+            : `Selected slot: ${styleSlotLabel(activeSlot)}. Empty values inherit from base.`
+        )
+        : (
+          getCurrentLocale() === "ru"
+            ? `Выбран слот: ${styleSlotLabel(activeSlot)}. Включите "Переопределить", чтобы показать настройки слота.`
+            : `Selected slot: ${styleSlotLabel(activeSlot)}. Enable Override to reveal slot controls.`
+        );
+    }
+    if (elements.lineSlots.fieldsContainer) {
+      elements.lineSlots.fieldsContainer.hidden = !slotEnabled;
+    }
+    if (elements.lineSlots.details) {
+      elements.lineSlots.details.hidden = !slotEnabled;
+      if (!slotEnabled) {
+        elements.lineSlots.details.removeAttribute("open");
+      }
+    }
+    Object.entries(elements.lineSlots.fields).forEach(([key, element]) => {
+      if (!element) {
+        return;
+      }
+      const raw = slotStyle?.[key];
+      element.value = normalizeOverrideFieldValue(raw);
+      element.disabled = !slotEnabled;
     });
   }
 
@@ -120,6 +332,49 @@ export function mountStyleEditorPanel(root, { store, actions, logger }) {
       logger("[subtitle-style] updated locally");
     });
   });
+
+  elements.lineSlots.enabled?.addEventListener("change", () => {
+    const enabled = Boolean(elements.lineSlots.enabled.checked);
+    updateStyle((style) => {
+      const activeSlot = store.getState().ui?.selectedStyleLineSlot || "source";
+      if (!style.line_slots || typeof style.line_slots !== "object") {
+        style.line_slots = {};
+      }
+      const current = style.line_slots[activeSlot] && typeof style.line_slots[activeSlot] === "object"
+        ? style.line_slots[activeSlot]
+        : {};
+      style.line_slots[activeSlot] = { ...current, enabled };
+    });
+    logger(`[subtitle-style] slot ${enabled ? "override on" : "override off"}`);
+  });
+
+  Object.entries(elements.lineSlots.fields).forEach(([key, element]) => {
+    if (!element) {
+      return;
+    }
+    const apply = () => {
+      updateStyle((style) => {
+        const activeSlot = store.getState().ui?.selectedStyleLineSlot || "source";
+        if (!style.line_slots || typeof style.line_slots !== "object") {
+          style.line_slots = {};
+        }
+        const current = style.line_slots[activeSlot] && typeof style.line_slots[activeSlot] === "object"
+          ? style.line_slots[activeSlot]
+          : {};
+        const raw = String(element.value ?? "");
+        style.line_slots[activeSlot] = {
+          ...current,
+          [key]: raw.trim() === "" ? null : raw,
+        };
+      });
+    };
+    element.addEventListener("input", apply);
+    element.addEventListener("change", () => {
+      apply();
+      logger("[subtitle-style] slot updated locally");
+    });
+  });
+
   elements.saveCustomBtn?.addEventListener("click", async () => {
     const name = String(elements.customName?.value || "").trim();
     if (!name) {

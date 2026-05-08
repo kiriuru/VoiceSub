@@ -30,6 +30,8 @@ function initializeLocaleSwitcher(actions) {
 
   const onChange = () => {
     actions.setUiLanguage(select.value || "en");
+    // Persist UI language immediately so it survives reloads without requiring the global Save button.
+    actions.saveCurrentConfig();
   };
 
   select.addEventListener("change", onChange);

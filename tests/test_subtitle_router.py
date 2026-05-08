@@ -147,6 +147,47 @@ class SubtitleRouterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(translation_item["slot_id"], "translation_1")
         self.assertEqual(translation_item["style_slot"], "translation_1")
 
+    async def test_translation_without_slot_id_is_mapped_using_target_language(self) -> None:
+        await self.router.handle_transcript(
+            TranscriptEvent(
+                event="final",
+                text="Привет",
+                sequence=1,
+                segment=TranscriptSegment(
+                    segment_id="seg-1",
+                    text="Привет",
+                    is_final=True,
+                    source_lang="ru",
+                    provider="local",
+                    sequence=1,
+                ),
+            )
+        )
+        await self.router.handle_translation(
+            TranslationEvent(
+                sequence=1,
+                source_text="Привет",
+                source_lang="ru",
+                provider="google_translate_v2",
+                translations=[
+                    TranslationItem(
+                        slot_id=None,
+                        label="EN",
+                        target_lang="en",
+                        text="Hello",
+                        provider="google_translate_v2",
+                        cached=False,
+                        success=True,
+                    )
+                ],
+            )
+        )
+        payload = self._last_payload()
+        self.assertEqual([item["text"] for item in payload["visible_items"]], ["Привет", "Hello"])
+        translation_item = payload["visible_items"][1]
+        self.assertEqual(translation_item["slot_id"], "translation_1")
+        self.assertEqual(translation_item["style_slot"], "translation_1")
+
     async def test_new_partial_keeps_previous_completed_translation_block_visible_until_next_final(self) -> None:
         await self.router.handle_transcript(
             TranscriptEvent(

@@ -47,6 +47,36 @@ app.mount("/overlay-assets", StaticFiles(directory=str(OVERLAY_DIR)), name="over
 app.mount("/project-fonts", StaticFiles(directory=str(PROJECT_FONTS_DIR)), name="project-fonts")
 
 
+@app.middleware("http")
+async def disable_frontend_caching(request: Request, call_next):
+    """
+    Keep frontend iteration frictionless: avoid hard-reload requirements on Windows browsers
+    by disabling HTTP caching for dashboard HTML + static assets.
+
+    Settings are persisted server-side (`user-data/`) and in localStorage, so reloads are safe.
+    """
+    response = await call_next(request)
+    path = request.url.path or "/"
+    should_disable_cache = (
+        path in {
+            "/",
+            "/overlay",
+            "/google-asr",
+            "/google-asr-experimental",
+            "/remote/controller-bridge",
+            "/remote/worker-bridge",
+            "/project-fonts.css",
+        }
+        or path.startswith("/static/")
+        or path.startswith("/overlay-assets/")
+    )
+    if should_disable_cache:
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
+
+
 @app.get("/api/health", response_model=HealthResponse)
 async def health(request: Request) -> HealthResponse:
     return request.app.state.diagnostics_service.health()

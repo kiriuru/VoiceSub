@@ -175,20 +175,7 @@
               <span data-i18n="translation.enable">Translate recognized speech</span>
             </label>
           </div>
-          <div class="translation-line-toolbar">
-            <label class="stack-field grow">
-              <span data-i18n="translation.lines.new_target">Target language for new line</span>
-              <select id="translation-language-select" data-i18n-title="translation.language_picker"></select>
-            </label>
-          </div>
           <ul id="translation-language-order" class="ordered-list translation-line-list"></ul>
-          <p class="muted" data-i18n="translation.lines.note">Each slot can use its own language, provider, and label. Duplicate target languages are allowed.</p>
-          <div class="translation-action-grid">
-            <button id="translation-lang-add-btn" data-i18n="translation.add_line">Add Line</button>
-            <button id="translation-lang-remove-btn" class="secondary" data-i18n="translation.disable_selected">Disable / Remove Selected</button>
-            <button id="translation-lang-up-btn" class="secondary" data-i18n="translation.move_up">Move Up</button>
-            <button id="translation-lang-down-btn" class="secondary" data-i18n="translation.move_down">Move Down</button>
-          </div>
         </article>
         <article class="panel translation-provider-panel">
           <div class="section-heading">
@@ -261,6 +248,21 @@
             </label>
           </div>
           <p id="translation-provider-status" class="muted"></p>
+
+          <div class="subsection-divider" aria-hidden="true"></div>
+          <div class="translation-line-toolbar">
+            <label class="stack-field grow">
+              <span data-i18n="translation.lines.new_target">Target language for new line</span>
+              <select id="translation-language-select" data-i18n-title="translation.language_picker"></select>
+            </label>
+          </div>
+          <p class="muted" data-i18n="translation.lines.note">Each slot can use its own language, provider, and label. Duplicate target languages are allowed.</p>
+          <div class="translation-action-grid">
+            <button id="translation-lang-add-btn" data-i18n="translation.add_line">Add Line</button>
+            <button id="translation-lang-remove-btn" class="secondary" data-i18n="translation.disable_selected">Disable / Remove Selected</button>
+            <button id="translation-lang-up-btn" class="secondary" data-i18n="translation.move_up">Move Up</button>
+            <button id="translation-lang-down-btn" class="secondary" data-i18n="translation.move_down">Move Down</button>
+          </div>
         </article>
         </div>
 
@@ -369,16 +371,6 @@
         </article>
         </div>
 
-        <article class="panel subtitle-notes-panel">
-          <div class="section-heading">
-            <div>
-              <p class="eyebrow" data-i18n="subtitles.notes.eyebrow">Behavior Notes</p>
-              <h2 data-i18n="subtitles.notes.title">Subtitle Routing Notes</h2>
-            </div>
-          </div>
-          <p class="muted" data-i18n="subtitles.notes.preview">The live subtitle preview now stays in the top overview area so you can always compare transcript, output timing, and device state without switching tabs.</p>
-          <p class="muted" data-i18n="subtitles.notes.routing">Use this section to control visibility, language order, overlay preset, and subtitle hold timing. The same saved routing state is shared by the dashboard preview and the OBS overlay.</p>
-        </article>
       </section>
         </div>
 
@@ -408,18 +400,6 @@
         </div>
         <p id="subtitle-style-preset-description" class="muted" data-i18n="style.preset_loading">Preset description loading...</p>
         <p id="subtitle-style-custom-status" class="muted" data-i18n="style.custom_status.default">Built-in presets are editable, and custom presets are saved locally in config/profiles.</p>
-
-        <div class="settings-surface">
-          <div class="surface-header">
-            <div>
-              <h3 data-i18n="style.fonts.title">Fonts</h3>
-              <p class="muted" data-i18n="style.fonts.note">Project-local fonts are the reliable custom-font path. System font listing is best-effort.</p>
-            </div>
-            <button id="font-refresh-btn" class="secondary" data-i18n="style.fonts.refresh">Refresh System Fonts</button>
-          </div>
-          <p class="muted"><span data-i18n="style.fonts.dir">Project-local fonts folder:</span> <span id="project-fonts-dir" class="mono">loading...</span></p>
-          <p id="font-source-status" class="muted" data-i18n="style.fonts.status.default">Fallback fonts are always available. Local system font access depends on the browser/runtime.</p>
-        </div>
 
         <div class="settings-surface">
           <div class="surface-header">
@@ -499,6 +479,10 @@
                 <option value="none" data-i18n="style.field.effect.none">None</option>
                 <option value="fade" data-i18n="style.field.effect.fade">Fade</option>
                 <option value="subtle_pop" data-i18n="style.field.effect.subtle_pop">Subtle pop</option>
+                <option value="slide_up" data-i18n="style.field.effect.slide_up">Slide up</option>
+                <option value="zoom_in" data-i18n="style.field.effect.zoom_in">Zoom in</option>
+                <option value="blur_in" data-i18n="style.field.effect.blur_in">Blur in</option>
+                <option value="glow" data-i18n="style.field.effect.glow">Glow</option>
               </select>
             </label>
           </div>
@@ -603,6 +587,10 @@
                 <option value="none" data-i18n="style.field.effect.none">None</option>
                 <option value="fade" data-i18n="style.field.effect.fade">Fade</option>
                 <option value="subtle_pop" data-i18n="style.field.effect.subtle_pop">Subtle pop</option>
+                <option value="slide_up" data-i18n="style.field.effect.slide_up">Slide up</option>
+                <option value="zoom_in" data-i18n="style.field.effect.zoom_in">Zoom in</option>
+                <option value="blur_in" data-i18n="style.field.effect.blur_in">Blur in</option>
+                <option value="glow" data-i18n="style.field.effect.glow">Glow</option>
               </select>
             </label>
           </div>
@@ -632,6 +620,18 @@
               </label>
             </div>
           </details>
+        </div>
+
+        <div class="settings-surface">
+          <div class="surface-header">
+            <div>
+              <h3 data-i18n="style.fonts.title">Fonts</h3>
+              <p class="muted" data-i18n="style.fonts.note">Project-local fonts are the reliable custom-font path. System font listing is best-effort.</p>
+            </div>
+            <button id="font-refresh-btn" class="secondary" data-i18n="style.fonts.refresh">Refresh System Fonts</button>
+          </div>
+          <p class="muted"><span data-i18n="style.fonts.dir">Project-local fonts folder:</span> <span id="project-fonts-dir" class="mono">loading...</span></p>
+          <p id="font-source-status" class="muted" data-i18n="style.fonts.status.default">Fallback fonts are always available. Local system font access depends on the browser/runtime.</p>
         </div>
 
         <p class="muted" data-i18n="style.final_note">The same saved subtitle style payload drives this dashboard preview and the OBS overlay. Presets are a starting point, and your edits stay local in config/profiles.</p>

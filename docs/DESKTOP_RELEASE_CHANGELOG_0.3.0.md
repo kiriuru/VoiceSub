@@ -5,12 +5,12 @@ Delta changelog относительно `0.2.9.2`.
 Предыдущий delta changelog:
 - [DESKTOP_RELEASE_CHANGELOG_0.2.9.2.md](./DESKTOP_RELEASE_CHANGELOG_0.2.9.2.md)
 
-Post-release follow-up for the current `main` branch now lives in [CHANGELOG.md](./CHANGELOG.md) under `Unreleased` so the shipped `0.3.0` notes stay release-specific.
+Post-release изменения для текущей ветки `main` теперь живут в [CHANGELOG.md](./CHANGELOG.md) в секции `Unreleased`, чтобы заметки про shipped `0.3.0` оставались строго release-specific.
 
-Current note:
+Текущее примечание:
 
-- per-translation-line provider selection, slot-based translation identity, and the backend translation provider extraction cleanup are post-`0.3.0` main-branch follow-up work and are documented in [CHANGELOG.md](./CHANGELOG.md) under `Unreleased`, not as part of the shipped `0.3.0` delta itself.
-- the current `main` branch follow-up also includes the split Translation tab UI, broader dashboard i18n coverage, and desktop storage alignment around `user-data/logs/` and `user-data/models/`; those changes are likewise tracked under `Unreleased`.
+- выбор провайдера «на каждую линию перевода», slot-based идентичность перевода, и вынос провайдеров перевода из legacy слоя — это post-`0.3.0` follow-up в ветке `main` и документируется в [CHANGELOG.md](./CHANGELOG.md) -> `Unreleased`, а не в shipped `0.3.0` delta.
+- текущий follow-up в `main` также включает разделение UI вкладки Translation, более широкое покрытие i18n для dashboard, и выравнивание storage вокруг `user-data/logs/` и `user-data/models/`; эти изменения также отслеживаются в `Unreleased`.
 
 ## Кратко
 

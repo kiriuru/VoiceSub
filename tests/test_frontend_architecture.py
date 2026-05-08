@@ -7,6 +7,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 FRONTEND_ROOT = PROJECT_ROOT / "frontend"
 JS_ROOT = FRONTEND_ROOT / "js"
+OVERLAY_ROOT = PROJECT_ROOT / "overlay"
 
 
 class FrontendArchitectureTests(unittest.TestCase):
@@ -112,6 +113,17 @@ class FrontendArchitectureTests(unittest.TestCase):
         self.assertIn("statusLine.dataset.status = level", worker_js)
         self.assertNotIn('classList.remove("ok", "warn", "bad")', controller_js)
         self.assertNotIn('classList.remove("ok", "warn", "bad")', worker_js)
+
+    def test_style_editor_rebuilds_preset_options_when_catalog_changes(self) -> None:
+        panel_js = (JS_ROOT / "panels" / "style-editor-panel.js").read_text(encoding="utf-8")
+        self.assertIn("function buildPresetCatalogSignature", panel_js)
+        self.assertIn("lastPresetCatalogSignature", panel_js)
+        self.assertIn("shouldRebuildPresets", panel_js)
+
+    def test_overlay_filters_stale_payloads_using_created_at_ms(self) -> None:
+        overlay_js = (OVERLAY_ROOT / "overlay.js").read_text(encoding="utf-8")
+        self.assertIn("created_at_ms", overlay_js)
+        self.assertIn("ignored stale overlay_update", overlay_js)
 
 
 if __name__ == "__main__":

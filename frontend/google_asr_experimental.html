@@ -188,14 +188,14 @@
   <body>
     <main>
       <section class="panel stack">
-        <p class="eyebrow">Browser Speech Worker</p>
-        <h1 id="worker-title">Browser Recognition Window (Experimental)</h1>
-        <p id="worker-description" class="muted">
-          This experimental worker opens one live microphone MediaStreamTrack and tries SpeechRecognition.start(audioTrack) before falling back to the normal start() path.
+        <p class="eyebrow" data-i18n="worker.eyebrow">Browser Speech Worker</p>
+        <h1 id="worker-title" data-i18n="worker.experimental.title">Browser Recognition Window (Experimental)</h1>
+        <p id="worker-description" class="muted" data-i18n="worker.experimental.description">
+          This experimental worker opens one live microphone MediaStreamTrack and tries SpeechRecognition.start(audioTrack). If that is rejected, it can fall back to normal start().
         </p>
         <div class="notice">
-          <p id="visibility-warning-text" class="muted">
-            Experimental mode opens one live microphone MediaStreamTrack and calls SpeechRecognition.start(audioTrack). If the browser rejects that path, the worker can fall back to normal start().
+          <p id="visibility-warning-text" class="muted" data-i18n="worker.experimental.warning.body">
+            Experimental mode is more sensitive to browser throttling. Keep this window open and visible while it is listening, or the audio-track path and quick rearms may become unstable.
           </p>
         </div>
       </section>
@@ -203,61 +203,61 @@
       <section class="grid">
         <section class="panel stack">
           <div>
-            <p class="eyebrow">Experimental Worker Settings</p>
-            <h2>Recognition Controls</h2>
+            <p class="eyebrow" data-i18n="worker.experimental.settings.eyebrow">Experimental Worker Settings</p>
+            <h2 data-i18n="worker.settings.title">Recognition Controls</h2>
           </div>
           <div class="status-card">
-            <div class="metric-title">Configured recognition language</div>
-            <div id="configured-language" class="status-value">loading...</div>
+            <div class="metric-title" data-i18n="worker.configured_language">Configured recognition language</div>
+            <div id="configured-language" class="status-value" data-i18n="common.loading">loading...</div>
           </div>
           <div class="status-card">
-            <div class="metric-title">Experimental start path</div>
-            <p id="worker-mode-note" class="muted">
+            <div class="metric-title" data-i18n="worker.experimental.settings.note_title">Experimental start path</div>
+            <p id="worker-mode-note" class="muted" data-i18n="worker.experimental.settings.note_body">
               Keeps one live microphone track open, rearms recognition with the same track when possible, and falls back to recognition.start() if start(audioTrack) is rejected.
             </p>
           </div>
-          <label class="toggle"><input id="interim-results" type="checkbox" checked /><span>Return interim results</span></label>
-          <label class="toggle"><input id="continuous-results" type="checkbox" checked /><span>Return continuous results</span></label>
-          <label class="toggle"><input id="force-finalization" type="checkbox" checked /><span>Force-finalize the current interim if the browser never emits a final result</span></label>
+          <label class="toggle"><input id="interim-results" type="checkbox" checked /><span data-i18n="worker.interim">Return interim results</span></label>
+          <label class="toggle"><input id="continuous-results" type="checkbox" checked /><span data-i18n="worker.continuous">Return continuous results</span></label>
+          <label class="toggle"><input id="force-finalization" type="checkbox" checked /><span data-i18n="worker.force_finalization">Force-finalize the current interim if the browser never emits a final result</span></label>
           <div class="actions">
-            <button id="start-recognition" class="primary" type="button">Start Recognition</button>
-            <button id="stop-recognition" class="secondary" type="button">Stop</button>
-            <button id="save-worker-settings" class="secondary" type="button">Save</button>
+            <button id="start-recognition" class="primary" type="button" data-i18n="worker.start">Start Recognition</button>
+            <button id="stop-recognition" class="secondary" type="button" data-i18n="common.stop">Stop</button>
+            <button id="save-worker-settings" class="secondary" type="button" data-i18n="common.save">Save</button>
           </div>
           <p id="settings-save-status" class="muted save-status"></p>
         </section>
 
         <section class="panel stack">
           <div>
-            <p class="eyebrow">Runtime Status</p>
-            <h2>Live Diagnostics</h2>
+            <p class="eyebrow" data-i18n="worker.status.eyebrow">Runtime Status</p>
+            <h2 data-i18n="worker.status.title">Live Diagnostics</h2>
           </div>
           <div class="status-card">
-            <div class="metric-title">Status</div>
+            <div class="metric-title" data-i18n="worker.status.label">Status</div>
             <div id="worker-status" class="status-value">idle</div>
           </div>
           <div class="status-card">
-            <div class="metric-title">onSound</div>
+            <div class="metric-title" data-i18n="worker.on_sound">onSound</div>
             <div id="on-sound-status" class="status-value">no</div>
           </div>
           <div class="metric-grid">
-            <div class="metric"><div class="metric-title">Approx sentence count</div><div id="approx-count" class="metric-value">0</div></div>
-            <div class="metric"><div class="metric-title">Final sentence count</div><div id="final-count" class="metric-value">0</div></div>
-            <div class="metric"><div class="metric-title">Final missing count</div><div id="missing-final-count" class="metric-value">0</div></div>
-            <div class="metric"><div class="metric-title">Forced confirmations</div><div id="forced-count" class="metric-value">0</div></div>
-            <div class="metric"><div class="metric-title">Updates sent to app</div><div id="app-send-count" class="metric-value">0</div></div>
-            <div class="metric"><div class="metric-title">WebSocket</div><div id="socket-status" class="metric-value">connecting</div></div>
+            <div class="metric"><div class="metric-title" data-i18n="worker.metric.approx">Approx sentence count</div><div id="approx-count" class="metric-value">0</div></div>
+            <div class="metric"><div class="metric-title" data-i18n="worker.metric.final">Final sentence count</div><div id="final-count" class="metric-value">0</div></div>
+            <div class="metric"><div class="metric-title" data-i18n="worker.metric.missing">Final missing count</div><div id="missing-final-count" class="metric-value">0</div></div>
+            <div class="metric"><div class="metric-title" data-i18n="worker.metric.forced">Forced confirmations</div><div id="forced-count" class="metric-value">0</div></div>
+            <div class="metric"><div class="metric-title" data-i18n="worker.metric.app_sends">Updates sent to app</div><div id="app-send-count" class="metric-value">0</div></div>
+            <div class="metric"><div class="metric-title" data-i18n="worker.metric.websocket">WebSocket</div><div id="socket-status" class="metric-value">connecting</div></div>
           </div>
         </section>
       </section>
 
       <section class="grid">
         <section class="panel stack">
-          <div><p class="eyebrow">Interim</p><h2>Live Partial Text</h2></div>
+          <div><p class="eyebrow" data-i18n="worker.partial.eyebrow">Interim</p><h2 data-i18n="worker.partial.title">Live Partial Text</h2></div>
           <textarea id="partial-box" readonly></textarea>
         </section>
         <section class="panel stack">
-          <div><p class="eyebrow">Final</p><h2>Last Final Text</h2></div>
+          <div><p class="eyebrow" data-i18n="worker.final.eyebrow">Final</p><h2 data-i18n="worker.final.title">Last Final Text</h2></div>
           <textarea id="final-box" readonly></textarea>
         </section>
       </section>
@@ -557,26 +557,6 @@
           };
         }
 
-        function localizeExperimentalCopy() {
-          const isRu = locale() === "ru";
-          document.title = "Browser Speech Worker (Experimental)";
-          workerTitle.textContent = isRu
-            ? "Окно браузерного распознавания (Experimental)"
-            : "Browser Recognition Window (Experimental)";
-          workerDescription.textContent = isRu
-            ? "Этот experimental worker заранее открывает один live MediaStreamTrack микрофона и пытается вызвать SpeechRecognition.start(audioTrack), а затем при необходимости откатывается на обычный start()."
-            : "This experimental worker opens one live microphone MediaStreamTrack first and tries SpeechRecognition.start(audioTrack), then falls back to the normal start() path if needed.";
-          workerModeNote.textContent = isRu
-            ? "Экспериментальный режим. Открывает один live MediaStreamTrack микрофона и вызывает SpeechRecognition.start(audioTrack). Если браузер отвергает этот путь, worker может откатиться на recognition.start()."
-            : "Experimental mode. Opens one live microphone MediaStreamTrack and calls SpeechRecognition.start(audioTrack). If the browser rejects that path, the worker can fall back to recognition.start().";
-          visibilityWarningText.textContent = isRu
-            ? "Держите это окно видимым. Если браузер скрывает или throttling-ит окно, experimental start(audioTrack) и быстрые rearms могут вести себя нестабильно."
-            : "Keep this window visible. If the browser hides or throttles it, experimental start(audioTrack) and quick rearms can become unstable.";
-          startButton.textContent = isRu ? "Запустить" : "Start Recognition";
-          stopButton.textContent = isRu ? "Стоп" : "Stop";
-          saveSettingsButton.textContent = isRu ? "Сохранить" : "Save";
-        }
-
         async function loadSettings() {
           let stored = null;
           try {
@@ -705,10 +685,10 @@
             window.I18n.setLocale(requestedLocale);
           }
           window.I18n.apply(document);
-          localizeExperimentalCopy();
+          document.title = t("document.title.worker_experimental");
           window.addEventListener("sst:locale-changed", () => {
             window.I18n.apply(document);
-            localizeExperimentalCopy();
+            document.title = t("document.title.worker_experimental");
             setStatus(state.currentStatus);
             updateCounters();
           });

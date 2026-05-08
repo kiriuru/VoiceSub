@@ -1,20 +1,30 @@
 import { subscribe } from "../core/store.js";
-import { applyStatusDataset, getCurrentLocale, normalizeUiStatus, resolveRuntimeUiStatus, t } from "../dashboard/helpers.js";
+import {
+  applyStatusDataset,
+  getCurrentLocale,
+  isBrowserRecognitionMode,
+  normalizeUiStatus,
+  resolveRuntimeUiStatus,
+  t,
+} from "../dashboard/helpers.js";
 
-function renderProgress(runtime, elements) {
+function renderProgress(runtime, elements, { mode } = {}) {
   const message = String(runtime?.status_message || "").trim();
   const card = elements.progressCard;
   if (!card) {
     return;
   }
+  const browserMode = isBrowserRecognitionMode(mode);
   const shouldShow = runtime?.status === "starting" || Boolean(message);
   card.hidden = !shouldShow;
   if (!shouldShow) {
+    card.classList.remove("is-compact");
     elements.progressPercent.textContent = "0%";
     elements.progressText.textContent = t("runtime.progress.preparing");
     elements.progressFill.style.width = "0%";
     return;
   }
+  card.classList.toggle("is-compact", browserMode);
   const percentMatch = message.match(/(\d+(?:\.\d+)?)%/);
   const percent = percentMatch ? Number.parseFloat(percentMatch[1]) : (runtime?.status === "starting" ? 12 : 0);
   elements.progressTitle.textContent =
@@ -64,6 +74,7 @@ export function mountRuntimePanel(root, { store, actions }) {
     const diagnostics = snapshot.diagnostics?.asr || {};
     const translationDiagnostics = snapshot.diagnostics?.translation || {};
     const obsDiagnostics = snapshot.diagnostics?.obs || {};
+    const mode = snapshot.config?.asr?.mode || "local";
     const healthStatus = normalizeUiStatus(snapshot.diagnostics?.healthStatus, "unknown");
     const runtimeStatus = resolveRuntimeUiStatus(runtime);
     const translationStatus = normalizeUiStatus(
@@ -161,7 +172,7 @@ export function mountRuntimePanel(root, { store, actions }) {
       elements.versionTag.textContent = `v${snapshot.versionInfo.current_version}`;
       elements.versionTag.title = snapshot.versionInfo.current_version;
     }
-    renderProgress(runtime, elements);
+    renderProgress(runtime, elements, { mode });
   }
 
   elements.startBtn?.addEventListener("click", onStart);

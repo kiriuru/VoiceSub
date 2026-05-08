@@ -201,6 +201,7 @@ Visual layout was not redesigned in `0.3.0`; the major change is the internal mo
 - `Google Cloud Translation - Advanced (v3)` is available as a separate provider and uses `project_id` plus OAuth access token instead of a v2 API key.
 - Configure up to five translation lines with their own enabled state, target language, provider, and optional label.
 - The Translation tab now shows each `translation_1 .. translation_5` slot as a separate card with an explicit per-line provider selector.
+- Translation slot cards appear only for lines explicitly added/configured in `translation.lines` (empty slots do not render until added).
 - Selecting a translation line switches the provider settings editor to that line's provider, while `translation.provider` remains the default provider for new lines and legacy compatibility.
 - The provider settings panel can also be pointed at a provider manually when no translation slot is selected.
 - Duplicate target languages are supported when they live in different translation slots.
@@ -235,6 +236,7 @@ Visual layout was not redesigned in `0.3.0`; the major change is the internal mo
   - background
   - alignment and spacing
   - effects
+- Built-in effects include: `none`, `fade`, `subtle_pop`, `slide_up`, `zoom_in`, `blur_in`, `glow`.
 - Configure per-line slot overrides.
 
 ### OBS

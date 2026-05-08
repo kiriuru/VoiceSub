@@ -1,8 +1,8 @@
-# Desktop Bootstrap Roadmap
+# Roadmap: Desktop Bootstrap Launcher
 
-This file tracks the bootstrap launcher plan so the next phases are not lost after install/verify/repair lands.
+Этот файл фиксирует план bootstrap launcher-а, чтобы следующие фазы не «потерялись» после реализации install/verify/repair.
 
-## Current Phase
+## Текущая фаза
 
 Implemented first:
 
@@ -11,7 +11,7 @@ Implemented first:
 - install / verify / repair for managed files
 - launch of the extracted legacy desktop runtime from disk
 
-Managed payload scope today:
+Текущий состав managed payload:
 
 - hidden internal runtime executable extracted next to the public launcher
 - `app-runtime/` extracted next to the public launcher
@@ -26,11 +26,11 @@ There is already version/update groundwork in:
 - [backend/api/routes_version.py](F:/AI/stream-sub-translator/backend/api/routes_version.py)
 - `updates` config section in [backend/config/__init__.py](F:/AI/stream-sub-translator/backend/config/__init__.py) plus [backend/config/defaults.py](F:/AI/stream-sub-translator/backend/config/defaults.py)
 
-That scaffold should be reused for later live release sync instead of starting another parallel version system.
+Эту основу нужно переиспользовать для будущего обновления релизов, а не заводить параллельную систему версий.
 
-## Next Phase: Runtime Update
+## Следующая фаза: обновление runtime
 
-Preferred approach:
+Предпочтительный подход:
 
 - use GitHub Releases, not direct `main` branch sync
 - publish a signed or at least hashed runtime manifest asset
@@ -39,17 +39,17 @@ Preferred approach:
 - launcher downloads only changed managed files or a staged patch bundle
 - launcher verifies SHA256 before swap
 
-Why not update from `main`:
+Почему не обновляться напрямую из `main`:
 
 - `main` can be ahead of release and temporarily inconsistent
 - Git checkout / pull is not a stable end-user updater
 - rollback is harder
 
-## Final Phase: Launcher Self-Update
+## Финальная фаза: self-update launcher-а
 
 The public launcher exe should update separately from runtime files.
 
-Preferred flow:
+Предпочтительный flow:
 
 - launcher checks release metadata
 - downloads `Stream Subtitle Translator.new.exe`

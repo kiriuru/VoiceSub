@@ -33,6 +33,11 @@
   };
 
   const debugEntries = [];
+  const staleGuards = {
+    overlay_update: { lastCreatedAt: 0, lastSequence: 0 },
+    transcript_update: { lastCreatedAt: 0, lastSequence: 0 },
+  };
+  let connectionId = 0;
 
   function sendClientLogPayload(payload) {
     const body = JSON.stringify(payload);
@@ -211,6 +216,14 @@
   }
 
   function applyOverlayPayload(payload) {
+    const createdAt = Number(payload?.created_at_ms) || 0;
+    if (Number.isFinite(createdAt) && createdAt > 0 && createdAt < staleGuards.overlay_update.lastCreatedAt) {
+      writeDebug("overlay payload", "ignored stale overlay_update");
+      return;
+    }
+    if (Number.isFinite(createdAt) && createdAt > 0) {
+      staleGuards.overlay_update.lastCreatedAt = createdAt;
+    }
     overlayState.hasOverlayLifecycle = true;
     clearLegacyTranscriptState();
     if (payload.preset && ["single", "dual-line", "stacked"].includes(payload.preset)) {
@@ -252,17 +265,44 @@
   }
 
   function connect() {
+    connectionId += 1;
+    const currentConnectionId = connectionId;
     const protocol = location.protocol === "https:" ? "wss" : "ws";
     const ws = new WebSocket(`${protocol}://${location.host}/ws/events`);
 
     ws.addEventListener("open", () => {
+      if (currentConnectionId !== connectionId) {
+        try {
+          ws.close();
+        } catch (_error) {
+          // ignore
+        }
+        return;
+      }
       writeDebug("ws connected", `profile=${profile}, preset=${overlayState.preset}, debug=${debugMode ? "on" : "off"}`);
     });
 
     ws.addEventListener("message", (event) => {
+      if (currentConnectionId !== connectionId) {
+        return;
+      }
       try {
         const data = JSON.parse(event.data);
         if (data.type === "transcript_update" && data.payload) {
+          const createdAt = Number(data.payload?.created_at_ms) || 0;
+          const sequence = Number(data.payload?.event_sequence ?? data.payload?.sequence) || 0;
+          if (Number.isFinite(createdAt) && createdAt > 0 && createdAt < staleGuards.transcript_update.lastCreatedAt) {
+            return;
+          }
+          if (Number.isFinite(sequence) && sequence > 0 && sequence < staleGuards.transcript_update.lastSequence) {
+            return;
+          }
+          if (Number.isFinite(createdAt) && createdAt > 0) {
+            staleGuards.transcript_update.lastCreatedAt = createdAt;
+          }
+          if (Number.isFinite(sequence) && sequence > 0) {
+            staleGuards.transcript_update.lastSequence = sequence;
+          }
           applyTranscript(data.payload);
           return;
         }
@@ -275,12 +315,21 @@
     });
 
     ws.addEventListener("close", () => {
+      if (currentConnectionId !== connectionId) {
+        return;
+      }
       clearOverlayPresentation("websocket disconnected");
       writeDebug("ws disconnected", "reconnecting in 1s");
       setTimeout(connect, 1000);
     });
 
-    ws.addEventListener("error", () => ws.close());
+    ws.addEventListener("error", () => {
+      try {
+        ws.close();
+      } catch (_error) {
+        // ignore
+      }
+    });
   }
 
   writeDebug("overlay boot", `profile=${profile}, preset=${preset}, compact=${overlayState.compact ? "on" : "off"}`);

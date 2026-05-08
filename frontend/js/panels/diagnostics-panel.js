@@ -81,13 +81,26 @@ export function mountDiagnosticsPanel(root, { store, actions, events }) {
       ].join(" | ");
     }
     if (elements.browserWorkerDiagnosticsText) {
-      elements.browserWorkerDiagnosticsText.textContent = browserWorker
-        ? [
-            `connected: ${browserWorker.connected ? "yes" : "no"}`,
-            `mode: ${browserWorker.browser_mode || "n/a"}`,
-            `socket: ${browserWorker.websocket_state || "n/a"}`,
-          ].join(" | ")
-        : t("tools.runtime.browser_worker.not_connected");
+      if (!browserWorker) {
+        elements.browserWorkerDiagnosticsText.textContent = t("tools.runtime.browser_worker.not_connected");
+      } else {
+        const connected =
+          browserWorker.worker_connected === true
+          || browserWorker.connected === true;
+        const websocketReady =
+          browserWorker.websocket_ready === true
+          || String(browserWorker.websocket_state || "").toLowerCase() === "open";
+        const mode = browserWorker.browser_mode || browserWorker.provider_name || "n/a";
+        const recognition = browserWorker.recognition_state || "n/a";
+        const supervisor = browserWorker.supervisor_state || "n/a";
+        elements.browserWorkerDiagnosticsText.textContent = [
+          `connected: ${connected ? "yes" : "no"}`,
+          `mode: ${mode}`,
+          `socket: ${websocketReady ? "ready" : (browserWorker.websocket_state || "n/a")}`,
+          `recognition: ${recognition}`,
+          `supervisor: ${supervisor}`,
+        ].join(" | ");
+      }
     }
     if (elements.obsCcDiagnosticsText) {
       elements.obsCcDiagnosticsText.textContent = [

@@ -264,6 +264,38 @@ a {
   background: rgba(255, 255, 255, 0.08);
 }
 
+.runtime-progress-card.is-compact {
+  margin-top: var(--space-3);
+  padding: 10px 12px;
+}
+
+.runtime-progress-card.is-compact .runtime-progress-head {
+  margin-bottom: 0;
+}
+
+.runtime-progress-card.is-compact .runtime-progress-head strong {
+  font-size: 13px;
+  letter-spacing: 0.02em;
+}
+
+.runtime-progress-card.is-compact .runtime-progress-head span {
+  display: none;
+}
+
+.runtime-progress-card.is-compact .runtime-progress-text {
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.runtime-progress-card.is-compact .runtime-progress-bar {
+  margin-top: 8px;
+  height: 6px;
+}
+
 .sst-latency-meter {
   width: 100%;
   min-height: 10px;
@@ -630,9 +662,33 @@ a {
   margin-bottom: var(--space-4);
 }
 
-.panel-style > .muted:last-child {
+.panel-style {
+  display: grid;
+  gap: var(--space-4);
+  align-content: start;
+}
+
+.panel-style .toolbar-row,
+.panel-style .actions,
+.panel-style .style-grid,
+.panel-style .slot-tab-list {
+  margin-top: 0;
+}
+
+/* Keep consistent vertical rhythm even when nested blocks bring their own margins. */
+.panel-style .settings-surface {
+  margin-top: 0;
+}
+
+.panel-style .settings-surface + .settings-surface,
+.panel-style .settings-surface + .style-details,
+.panel-style .style-details + .settings-surface,
+.panel-style .style-details + .style-details {
   margin-top: var(--space-4);
-  margin-bottom: 0;
+}
+
+.panel-style > .muted:last-child {
+  margin: 0;
 }
 
 .grid {

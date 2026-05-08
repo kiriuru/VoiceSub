@@ -88,6 +88,22 @@
   animation: subtitle-subtle-pop 180ms ease-out both;
 }
 
+.subtitle-line__surface.effect-slide-up {
+  animation: subtitle-slide-up 240ms cubic-bezier(0.2, 0.9, 0.2, 1) both;
+}
+
+.subtitle-line__surface.effect-zoom-in {
+  animation: subtitle-zoom-in 220ms ease-out both;
+}
+
+.subtitle-line__surface.effect-blur-in {
+  animation: subtitle-blur-in 240ms ease-out both;
+}
+
+.subtitle-line__surface.effect-glow {
+  animation: subtitle-glow 320ms ease-out both;
+}
+
 .subtitle-stage-note {
   margin-top: 12px;
   color: #8b949e;
@@ -123,5 +139,57 @@
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes subtitle-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes subtitle-zoom-in {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes subtitle-blur-in {
+  from {
+    opacity: 0;
+    filter: blur(10px);
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateY(0);
+  }
+}
+
+@keyframes subtitle-glow {
+  from {
+    opacity: 0;
+    filter: drop-shadow(0 0 10px rgba(108, 199, 255, 0.55)) drop-shadow(0 0 22px rgba(255, 108, 230, 0.28));
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    filter: none;
+    transform: translateY(0);
   }
 }

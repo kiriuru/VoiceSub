@@ -1,8 +1,8 @@
-# Remote LAN Implementation Plan
+# План реализации Remote LAN
 
-This plan is scoped to LAN-only remote operation and keeps local mode stable by default.
+Этот план ограничен LAN-only remote режимом и сохраняет local mode стабильным по умолчанию.
 
-## Step 1 - Foundation and Isolation (baseline completed)
+## Шаг 1 — Основа и изоляция (baseline completed)
 
 - Add `remote` config section with strict normalization.
 - Keep default startup on `127.0.0.1`.
@@ -10,14 +10,14 @@ This plan is scoped to LAN-only remote operation and keeps local mode stable by 
 - Add dedicated startup wrappers for controller/worker.
 - Add remote diagnostics endpoint and include diagnostics in health/runtime status responses.
 
-## Step 2 - LAN Session Signaling (baseline completed)
+## Шаг 2 — Сигналинг и сессия (baseline completed)
 
 - Add pairing session creation (`session_id` + `pair_code`).
 - Add worker pairing verification endpoint.
 - Add controller/worker heartbeat endpoint.
 - Track session state (`controller_online`, `worker_online`, expiry).
 
-## Step 3 - WebRTC Audio Transport (baseline in progress)
+## Шаг 3 — Транспорт аудио (baseline in progress)
 
 - Controller captures selected microphone stream for remote session.
 - Controller sends microphone audio to worker using WebRTC.
@@ -31,7 +31,7 @@ Implemented baseline:
 - worker bridge page (`/remote/worker-bridge`)
 - bridge auto-reconnect with exponential backoff for transient disconnects
 
-## Step 4 - Remote AI Pipeline (in progress)
+## Шаг 4 — Remote AI pipeline (in progress)
 
 - Worker runs VAD -> ASR -> translation pipeline in AI mode.
 - Worker emits partial/final transcript + translation events back to controller.
@@ -49,7 +49,7 @@ Implemented in this step:
   - `GET /api/remote/worker/health`
 - Controller bridge now supports explicit microphone selection before WebRTC stream start.
 
-## Step 5 - Controller Routing and UX (in progress)
+## Шаг 5 — Маршрутизация на Controller и UX (in progress)
 
 - Controller routes remote results into existing subtitle router/overlay/export paths.
 - Add dashboard controls for:
@@ -77,9 +77,9 @@ Implemented in this step:
 - `Remote LAN` panel now includes one-click orchestration:
   - `Prepare Remote Run` performs worker sync + worker runtime start + opens controller bridge
 
-## Compatibility Rules
+## Правила совместимости
 
-- Local mode remains default and fully functional without remote setup.
-- Remote mode is opt-in and must not alter local defaults.
-- No cloud/backend account requirements are introduced.
-- OBS overlay remains served by the same local FastAPI app.
+- Local mode остаётся default и полностью работает без remote setup.
+- Remote mode — opt-in и не меняет local defaults.
+- Не добавляются требования к аккаунтам/облаку/хостингу.
+- OBS overlay по-прежнему обслуживается тем же локальным FastAPI приложением.

@@ -219,6 +219,17 @@ class ConfigMigrationTests(unittest.TestCase):
         self.assertEqual(migrated["translation"]["target_languages"], ["en"])
         self.assertEqual(migrated["subtitle_output"]["display_order"], ["translation_2", "translation_1", "source"])
 
+    def test_overlay_compact_preset_normalizes_to_stacked_plus_compact_flag(self) -> None:
+        saved = self.manager.save(
+            {
+                "overlay": {
+                    "preset": "compact",
+                }
+            }
+        )
+        self.assertEqual(saved["overlay"]["preset"], "stacked")
+        self.assertTrue(saved["overlay"]["compact"])
+
 
 if __name__ == "__main__":
     unittest.main()

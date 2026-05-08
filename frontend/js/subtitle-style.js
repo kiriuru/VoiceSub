@@ -97,7 +97,7 @@
     const textAlign = ["left", "center", "right"].includes(String(current.text_align || "").toLowerCase())
       ? String(current.text_align).toLowerCase()
       : defaults.text_align;
-    const effect = ["none", "fade", "subtle_pop"].includes(String(current.effect || "").toLowerCase())
+    const effect = ["none", "fade", "subtle_pop", "slide_up", "zoom_in", "blur_in", "glow"].includes(String(current.effect || "").toLowerCase())
       ? String(current.effect).toLowerCase()
       : defaults.effect;
 

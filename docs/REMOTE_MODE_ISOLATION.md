@@ -1,34 +1,34 @@
-# Remote Mode Isolation Strategy
+# Стратегия изоляции Remote Mode
 
-This branch introduces a LAN-only remote mode without breaking the existing local-first workflow.
+Эта ветка вводит LAN-only remote mode, не ломая существующий local-first workflow.
 
-## Decisions
+## Решения
 
-1. Keep local mode as the default.
-2. Remote mode is opt-in and disabled by default.
-3. No cloud/SaaS/account/auth features are added.
-4. Controller and Worker responsibilities are separated.
-5. Existing local API/UI/overlay behavior must remain unchanged when remote mode is off.
-6. Desktop launcher must expose remote roles only as explicit secondary profiles, never as the default startup path.
+1. Local mode остаётся default.
+2. Remote mode — opt-in и по умолчанию выключен.
+3. Не добавляются cloud/SaaS/accounts/auth.
+4. Ответственность Controller и Worker разделена.
+5. Поведение локального API/UI/overlay не меняется, когда remote mode выключен.
+6. Desktop launcher показывает remote роли только как явные вторичные профили, а не как default путь запуска.
 
-## Folder Lock
+## Важные рабочие папки (для экспериментов/проверок)
 
-- `SST desktop remote SST/`: test workspace for remote mode experiments.
-- `desktop remote clean/`: clean workspace for publish validation and clean-start checks.
+- `SST desktop remote SST/`: тестовая рабочая папка для экспериментов с remote mode.
+- `desktop remote clean/`: «чистая» папка для publish validation и проверок clean-start.
 
-## Safe Implementation Rules
+## Правила безопасной реализации
 
-1. Add remote config behind explicit flags only.
-2. Do not change existing defaults for local startup.
-3. Add separate runtime entry points for Controller and Worker.
-4. Keep subtitle routing on Controller side.
-5. Keep ASR+translation execution on Worker side in remote mode.
-6. Add reconnect and heartbeat for LAN instability.
-7. Keep controller bootstrap lightweight and keep worker bootstrap on local AI only.
+1. Добавлять remote config только за явными флагами.
+2. Не менять существующие default значения локального старта.
+3. Иметь отдельные runtime entrypoints для Controller и Worker.
+4. Subtitle routing остаётся на стороне Controller.
+5. ASR+translation в remote режиме исполняется на стороне Worker.
+6. Для нестабильного LAN иметь reconnect и heartbeat.
+7. Controller bootstrap остаётся лёгким, worker bootstrap — только local AI.
 
-## Exit Criteria For Remote Work
+## Критерии готовности remote mode
 
-1. Local mode still works with no remote setup.
-2. Remote mode works inside one LAN with explicit enable.
-3. Overlay and export stay on Controller side.
-4. Worker can run AI-only pipeline from incoming WebRTC audio.
+1. Local mode работает без remote setup.
+2. Remote mode работает в пределах одного LAN при явном включении.
+3. Overlay и export остаются на стороне Controller.
+4. Worker может выполнять AI-only pipeline из входящего remote audio.
