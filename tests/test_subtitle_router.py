@@ -692,6 +692,37 @@ class SubtitleRouterTests(unittest.IsolatedAsyncioTestCase):
         translation_slots = [item["slot_id"] for item in payload["visible_items"] if item["kind"] == "translation"]
         self.assertEqual(translation_slots, ["translation_2", "translation_1"])
 
+    async def test_subtitle_payload_update_carries_created_at_ms_for_dashboard_freshness(self) -> None:
+        # Regression: dashboard ws clients fall back to payload.sequence (a
+        # per-session source phrase counter) for stale-event detection when
+        # created_at_ms is missing. SubtitlePayloadEvent.sequence resets to 0
+        # on every runtime stop/start, so without an authoritative timestamp
+        # the dashboard freezes after a Stop/Start until sequences catch up.
+        await self.router.handle_transcript(
+            TranscriptEvent(
+                event="partial",
+                text="Превью",
+                sequence=1,
+                segment=TranscriptSegment(
+                    segment_id="seg-preview",
+                    text="Превью",
+                    is_partial=True,
+                    source_lang="ru",
+                    provider="local",
+                    sequence=1,
+                ),
+            )
+        )
+        subtitle_payload_messages = [
+            message for message in self.ws_manager.messages if message.get("type") == "subtitle_payload_update"
+        ]
+        self.assertTrue(subtitle_payload_messages, "subtitle_payload_update broadcast was not captured")
+        for message in subtitle_payload_messages:
+            payload = message["payload"]
+            self.assertIn("created_at_ms", payload)
+            self.assertIsInstance(payload["created_at_ms"], int)
+            self.assertGreater(int(payload["created_at_ms"]), 0)
+
 
 if __name__ == "__main__":
     unittest.main()

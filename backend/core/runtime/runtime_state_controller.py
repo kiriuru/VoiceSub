@@ -45,7 +45,10 @@ class RuntimeStateController:
         self._last_runtime_status_broadcast_monotonic: float = 0.0
 
     def reset_broadcast_state(self) -> None:
-        self._runtime_event_sequence = 0
+        # The global event_sequence stream must stay monotonic across runtime
+        # stop/start cycles; dashboards (and other long-lived ws clients) rely
+        # on it for stale-event detection and would otherwise drop every event
+        # after a Stop/Start until the new session catches up.
         self._runtime_event_sequence_by_type.clear()
         self._last_runtime_status_signature = None
         self._last_runtime_status_broadcast_monotonic = 0.0

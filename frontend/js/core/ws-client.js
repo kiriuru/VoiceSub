@@ -99,23 +99,44 @@ export class WsClient {
     if (!payload || typeof payload !== "object") {
       return false;
     }
+    if (payload.stale === true) {
+      return true;
+    }
     const currentSequence = Number(payload.event_sequence ?? payload.sequence);
     const lastSequence = this.sequenceByType.get(eventType);
-    if (Number.isFinite(currentSequence)) {
-      if (Number.isFinite(lastSequence) && currentSequence < lastSequence) {
-        return true;
-      }
-      this.sequenceByType.set(eventType, currentSequence);
-    }
     const updatedAt = Number(payload.created_at_ms) || Date.parse(String(payload.updated_at || payload.timestamp || ""));
     const lastTimestamp = this.timestampByType.get(eventType);
-    if (Number.isFinite(updatedAt)) {
-      if (Number.isFinite(lastTimestamp) && updatedAt < lastTimestamp) {
+    const hasSequence = Number.isFinite(currentSequence);
+    const hasLastSequence = Number.isFinite(lastSequence);
+    const hasTimestamp = Number.isFinite(updatedAt);
+    const hasLastTimestamp = Number.isFinite(lastTimestamp);
+
+    // Timestamp is authoritative for staleness because backend sequence counters
+    // intentionally reset to 0 on every runtime stop/start. Without trusting the
+    // timestamp first, dashboards drop every event after a Stop/Start until the
+    // new session sequences catch up to the previous high-water mark.
+    if (hasTimestamp && hasLastTimestamp) {
+      if (updatedAt < lastTimestamp) {
         return true;
       }
+      if (updatedAt > lastTimestamp) {
+        if (hasSequence) {
+          this.sequenceByType.set(eventType, currentSequence);
+        }
+        this.timestampByType.set(eventType, updatedAt);
+        return false;
+      }
+    }
+    if (hasSequence && hasLastSequence && currentSequence < lastSequence) {
+      return true;
+    }
+    if (hasSequence) {
+      this.sequenceByType.set(eventType, currentSequence);
+    }
+    if (hasTimestamp) {
       this.timestampByType.set(eventType, updatedAt);
     }
-    return payload.stale === true;
+    return false;
   }
 
   handleMessage(rawData) {

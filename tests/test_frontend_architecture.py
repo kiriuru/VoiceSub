@@ -125,6 +125,20 @@ class FrontendArchitectureTests(unittest.TestCase):
         self.assertIn("created_at_ms", overlay_js)
         self.assertIn("ignored stale overlay_update", overlay_js)
 
+    def test_dashboard_ws_client_treats_timestamp_as_authoritative_freshness_signal(self) -> None:
+        # Regression: dashboards sit on a long-lived /ws/events connection while
+        # the backend resets per-session sequence counters on every Stop/Start.
+        # If the ws client trusts those resettable sequences over created_at_ms,
+        # it freezes after a runtime restart until sequences catch up. The
+        # client must therefore compare timestamps first and only fall back to
+        # the sequence when timestamps are equal or missing.
+        ws_client_js = (JS_ROOT / "core" / "ws-client.js").read_text(encoding="utf-8")
+        self.assertIn("isStale(eventType, payload)", ws_client_js)
+        self.assertIn("created_at_ms", ws_client_js)
+        self.assertIn("hasTimestamp && hasLastTimestamp", ws_client_js)
+        self.assertIn("updatedAt > lastTimestamp", ws_client_js)
+        self.assertIn("this.sequenceByType.set(eventType, currentSequence)", ws_client_js)
+
 
 if __name__ == "__main__":
     unittest.main()

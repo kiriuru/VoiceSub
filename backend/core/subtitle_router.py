@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from typing import Any, Awaitable, Callable, Literal
 
 from backend.core.asr_provider_selection import (
@@ -127,7 +128,12 @@ class SubtitleRouter:
     async def _publish_current(self) -> None:
         payload = self._build_presentation_payload()
         await self.overlay_broadcaster.publish(payload)
-        await self.ws_manager.broadcast({"type": "subtitle_payload_update", "payload": payload.model_dump()})
+        # Mirror created_at_ms from overlay_update so dashboard ws clients can
+        # detect freshness via timestamp; payload.sequence resets on every
+        # runtime start and is unreliable as a stale-event guard on its own.
+        subtitle_body = payload.model_dump()
+        subtitle_body["created_at_ms"] = int(time.time() * 1000)
+        await self.ws_manager.broadcast({"type": "subtitle_payload_update", "payload": subtitle_body})
         if self.presentation_callback is not None:
             await self.presentation_callback(payload)
 
