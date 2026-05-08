@@ -3,8 +3,9 @@ from __future__ import annotations
 import asyncio
 import unittest
 
+from backend.core.runtime.runtime_metrics_controller import RuntimeMetricsController
 from backend.core.subtitle_router import RuntimeOrchestrator
-from backend.models import RuntimeMetrics, RuntimeState
+from backend.models import RuntimeState
 
 
 class _RecordingWsManager:
@@ -20,7 +21,7 @@ class RuntimeEventCoalescingTests(unittest.TestCase):
         runtime = RuntimeOrchestrator.__new__(RuntimeOrchestrator)
         runtime.ws_manager = _RecordingWsManager()
         runtime._state = RuntimeState(is_running=True, running=True, status="listening", phase="listening")
-        runtime._metrics = RuntimeMetrics()
+        runtime._metrics_controller = RuntimeMetricsController()
         runtime._runtime_event_sequence = 0
         runtime._runtime_event_sequence_by_type = {}
         runtime._last_runtime_status_signature = None
@@ -35,7 +36,7 @@ class RuntimeEventCoalescingTests(unittest.TestCase):
             await RuntimeOrchestrator._broadcast_runtime(runtime)
 
             self.assertEqual(len(runtime.ws_manager.messages), 1)
-            self.assertEqual(runtime._metrics.runtime_status_duplicate_suppressed, 1)
+            self.assertEqual(runtime._metrics_controller.metrics.runtime_status_duplicate_suppressed, 1)
 
         asyncio.run(scenario())
 
@@ -47,7 +48,7 @@ class RuntimeEventCoalescingTests(unittest.TestCase):
             await RuntimeOrchestrator._broadcast_runtime(runtime)
 
             self.assertEqual(len(runtime.ws_manager.messages), 2)
-            self.assertEqual(runtime._metrics.runtime_status_broadcast_count, 2)
+            self.assertEqual(runtime._metrics_controller.metrics.runtime_status_broadcast_count, 2)
 
         asyncio.run(scenario())
 

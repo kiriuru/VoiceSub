@@ -8,6 +8,11 @@
 
 Post-`0.3.0` branch follow-up focused on internal modularization and runtime start behavior, without changing the local-first product default or the public version source of truth.
 
+- Runtime metrics state moved into `RuntimeMetricsController` (`backend/core/runtime/runtime_metrics_controller.py`).
+- Browser worker connection/session/generation/signature state is now owned by `BrowserWorkerStateController` (`backend/core/runtime/browser_worker_state_controller.py`).
+- `RuntimeOrchestrator` delegates those low-risk state mutations to the controllers without changing runtime status payload shape or WebSocket behavior.
+- Added unit tests for metrics and browser worker state ownership (`tests/test_runtime_metrics_controller.py`, `tests/test_browser_worker_state_controller.py`).
+
 ### P1 runtime stabilization (facade + controllers)
 
 - `TranslationDispatcher` is now restart-safe: `stop()` no longer permanently bricks the dispatcher for subsequent runtime sessions; `start()` resets internal stopped state and tests cover `stop() -> start()` reuse.
@@ -102,8 +107,9 @@ Post-`0.3.0` branch follow-up focused on internal modularization and runtime sta
   - `python -m compileall backend desktop tests`
   - `.\.venv\Scripts\python.exe -m unittest discover -s tests`
 - verification result:
-  - `178 tests`
+  - `204 tests`
   - `OK`
+ - recorded non-remote smoke verification output in `docs/MANUAL_SMOKE_RESULTS_NON_REMOTE.md` (manual-only items remain NOT TESTED unless executed with microphone/OBS/browser windows).
 
 ### Non-remote runtime stabilization pass
 

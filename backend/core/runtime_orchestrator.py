@@ -33,13 +33,8 @@ from backend.core.runtime.audio_runtime_controller import (
     pcm16_rms_level,
     prepare_recognition_audio,
 )
-from backend.core.runtime.runtime_metrics_collector import (
-    apply_translation_dispatcher_metrics,
-    increment_counter_metric,
-    increment_metric,
-    record_metrics,
-    runtime_material_status_snapshot,
-)
+from backend.core.runtime.runtime_metrics_collector import runtime_material_status_snapshot
+from backend.core.runtime.runtime_metrics_controller import RuntimeMetricsController
 from backend.core.runtime.runtime_status_builder import build_overlay_runtime_status, build_runtime_state
 from backend.core.runtime.runtime_state_controller import RuntimeStateController
 from backend.core.runtime.runtime_lifecycle_coordinator import RuntimeLifecycleCoordinator
@@ -73,7 +68,6 @@ from backend.models import (
     AsrDiagnostics,
     ObsCaptionDiagnostics,
     OverlayRuntimeStatus,
-    RuntimeMetrics,
     RuntimeState,
     TranscriptEvent,
     TranscriptSegment,
@@ -168,7 +162,7 @@ class RuntimeOrchestrator:
         self._segment_counter = 0
         self._active_segment_id: str | None = None
         self._active_segment_revision = 0
-        self._metrics = RuntimeMetrics()
+        self._metrics_controller = RuntimeMetricsController()
         self._effective_realtime_settings = dict(self._LEGACY_VAD_SETTINGS)
         self._effective_subtitle_lifecycle_settings = {
             "completed_block_ttl_ms": 4500,
@@ -186,7 +180,6 @@ class RuntimeOrchestrator:
         self._rnnoise_processor = RNNoiseRecognitionProcessor(sample_rate=self._asr_engine.sample_rate, channels=1)
         self._last_partial_text_by_segment: dict[str, str] = {}
         self._last_partial_emit_monotonic_by_segment: dict[str, float] = {}
-        self._external_worker_connected = False
         self._browser_asr_gateway = BrowserAsrGateway(structured_logger=structured_logger)
         self._asr_mode = AsrModeController(self.config_getter)
         self._remote_audio_connected = False
@@ -195,8 +188,8 @@ class RuntimeOrchestrator:
         self._runtime_status_heartbeat_interval_ms = 1000
         self._state_controller = RuntimeStateController(
             ws_manager,
-            metrics_getter=lambda: self._metrics,
-            metrics_setter=lambda metrics: setattr(self, "_metrics", metrics),
+            metrics_getter=lambda: self._metrics_controller.metrics,
+            metrics_setter=self._metrics_controller.set_metrics,
             increment_counter_metric=lambda key, amount: self._increment_counter_metric(key, amount),
             heartbeat_interval_ms=self._runtime_status_heartbeat_interval_ms,
         )
@@ -205,9 +198,7 @@ class RuntimeOrchestrator:
             obs_caption_output=self._obs_caption_output,
             state_controller=self._state_controller,
         )
-        self._active_browser_worker_session_id: str | None = None
-        self._active_browser_worker_generation_id: int = 0
-        self._last_browser_worker_status_signature: tuple[Any, ...] | None = None
+        self._browser_worker_state = BrowserWorkerStateController()
         self._asr_runtime_generation: int = 0
         self._in_flight_transcribe_count: int = 0
         self._translation = TranslationRuntimeController(
@@ -227,7 +218,7 @@ class RuntimeOrchestrator:
                 self._last_partial_text_by_segment.clear(),
                 self._last_partial_emit_monotonic_by_segment.clear(),
             ),
-            reset_browser_worker_status_signature=lambda: setattr(self, "_last_browser_worker_status_signature", None),
+            reset_browser_worker_status_signature=lambda: self._browser_worker_state.clear_status_signature(),
         )
         self._session = RuntimeSessionController(
             bump_asr_runtime_generation=lambda: setattr(self, "_asr_runtime_generation", self._asr_runtime_generation + 1),
@@ -241,16 +232,9 @@ class RuntimeOrchestrator:
                 setattr(self, "_session_started_at_monotonic", started_at_monotonic),
             ),
             reset_export_session=self._reset_export_session,
-            reset_metrics=lambda: setattr(self, "_metrics", RuntimeMetrics()),
+            reset_metrics=self._metrics_controller.reset,
             reset_in_flight_transcribe_count=lambda: setattr(self, "_in_flight_transcribe_count", 0),
             clear_runtime_loop=lambda: setattr(self, "_runtime_loop", None),
-        )
-        self._browser_worker_state = BrowserWorkerStateController(
-            set_external_worker_connected=lambda connected: setattr(self, "_external_worker_connected", bool(connected)),
-            set_active_session_id=lambda session_id: setattr(self, "_active_browser_worker_session_id", session_id),
-            set_active_generation_id=lambda generation_id: setattr(self, "_active_browser_worker_generation_id", int(generation_id)),
-            clear_status_signature=lambda: setattr(self, "_last_browser_worker_status_signature", None),
-            set_status_signature=lambda signature: setattr(self, "_last_browser_worker_status_signature", signature),
         )
         self._remote_audio_state = RemoteAudioStateController(
             ensure_queue=self._ensure_remote_audio_queue,
@@ -264,7 +248,7 @@ class RuntimeOrchestrator:
         self._start_state = RuntimeStartStateController(
             set_runtime_loop=lambda: setattr(self, "_runtime_loop", asyncio.get_running_loop()),
             clear_latest_status_message=lambda: setattr(self, "_latest_runtime_status_message", None),
-            reset_metrics=lambda: setattr(self, "_metrics", RuntimeMetrics()),
+            reset_metrics=self._metrics_controller.reset,
             reset_in_flight_transcribe_count=lambda: setattr(self, "_in_flight_transcribe_count", 0),
         )
         self._stop_state = RuntimeStopStateController(
@@ -472,8 +456,8 @@ class RuntimeOrchestrator:
             heartbeat = int(getattr(self, "_runtime_status_heartbeat_interval_ms", 1000) or 1000)
             self._state_controller = RuntimeStateController(  # type: ignore[attr-defined]
                 self.ws_manager,
-                metrics_getter=lambda: self._metrics,
-                metrics_setter=lambda metrics: setattr(self, "_metrics", metrics),
+                metrics_getter=lambda: self._metrics_controller.metrics,
+                metrics_setter=self._metrics_controller.set_metrics,
                 increment_counter_metric=lambda key, amount: self._increment_counter_metric(key, amount),
                 heartbeat_interval_ms=heartbeat,
             )
@@ -599,7 +583,7 @@ class RuntimeOrchestrator:
             started_at_utc=started_at_utc,
             last_error=last_error,
             status_message=status_message,
-            metrics=self._metrics,
+            metrics=self._metrics_controller.metrics,
             subtitle_router_counters=self.subtitle_router.diagnostic_counters(),
             asr_diagnostics=self.asr_diagnostics(),
             translation_diagnostics=self.translation_diagnostics(),
@@ -628,7 +612,7 @@ class RuntimeOrchestrator:
         )
 
     def _record_metrics(self, **values: float | int | None) -> None:
-        self._metrics = record_metrics(self._metrics, **values)
+        self._metrics_controller.record(**values)
 
     def _runtime_material_status_snapshot(self, payload: dict[str, Any]) -> tuple[Any, ...]:
         return runtime_material_status_snapshot(payload)
@@ -642,12 +626,10 @@ class RuntimeOrchestrator:
         return self._state_controller.enrich(event_type, payload)
 
     def _apply_translation_dispatcher_metrics(self, metrics: dict) -> None:
-        if not isinstance(metrics, dict):
-            return
-        self._metrics = apply_translation_dispatcher_metrics(self._metrics, snapshot=metrics)
+        self._metrics_controller.apply_translation_dispatcher_metrics(metrics)
 
     def _increment_metric(self, key: Literal["partial_updates_emitted", "finals_emitted", "suppressed_partial_updates"]) -> None:
-        self._metrics = increment_metric(self._metrics, key)
+        self._metrics_controller.increment_metric(key)
 
     def _increment_counter_metric(
         self,
@@ -668,7 +650,7 @@ class RuntimeOrchestrator:
         ],
         amount: int = 1,
     ) -> None:
-        self._metrics = increment_counter_metric(self._metrics, key, amount)
+        self._metrics_controller.increment_counter_metric(key, amount)
 
     @staticmethod
     def _pcm16_rms_level(audio: bytes) -> float:
@@ -1040,7 +1022,7 @@ class RuntimeOrchestrator:
                 )
                 if work_item.generation != self._asr_runtime_generation:
                     self._record_metrics(
-                        stale_partial_jobs_dropped=int(self._metrics.stale_partial_jobs_dropped or 0) + 1
+                        stale_partial_jobs_dropped=int(self._metrics_controller.metrics.stale_partial_jobs_dropped or 0) + 1
                     )
                     continue
 
@@ -1065,7 +1047,7 @@ class RuntimeOrchestrator:
                     self._record_metrics(in_flight_transcribe_count=self._in_flight_transcribe_count)
                 if work_item.generation != self._asr_runtime_generation or not self._state.is_running:
                     self._record_metrics(
-                        asr_stale_results_ignored=int(self._metrics.asr_stale_results_ignored or 0) + 1,
+                        asr_stale_results_ignored=int(self._metrics_controller.metrics.asr_stale_results_ignored or 0) + 1,
                     )
                     continue
                 now_monotonic = time.perf_counter()
@@ -1369,8 +1351,7 @@ class RuntimeOrchestrator:
 
     async def _browser_asr_worker_connected_impl(self) -> None:
         self._browser_worker_state.reset_for_start()
-        # Connected event implies the worker is now reachable.
-        self._external_worker_connected = True
+        self._browser_worker_state.mark_connected()
         browser_mode = self._current_asr_mode() if self._is_browser_asr_mode() else None
         self._browser_asr_gateway.worker_connected(browser_mode=browser_mode)
         if self._state.is_running and self._is_browser_asr_mode():
@@ -1452,13 +1433,10 @@ class RuntimeOrchestrator:
                 current.mic_rms,
                 current.mic_active_recent_ms,
             )
-            if signature == self._last_browser_worker_status_signature and previous.model_dump() == current.model_dump():
+            if signature == self._browser_worker_state.last_status_signature and previous.model_dump() == current.model_dump():
                 self._increment_counter_metric("browser_worker_event_coalesced", 1)
                 return
-            if hasattr(self, "_browser_worker_state") and self._browser_worker_state is not None:  # type: ignore[attr-defined]
-                self._browser_worker_state.update_status_signature(signature)  # type: ignore[attr-defined]
-            else:
-                self._last_browser_worker_status_signature = signature
+            self._browser_worker_state.update_status_signature(signature)
             await self._broadcast_runtime()
 
     async def ingest_external_asr_update(
@@ -1566,7 +1544,7 @@ class RuntimeOrchestrator:
             self._local_audio_device_id = device_id
             self._audio_capture_ctl.set_device_id(device_id)
             if not self._is_browser_asr_mode(asr_mode):
-                self._external_worker_connected = False
+                self._browser_worker_state.mark_disconnected()
             started_at = await self._lifecycle.start()
             await self._set_runtime_state(
                 is_running=True,
@@ -1585,7 +1563,7 @@ class RuntimeOrchestrator:
                             if asr_mode == BROWSER_GOOGLE_EXPERIMENTAL_MODE
                             else "Browser speech worker connected. Press Start Recognition in the popup window."
                         )
-                        if self._external_worker_connected
+                        if self._browser_worker_state.external_worker_connected
                         else (
                             "Waiting for the experimental browser speech worker window to connect."
                             if asr_mode == BROWSER_GOOGLE_EXPERIMENTAL_MODE
@@ -1853,11 +1831,11 @@ class RuntimeOrchestrator:
             browser_mode = self._current_asr_mode()
             message = (
                 "Experimental browser speech worker is connected."
-                if self._external_worker_connected
+                if self._browser_worker_state.external_worker_connected
                 else "Experimental browser speech mode is configured. Open the browser worker window to capture audio."
             ) if browser_mode == BROWSER_GOOGLE_EXPERIMENTAL_MODE else (
                 "Browser speech worker is connected."
-                if self._external_worker_connected
+                if self._browser_worker_state.external_worker_connected
                 else "Browser speech mode is configured. Open the browser worker window to capture audio."
             )
             return AsrProviderStatus(
@@ -1892,11 +1870,11 @@ class RuntimeOrchestrator:
                 browser_worker = self._browser_asr_gateway.diagnostics()
                 worker_message = (
                     "Experimental browser speech worker is connected."
-                    if self._external_worker_connected
+                    if self._browser_worker_state.external_worker_connected
                     else "Open the experimental browser speech window and start recognition there."
                 ) if browser_mode == BROWSER_GOOGLE_EXPERIMENTAL_MODE else (
                     "Browser speech worker is connected."
-                    if self._external_worker_connected
+                    if self._browser_worker_state.external_worker_connected
                     else "Open the browser speech window and start recognition there."
                 )
                 return AsrDiagnostics(
@@ -2047,9 +2025,9 @@ class RuntimeOrchestrator:
                 asr_queue_max_size=self._segment_queue.maxsize,
                 asr_partial_jobs_dropped=self._segment_queue.partial_jobs_dropped,
                 partial_jobs_coalesced=self._segment_queue.partial_jobs_coalesced,
-                stale_partial_jobs_dropped=int(self._metrics.stale_partial_jobs_dropped or 0),
+                stale_partial_jobs_dropped=int(self._metrics_controller.metrics.stale_partial_jobs_dropped or 0),
                 finals_prioritized_count=self._segment_queue.finals_prioritized_count,
-                asr_stale_results_ignored=int(self._metrics.asr_stale_results_ignored or 0),
+                asr_stale_results_ignored=int(self._metrics_controller.metrics.asr_stale_results_ignored or 0),
                 in_flight_transcribe_count=self._in_flight_transcribe_count,
                 inference_mode_enabled=inference_mode_enabled,
                 gpu_memory_allocated_mb=diagnostics.gpu_memory_allocated_mb,
