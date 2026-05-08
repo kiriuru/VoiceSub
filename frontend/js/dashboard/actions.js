@@ -237,9 +237,11 @@ export function createDashboardActions({ store, api, logger }) {
         logger(`[runtime] ${runtime.status_message}`);
       }
     }
+    const prevDiagnostics = store.getState().diagnostics || {};
     store.updateState({
       runtime,
       diagnostics: {
+        ...prevDiagnostics,
         asr: normalizeDiagnostics(runtime.asr_diagnostics || {}),
         translation: runtime.translation_diagnostics || null,
         metrics: runtime.metrics || null,
@@ -576,7 +578,13 @@ export function createDashboardActions({ store, api, logger }) {
       return;
     }
     if (message.type === "diagnostics_update") {
-      store.updateState({ diagnostics: normalizeDiagnostics(message.payload) });
+      const snapshot = store.getState();
+      store.updateState({
+        diagnostics: {
+          ...(snapshot.diagnostics || {}),
+          asr: normalizeDiagnostics(message.payload),
+        },
+      });
       return;
     }
     if (message.type === "model_status_update") {
