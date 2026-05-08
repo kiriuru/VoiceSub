@@ -58,7 +58,7 @@ from backend.core.runtime.translation_runtime_coordinator import summarize_trans
 from backend.core.runtime.translation_runtime_controller import TranslationRuntimeController
 from backend.core.runtime.output_fanout_controller import OutputFanoutController
 from backend.core.runtime.transcript_controller import TranscriptController
-from backend.core.runtime.speech_source_factory import SpeechSourceFactory, _Hooks
+# SpeechSourceFactory is intentionally not used: we select among concrete SpeechSource implementations directly.
 from backend.core.runtime.browser_speech_source import BrowserSpeechSource, _BrowserHooks
 from backend.core.runtime.remote_controller_speech_source import RemoteControllerSpeechSource, _RemoteControllerHooks
 from backend.core.runtime.remote_worker_speech_source import RemoteWorkerSpeechSource, _RemoteWorkerHooks
@@ -66,12 +66,6 @@ from backend.core.runtime.local_parakeet_speech_source import LocalParakeetSpeec
 from backend.core.segment_queue import AsrWorkItem, SegmentQueue
 from backend.core.structured_runtime_logger import StructuredRuntimeLogger
 from backend.core.runtime.subtitle_presentation_controller import SubtitlePresentationController
-from backend.core.subtitle_router import (
-    BROWSER_ASR_MODE,
-    BROWSER_ASR_MODES,
-    EXPERIMENTAL_BROWSER_ASR_MODE,
-    LOCAL_ASR_MODE,
-)
 from backend.core.translation_dispatcher import TranslationDispatcher
 from backend.core.translation_engine import TranslationEngine
 from backend.core.vad import VadEngine
@@ -224,14 +218,6 @@ class RuntimeOrchestrator:
             metrics_callback=self._apply_translation_dispatcher_metrics,
             structured_logger=structured_logger,
         )
-        self._lifecycle = RuntimeLifecycleCoordinator(
-            start_translation=self._translation.start,
-            stop_translation=self._translation.stop,
-            start_obs_captions=self._obs_caption_output.start,
-            stop_obs_captions=self._obs_caption_output.stop,
-            apply_obs_settings=lambda: self._output.apply_live_settings(self.config_getter()),
-            reset_subtitles=self.subtitle_router.reset,
-        )
         self._reset = RuntimeResetController(
             reset_vad=self._vad.reset,
             clear_segment_queue=self._segment_queue.clear,
@@ -301,20 +287,13 @@ class RuntimeOrchestrator:
             await task  # type: ignore[misc]
 
         self._processing_tasks = ProcessingTasksController(
-            get_capture_task=lambda: self._capture_task,
-            set_capture_task=lambda task: setattr(self, "_capture_task", task),
-            get_asr_task=lambda: self._asr_task,
-            set_asr_task=lambda task: setattr(self, "_asr_task", task),
             create_capture_task=lambda: asyncio.create_task(self._capture_loop()),
             create_asr_task=lambda: asyncio.create_task(self._asr_loop()),
             await_task=_await_task,
         )
         self._audio_capture_ctl = AudioCaptureController(
-            get_capture=lambda: self._audio_capture,
-            set_capture=lambda capture: setattr(self, "_audio_capture", capture),
             # Must be late-bound for tests that patch AudioCapture in this module.
             create_capture=lambda: AudioCapture(),
-            get_device_id=lambda: self._local_audio_device_id,
             stop_in_thread=lambda capture: asyncio.to_thread(capture.stop),
         )
         self._transcript = TranscriptController(
@@ -325,25 +304,7 @@ class RuntimeOrchestrator:
             publish_source_event=self._output.publish_source_event,
             default_source_lang=str(self.config_getter().get("source_lang", "auto") or "auto"),
         )
-        self._speech_source_factory = SpeechSourceFactory(
-            _Hooks(
-                browser_worker_connected=self._browser_asr_worker_connected_impl,
-                browser_worker_disconnected=self._browser_asr_worker_disconnected_impl,
-                update_browser_worker_status=self._update_browser_asr_worker_status_impl,
-                ingest_external_asr_update=self._ingest_external_asr_update_impl,
-                ingest_remote_audio_chunk=self._ingest_remote_audio_chunk_impl,
-                ingest_remote_transcript_event=self._ingest_remote_transcript_event_impl,
-                ingest_remote_translation_event=self._ingest_remote_translation_event_impl,
-                start_processing_tasks=self._start_processing_tasks_impl,
-                stop_processing_tasks=self._stop_processing_tasks_impl,
-                start_audio_capture=self._start_audio_capture_impl,
-                stop_audio_capture=self._stop_audio_capture_impl,
-                init_remote_audio=self._init_remote_audio_impl,
-                shutdown_remote_audio=self._shutdown_remote_audio_impl,
-                init_browser_worker=self._init_browser_worker_impl,
-                shutdown_browser_worker=self._shutdown_browser_worker_impl,
-            )
-        )
+        # NOTE: hook-based generic SpeechSource factory removed in favor of concrete SpeechSource implementations.
         self._browser_speech_source = BrowserSpeechSource(
             gateway=self._browser_asr_gateway,
             hooks=_BrowserHooks(
@@ -397,15 +358,46 @@ class RuntimeOrchestrator:
             set_active_source=lambda source: setattr(self, "_active_speech_source", source),
             set_local_audio_device_id=lambda device_id: setattr(self, "_local_audio_device_id", device_id),
             set_device_id=lambda device_id: setattr(self, "_device_id", device_id),
-            choose_source=lambda is_browser_mode, uses_remote_audio_source, uses_remote_event_source: self._speech_source_factory.build(
-                is_browser_mode=is_browser_mode,
-                uses_remote_audio_source=uses_remote_audio_source,
-                uses_remote_event_source=uses_remote_event_source,
-            ),
             browser_source=self._browser_speech_source,
             remote_controller_source=self._remote_controller_source,
             remote_worker_source=self._remote_worker_source,
             local_parakeet_source=self._local_parakeet_source,
+        )
+        self._lifecycle = RuntimeLifecycleCoordinator(
+            pre_start=lambda: self._start_state.pre_start(),
+            pre_stop=lambda: self._stop_state.pre_stop(),
+            start_translation=self._translation.start,
+            stop_translation=self._translation.stop,
+            start_obs_captions=self._obs_caption_output.start,
+            stop_obs_captions=self._obs_caption_output.stop,
+            apply_obs_settings=lambda: self._output.apply_live_settings(self.config_getter()),
+            reset_subtitles=self.subtitle_router.reset,
+            select_speech_source=lambda: self._speech_source_state.select_for_start(
+                is_browser_mode=self._is_browser_asr_mode(self._current_asr_mode()),
+                uses_remote_audio_source=self._uses_remote_audio_source(),
+                uses_remote_event_source=self._uses_remote_event_source(),
+            ),
+            start_speech_source=(
+                lambda: self._active_speech_source.start()
+                if self._active_speech_source is not None
+                else asyncio.sleep(0)
+            ),
+            stop_speech_source=(
+                lambda: self._active_speech_source.stop()
+                if self._active_speech_source is not None
+                else asyncio.sleep(0)
+            ),
+            on_start_reset=self._reset.on_start_reset,
+            start_session=self._session.start_new_session,
+            capture_asr_mode_for_start=lambda: self._asr_mode.capture_for_start(state_is_running=self._state.is_running),
+            init_asr_runtime_if_needed=self._init_asr_runtime_if_needed,
+            unload_asr_runtime_state=lambda: asyncio.to_thread(self._asr_engine.unload_runtime_state),
+            safe_stop_audio=self._safe_stop_audio,
+            shutdown_remote_audio=self._remote_audio_state.shutdown_for_stop,
+            stop_session_cleanup=self._session.stop_cleanup,
+            try_export_on_stop=lambda: self._export_ctl.try_export_on_stop()[1],
+            broadcast_runtime=self._broadcast_runtime,
+            clear_after_stop=lambda: self._speech_source_state.clear_after_stop(),
         )
         self._active_speech_source = None
         self._apply_vad_tuning()
@@ -913,7 +905,7 @@ class RuntimeOrchestrator:
     def _build_startup_status_message(self) -> str:
         if self._is_browser_asr_mode():
             browser_lang = str(self._browser_asr_config().get("recognition_language", "ru-RU") or "ru-RU")
-            if self._current_asr_mode() == EXPERIMENTAL_BROWSER_ASR_MODE:
+            if self._current_asr_mode() == BROWSER_GOOGLE_EXPERIMENTAL_MODE:
                 return (
                     f"Preparing experimental browser speech worker mode for {browser_lang}. "
                     "The popup window will open a live microphone track before recognition starts."
@@ -955,7 +947,7 @@ class RuntimeOrchestrator:
                     if self._audio_capture is None:
                         await asyncio.sleep(0.05)
                         continue
-                    chunk = await asyncio.to_thread(self._audio_capture.read_chunk, 0.25)
+                    chunk = await self._audio_capture_ctl.read_chunk(0.25)
                     if chunk is None:
                         continue
                     chunk_data = chunk.data
@@ -1389,7 +1381,7 @@ class RuntimeOrchestrator:
                 last_error=None,
                 status_message=(
                     "Experimental browser speech worker connected. Press Start Recognition in the popup window."
-                    if browser_mode == EXPERIMENTAL_BROWSER_ASR_MODE
+                    if browser_mode == BROWSER_GOOGLE_EXPERIMENTAL_MODE
                     else "Browser speech worker connected. Press Start Recognition in the popup window."
                 ),
             )
@@ -1420,7 +1412,7 @@ class RuntimeOrchestrator:
                 started_at_utc=self._state.started_at_utc,
                 status_message=(
                     "Experimental browser speech worker disconnected. Reopen or restart the browser recognition window."
-                    if browser_mode == EXPERIMENTAL_BROWSER_ASR_MODE
+                    if browser_mode == BROWSER_GOOGLE_EXPERIMENTAL_MODE
                     else "Browser speech worker disconnected. Reopen or restart the browser recognition window."
                 ),
             )
@@ -1541,14 +1533,6 @@ class RuntimeOrchestrator:
         if self._state.is_running:
             return self._state
 
-        if hasattr(self, "_start_state") and self._start_state is not None:  # type: ignore[attr-defined]
-            self._start_state.pre_start()  # type: ignore[attr-defined]
-        else:
-            self._runtime_loop = asyncio.get_running_loop()
-            self._latest_runtime_status_message = None
-            self._metrics = RuntimeMetrics()
-            self._in_flight_transcribe_count = 0
-        await self._lifecycle.start()
         asr_mode = self._current_asr_mode()
         if self._current_remote_role() == REMOTE_ROLE_WORKER and self._is_browser_asr_mode(asr_mode):
             await self._set_runtime_state(
@@ -1561,26 +1545,6 @@ class RuntimeOrchestrator:
             return self._state
         use_remote_audio_source = self._uses_remote_audio_source()
         use_remote_event_source = self._uses_remote_event_source()
-        if hasattr(self, "_speech_source_state") and self._speech_source_state is not None:  # type: ignore[attr-defined]
-            self._speech_source_state.select_for_start(  # type: ignore[attr-defined]
-                is_browser_mode=self._is_browser_asr_mode(asr_mode),
-                uses_remote_audio_source=use_remote_audio_source,
-                uses_remote_event_source=use_remote_event_source,
-            )
-        else:
-            self._active_speech_source = self._speech_source_factory.build(
-                is_browser_mode=self._is_browser_asr_mode(asr_mode),
-                uses_remote_audio_source=use_remote_audio_source,
-                uses_remote_event_source=use_remote_event_source,
-            )
-            if self._is_browser_asr_mode(asr_mode):
-                self._active_speech_source = self._browser_speech_source
-            elif use_remote_event_source:
-                self._active_speech_source = self._remote_controller_source
-            elif use_remote_audio_source:
-                self._active_speech_source = self._remote_worker_source
-            else:
-                self._active_speech_source = self._local_parakeet_source
         if not self._is_browser_asr_mode(asr_mode) and not use_remote_audio_source and not use_remote_event_source and not has_audio_inputs:
             await self._set_runtime_state(
                 is_running=False,
@@ -1598,26 +1562,12 @@ class RuntimeOrchestrator:
         )
 
         try:
-            if not self._is_browser_asr_mode(asr_mode) and not use_remote_event_source:
-                asr_status = await asyncio.to_thread(self._asr_engine.initialize_runtime)
-                self._apply_vad_tuning()
-                if not asr_status.ready:
-                    await self._set_runtime_state(
-                        is_running=False,
-                        status="error",
-                        started_at_utc=None,
-                        last_error=asr_status.message,
-                        status_message=None,
-                    )
-                    return self._state
             self._device_id = "remote_webrtc_controller" if use_remote_audio_source else device_id
             self._local_audio_device_id = device_id
+            self._audio_capture_ctl.set_device_id(device_id)
             if not self._is_browser_asr_mode(asr_mode):
                 self._external_worker_connected = False
-            # Core lifecycle is handled by RuntimeLifecycleCoordinator.start()
-            self._reset.on_start_reset()
-            started_at = self._session.start_new_session()
-            self._asr_mode.capture_for_start(state_is_running=self._state.is_running)
+            started_at = await self._lifecycle.start()
             await self._set_runtime_state(
                 is_running=True,
                 status="listening",
@@ -1632,13 +1582,13 @@ class RuntimeOrchestrator:
                     (
                         (
                             "Experimental browser speech worker connected. Press Start Recognition in the popup window."
-                            if asr_mode == EXPERIMENTAL_BROWSER_ASR_MODE
+                            if asr_mode == BROWSER_GOOGLE_EXPERIMENTAL_MODE
                             else "Browser speech worker connected. Press Start Recognition in the popup window."
                         )
                         if self._external_worker_connected
                         else (
                             "Waiting for the experimental browser speech worker window to connect."
-                            if asr_mode == EXPERIMENTAL_BROWSER_ASR_MODE
+                            if asr_mode == BROWSER_GOOGLE_EXPERIMENTAL_MODE
                             else "Waiting for the browser speech worker window to connect."
                         )
                     )
@@ -1646,8 +1596,6 @@ class RuntimeOrchestrator:
                     else None
                 ),
             )
-            if getattr(self, "_active_speech_source", None) is not None:
-                await self._active_speech_source.start()
         except Exception as exc:
             await self._safe_stop_audio()
             await self._lifecycle.stop()
@@ -1660,6 +1608,22 @@ class RuntimeOrchestrator:
             )
         return self._state
 
+    async def _init_asr_runtime_if_needed(self) -> None:
+        asr_mode = self._current_asr_mode()
+        use_remote_event_source = self._uses_remote_event_source()
+        if self._is_browser_asr_mode(asr_mode) or use_remote_event_source:
+            return
+        asr_status = await asyncio.to_thread(self._asr_engine.initialize_runtime)
+        self._apply_vad_tuning()
+        if not asr_status.ready:
+            raise RuntimeError(asr_status.message)
+
+    async def stop(self) -> RuntimeState:
+        export_error = await self._lifecycle.stop()
+        if export_error:
+            self._state = self._state.model_copy(update={"last_error": f"Export error: {export_error}"})
+        return self._state
+
     async def _safe_stop_audio(self) -> None:
         # Some tests construct RuntimeOrchestrator via __new__ and bypass __init__.
         if not hasattr(self, "_audio_capture_ctl") or self._audio_capture_ctl is None:  # type: ignore[attr-defined]
@@ -1670,47 +1634,7 @@ class RuntimeOrchestrator:
         await self._audio_capture_ctl.stop_if_running()  # type: ignore[attr-defined]
 
     async def stop(self) -> RuntimeState:
-        if hasattr(self, "_stop_state") and self._stop_state is not None:  # type: ignore[attr-defined]
-            self._stop_state.pre_stop()  # type: ignore[attr-defined]
-        else:
-            self._latest_runtime_status_message = None
-            self._asr_runtime_generation += 1
-            self._set_state(is_running=False, status="idle", started_at_utc=None, last_error=None)
-        self._segment_queue.clear()
-        if getattr(self, "_active_speech_source", None) is not None:
-            await self._active_speech_source.stop()
-        if hasattr(self, "_processing_tasks") and self._processing_tasks is not None:  # type: ignore[attr-defined]
-            self._processing_tasks.clear_refs()  # type: ignore[attr-defined]
-        else:
-            self._capture_task = None
-            self._asr_task = None
-        self._browser_worker_state.reset_for_stop()
-        self._asr_mode.reset_active()
-        self._remote_audio_state.note_disconnected()
-        await self._safe_stop_audio()
         await self._lifecycle.stop()
-        if hasattr(self, "_export_ctl") and self._export_ctl is not None:  # type: ignore[attr-defined]
-            _, export_error = self._export_ctl.try_export_on_stop()  # type: ignore[attr-defined]
-        else:
-            stopped_at_utc = datetime.now(timezone.utc).isoformat()
-            export_error: str | None = None
-            try:
-                self._export_session_files(stopped_at_utc=stopped_at_utc)
-            except Exception as exc:
-                export_error = str(exc)
-        # Core lifecycle stop is handled by RuntimeLifecycleCoordinator.stop()
-        self._reset.on_stop_reset()
-        await asyncio.to_thread(self._asr_engine.unload_runtime_state)
-        await self._remote_audio_state.shutdown_for_stop()
-        self._session.stop_cleanup()
-        if export_error:
-            self._state = self._state.model_copy(update={"last_error": f"Export error: {export_error}"})
-        await self._broadcast_runtime()
-        if hasattr(self, "_speech_source_state") and self._speech_source_state is not None:  # type: ignore[attr-defined]
-            self._speech_source_state.clear_after_stop()  # type: ignore[attr-defined]
-        else:
-            self._active_speech_source = None
-            self._local_audio_device_id = None
         return self._state
 
     async def _start_processing_tasks_impl(self) -> None:
@@ -1721,6 +1645,8 @@ class RuntimeOrchestrator:
                 self._asr_task = asyncio.create_task(self._asr_loop())
             return
         self._processing_tasks.ensure_started()  # type: ignore[attr-defined]
+        self._capture_task = self._processing_tasks.capture_task  # type: ignore[attr-defined]
+        self._asr_task = self._processing_tasks.asr_task  # type: ignore[attr-defined]
 
     async def _stop_processing_tasks_impl(self) -> None:
         if not hasattr(self, "_processing_tasks") or self._processing_tasks is None:  # type: ignore[attr-defined]
@@ -1736,6 +1662,8 @@ class RuntimeOrchestrator:
             self._asr_task = None
             return
         await self._processing_tasks.stop()  # type: ignore[attr-defined]
+        self._capture_task = None
+        self._asr_task = None
 
     async def _start_audio_capture_impl(self) -> None:
         if not hasattr(self, "_audio_capture_ctl") or self._audio_capture_ctl is None:  # type: ignore[attr-defined]
@@ -1747,7 +1675,9 @@ class RuntimeOrchestrator:
             self._audio_capture = AudioCapture()
             self._audio_capture.start(device_id=device_id)
             return
+        self._audio_capture_ctl.set_device_id(self._local_audio_device_id)  # type: ignore[attr-defined]
         self._audio_capture_ctl.start_if_needed()  # type: ignore[attr-defined]
+        self._audio_capture = self._audio_capture_ctl.capture  # type: ignore[attr-defined]
 
     async def _stop_audio_capture_impl(self) -> None:
         await self._safe_stop_audio()
@@ -1929,7 +1859,7 @@ class RuntimeOrchestrator:
                 "Experimental browser speech worker is connected."
                 if self._external_worker_connected
                 else "Experimental browser speech mode is configured. Open the browser worker window to capture audio."
-            ) if browser_mode == EXPERIMENTAL_BROWSER_ASR_MODE else (
+            ) if browser_mode == BROWSER_GOOGLE_EXPERIMENTAL_MODE else (
                 "Browser speech worker is connected."
                 if self._external_worker_connected
                 else "Browser speech mode is configured. Open the browser worker window to capture audio."
@@ -1968,7 +1898,7 @@ class RuntimeOrchestrator:
                     "Experimental browser speech worker is connected."
                     if self._external_worker_connected
                     else "Open the experimental browser speech window and start recognition there."
-                ) if browser_mode == EXPERIMENTAL_BROWSER_ASR_MODE else (
+                ) if browser_mode == BROWSER_GOOGLE_EXPERIMENTAL_MODE else (
                     "Browser speech worker is connected."
                     if self._external_worker_connected
                     else "Open the browser speech window and start recognition there."
@@ -1982,7 +1912,7 @@ class RuntimeOrchestrator:
                     effective_provider=str(resolved_asr.get("effective_provider", browser_mode) or browser_mode),
                     provider=browser_mode,
                     provider_label="Browser Google Speech Experimental"
-                    if browser_mode == EXPERIMENTAL_BROWSER_ASR_MODE
+                    if browser_mode == BROWSER_GOOGLE_EXPERIMENTAL_MODE
                     else "Browser Google Speech",
                     provider_kind=str(resolved_asr.get("provider_kind", "") or "") or "browser_worker",
                     provider_mode_kind="browser_speech",
@@ -2018,7 +1948,7 @@ class RuntimeOrchestrator:
                     message=(
                         f"{worker_message} Recognition language: {browser_lang}. "
                         "The worker may fall back to default start() if audio-track start is rejected."
-                        if browser_mode == EXPERIMENTAL_BROWSER_ASR_MODE
+                        if browser_mode == BROWSER_GOOGLE_EXPERIMENTAL_MODE
                         else f"{worker_message} Recognition language: {browser_lang}."
                     ),
                     runtime_initialized=self._state.is_running,
@@ -2034,7 +1964,7 @@ class RuntimeOrchestrator:
             integrity_state, _integrity_detail = official_eu_parakeet_integrity_state(self._models_dir)
             manifest = read_official_eu_parakeet_manifest(self._models_dir)
             return AsrDiagnostics(
-                mode=str(resolved_asr.get("mode", LOCAL_ASR_MODE) or LOCAL_ASR_MODE),
+                mode=str(resolved_asr.get("mode", RESOLVED_LOCAL_ASR_MODE) or RESOLVED_LOCAL_ASR_MODE),
                 provider_preference=str(
                     resolved_asr.get("provider_preference", diagnostics.requested_provider or DEFAULT_PARAKEET_PROVIDER)
                     or diagnostics.requested_provider
@@ -2083,7 +2013,7 @@ class RuntimeOrchestrator:
                 device_active=diagnostics.device_active,
                 selected_execution_provider=diagnostics.actual_execution_provider,
                 partials_supported=diagnostics.supports_partials,
-                sample_rate=getattr(self._audio_capture, "sample_rate", None) or self._asr_engine.sample_rate,
+                sample_rate=(self._audio_capture_ctl.sample_rate or self._asr_engine.sample_rate),
                 audio_frame_duration_ms=getattr(self._vad, "frame_duration_ms", None),
                 vad_mode=getattr(self._vad, "vad_mode", None),
                 vad_partial_interval_ms=getattr(self._vad, "partial_interval_frames", 0) * getattr(self._vad, "frame_duration_ms", 0) or None,
@@ -2134,7 +2064,7 @@ class RuntimeOrchestrator:
             )
         except Exception as exc:
             return AsrDiagnostics(
-                mode=LOCAL_ASR_MODE,
+                mode=RESOLVED_LOCAL_ASR_MODE,
                 provider_preference=DEFAULT_PARAKEET_PROVIDER,
                 effective_provider="unknown",
                 provider="unknown",

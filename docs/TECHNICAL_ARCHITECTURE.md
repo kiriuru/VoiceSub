@@ -50,7 +50,7 @@ flowchart LR
   E --> I["Exporter / Logs / Diagnostics"]
 ```
 
-`RuntimeOrchestrator` now physically lives in `backend/core/runtime_orchestrator.py`, while `subtitle_router.py` stays focused on subtitle lifecycle/presentation routing. A small compatibility shim is still kept for legacy imports from `backend.core.subtitle_router`.
+`RuntimeOrchestrator` now physically lives in `backend/core/runtime_orchestrator.py`. Subtitle routing stays local and deterministic: `backend/core/subtitle_router.py` is the publish-focused facade (overlay + dashboard WS), while lifecycle rules and payload construction are split into dedicated modules.
 
 ## 4. Backend Structure
 
@@ -145,7 +145,9 @@ flowchart LR
   - `config_migrations.py`
   - `config_schema_export.py`
 - runtime / routing / diagnostics:
-  - `subtitle_router.py`
+  - `subtitle_router.py` (facade: publish + wiring)
+  - `subtitle_lifecycle_core.py` (lifecycle state machine: promotion, TTL/relevance, expiry scheduling)
+  - `subtitle_presentation.py` (payload building: ordering, style-slot mapping, partial+completed merge)
   - `overlay_broadcaster.py`
   - `session_logger.py`
   - `structured_runtime_logger.py`
@@ -162,7 +164,10 @@ flowchart LR
 Практически это означает:
 
 - `RuntimeOrchestrator` physically lives in `backend/core/runtime_orchestrator.py`;
-- `backend/core/subtitle_router.py` keeps the subtitle lifecycle state machine and a compatibility-only `RuntimeOrchestrator` import shim;
+- `backend/core/subtitle_router.py` is the subtitle publish facade (overlay + WS) and keeps compatibility shims for legacy imports;
+- subtitle lifecycle and payload construction are split into:
+  - `backend/core/subtitle_lifecycle_core.py`
+  - `backend/core/subtitle_presentation.py`
 - orchestration responsibilities постепенно выносятся из одного большого runtime hub в domain-specific helpers под `backend/core/runtime/`.
 
 ### 4.5 Config package
@@ -581,7 +586,10 @@ Client event route:
 
 ## 15. Overlay and Translation Routing
 
-`backend/core/subtitle_router.py` remains the main subtitle/event coordination point for subtitle lifecycle only.
+`backend/core/subtitle_router.py` remains the main subtitle/event coordination point as a facade, while lifecycle and payload responsibilities are owned by:
+
+- `backend/core/subtitle_lifecycle_core.py`
+- `backend/core/subtitle_presentation.py`
 
 Core responsibilities:
 

@@ -29,11 +29,16 @@ Post-`0.3.0` branch follow-up focused on internal modularization and runtime sta
 - `ConfigStateService` now uses an explicit lock so the active in-memory config snapshot is safe under concurrent runtime + settings operations.
 - translation dispatch now has per-provider concurrency and basic rate limiting (guarding bursty providers while keeping target-parallel behavior).
 - local endpoint readiness checks are now cached with background refresh to avoid blocking hot paths on repeated connectivity probes.
+- `SubtitleRouter` is now split into:
+  - `SubtitleLifecycleCore` (lifecycle state machine, TTL/relevance, promotion/expiry),
+  - `SubtitlePresentation` (payload building, ordering, style-slot mapping, partial+completed merge),
+  - `SubtitleRouter` (facade that publishes to overlay/WS and wires core+presentation).
 
 ### Architecture follow-up
 
 - monolithic `backend/config.py` has been replaced by the `backend/config/` package with explicit `defaults.py`, `secrets.py`, and domain normalizers under `backend/config/normalizers/`;
 - `RuntimeOrchestrator` now physically lives in `backend/core/runtime_orchestrator.py`, while `backend/core/subtitle_router.py` keeps subtitle lifecycle logic and a compatibility-only import shim;
+- subtitle lifecycle internals were extracted from `backend/core/subtitle_router.py` into `backend/core/subtitle_lifecycle_core.py` and `backend/core/subtitle_presentation.py`, with `backend/core/subtitle_router.py` remaining as a facade and legacy import shim;
 - runtime orchestration is now split further across `backend/core/runtime/` helpers, with `backend/core/runtime_orchestrator.py` used directly by bootstrap wiring;
 - translation provider extraction is now completed for the current provider set under `backend/translation/providers/`, while `backend/core/translation_engine.py` remains the compatibility engine/shim entrypoint;
 - the docs now describe the real launcher profile surface: `Quick Start (Browser Speech)`, `NVIDIA GPU (CUDA)`, `CPU-only`, `Remote Controller`, and `Remote Worker`.

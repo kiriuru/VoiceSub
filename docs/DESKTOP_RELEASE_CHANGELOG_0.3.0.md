@@ -27,6 +27,12 @@ Post-release изменения для текущей ветки `main` тепе
 - введён explicit lock для active in-memory config state (`ConfigStateService`), чтобы runtime + settings операции не гонялись.
 - translation dispatch получил per-provider concurrency/rate-limits.
 - readiness checks для локальных endpoint-ов переведены на cached/background path.
+- subtitle routing разрезан на core state-machine + presentation + facade:
+  - `backend/core/subtitle_lifecycle_core.py`
+  - `backend/core/subtitle_presentation.py`
+  - `backend/core/subtitle_router.py` (publish facade + legacy import shim)
+- добавлен актуальный live smoke checklist для non-remote путей:
+  - `docs/SMOKE_CHECKLIST_NON_REMOTE.md`
 
 ## Кратко
 
