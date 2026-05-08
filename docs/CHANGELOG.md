@@ -14,6 +14,9 @@ Post-`0.3.0` branch follow-up focused on internal modularization and runtime sta
 - Added unit tests for metrics and browser worker state ownership (`tests/test_runtime_metrics_controller.py`, `tests/test_browser_worker_state_controller.py`).
 - Runtime session identity/timestamps/export records moved into `RuntimeSessionController` (`backend/core/runtime/runtime_session_controller.py`), with `RuntimeOrchestrator` delegating completed export record handling and export payload prep.
 - Added unit tests covering session/export state ownership (`tests/test_runtime_session_controller.py`) and updated exporter runtime regression coverage.
+- Segment sequence/counter/active segment/partial coalescing tracking state moved into `SegmentStateController` (`backend/core/runtime/segment_state_controller.py`).
+- `RuntimeOrchestrator` delegates segment/partial bookkeeping to `SegmentStateController` without intentionally changing ASR/audio/VAD/transcript behavior.
+- Added unit tests for segment state ownership and partial tracking behavior (`tests/test_segment_state_controller.py`).
 
 ### P1 runtime stabilization (facade + controllers)
 
@@ -109,7 +112,7 @@ Post-`0.3.0` branch follow-up focused on internal modularization and runtime sta
   - `python -m compileall backend desktop tests`
   - `.\.venv\Scripts\python.exe -m unittest discover -s tests`
 - verification result:
-  - `215 tests`
+  - `223 tests`
   - `OK`
  - recorded non-remote smoke verification output in `docs/MANUAL_SMOKE_RESULTS_NON_REMOTE.md` (manual-only items remain NOT TESTED unless executed with microphone/OBS/browser windows).
 

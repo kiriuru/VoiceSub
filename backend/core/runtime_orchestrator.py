@@ -158,10 +158,7 @@ class RuntimeOrchestrator:
         self._remote_audio_queue: asyncio.Queue[bytes] | None = None
         self._device_id: str | None = None
         self._local_audio_device_id: str | None = None
-        self._sequence = 0
-        self._segment_counter = 0
-        self._active_segment_id: str | None = None
-        self._active_segment_revision = 0
+        self._segment_state = SegmentStateController()
         self._metrics_controller = RuntimeMetricsController()
         self._effective_realtime_settings = dict(self._LEGACY_VAD_SETTINGS)
         self._effective_subtitle_lifecycle_settings = {
@@ -174,8 +171,6 @@ class RuntimeOrchestrator:
             "hard_max_phrase_ms": self._LEGACY_VAD_SETTINGS["max_segment_ms"],
         }
         self._rnnoise_processor = RNNoiseRecognitionProcessor(sample_rate=self._asr_engine.sample_rate, channels=1)
-        self._last_partial_text_by_segment: dict[str, str] = {}
-        self._last_partial_emit_monotonic_by_segment: dict[str, float] = {}
         self._browser_asr_gateway = BrowserAsrGateway(structured_logger=structured_logger)
         self._asr_mode = AsrModeController(self.config_getter)
         self._remote_audio_connected = False
@@ -210,15 +205,12 @@ class RuntimeOrchestrator:
             clear_segment_queue=self._segment_queue.clear,
             reset_asr_runtime_state=self._asr_engine.reset_runtime_state,
             reset_state_broadcast=self._state_controller.reset_broadcast_state,
-            clear_partial_tracking=lambda: (
-                self._last_partial_text_by_segment.clear(),
-                self._last_partial_emit_monotonic_by_segment.clear(),
-            ),
+            clear_partial_tracking=self._segment_state.clear_all_partial_tracking,
             reset_browser_worker_status_signature=lambda: self._browser_worker_state.clear_status_signature(),
         )
         self._session = RuntimeSessionController(
             bump_asr_runtime_generation=lambda: setattr(self, "_asr_runtime_generation", self._asr_runtime_generation + 1),
-            set_sequence_zero=lambda: setattr(self, "_sequence", 0),
+            set_sequence_zero=self._segment_state.reset_sequence,
             new_session_id=lambda: datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f"),
             now_utc_iso=lambda: datetime.now(timezone.utc).isoformat(),
             now_monotonic=time.perf_counter,
@@ -248,14 +240,6 @@ class RuntimeOrchestrator:
         )
         self._export_ctl = RuntimeExportController(
             export_session_files=lambda stopped_at_utc: self._export_session_files(stopped_at_utc=stopped_at_utc),
-        )
-        self._segment_state = SegmentStateController(
-            get_active_segment_id=lambda: self._active_segment_id,
-            clear_active_segment=lambda: (
-                setattr(self, "_active_segment_id", None),
-                setattr(self, "_active_segment_revision", 0),
-            ),
-            clear_partial_tracking_for_segment=lambda segment_id: self._clear_partial_tracking(segment_id),
         )
         async def _await_task(task: object) -> None:
             await task  # type: ignore[misc]
@@ -737,14 +721,14 @@ class RuntimeOrchestrator:
         if not normalized_text:
             return False
 
-        previous_text = self._last_partial_text_by_segment.get(segment_id, "")
+        previous_text = self._segment_state.get_last_partial_text(segment_id)
         normalized_previous = " ".join(previous_text.split())
         if normalized_text == normalized_previous:
             return False
 
         coalescing_ms = int(self._effective_realtime_settings.get("partial_coalescing_ms", 0))
         min_delta_chars = int(self._effective_realtime_settings.get("partial_min_delta_chars", 0))
-        previous_emit_at = self._last_partial_emit_monotonic_by_segment.get(segment_id, 0.0)
+        previous_emit_at = self._segment_state.get_last_partial_emit_monotonic(segment_id) or 0.0
         elapsed_ms = (time.perf_counter() - previous_emit_at) * 1000.0 if previous_emit_at else None
         growth_chars = len(normalized_text) - len(normalized_previous)
 
@@ -779,14 +763,13 @@ class RuntimeOrchestrator:
         return True
 
     def _mark_partial_emitted(self, segment_id: str, text: str) -> None:
-        self._last_partial_text_by_segment[segment_id] = " ".join(text.split())
-        self._last_partial_emit_monotonic_by_segment[segment_id] = time.perf_counter()
+        self._segment_state.mark_partial_emitted(segment_id, text)
 
     def _clear_partial_tracking(self, segment_id: str | None) -> None:
-        if not segment_id:
-            return
-        self._last_partial_text_by_segment.pop(segment_id, None)
-        self._last_partial_emit_monotonic_by_segment.pop(segment_id, None)
+        self._segment_state.clear_partial_tracking_for_segment(segment_id)
+
+    def _next_sequence(self) -> int:
+        return self._segment_state.next_sequence()
 
     async def _set_listening_if_current(
         self,
@@ -909,7 +892,7 @@ class RuntimeOrchestrator:
                                 lifecycle_event="segment_started",
                                 text="",
                                 device_id=self._device_id,
-                                sequence=self._sequence,
+                                sequence=self._segment_state.sequence,
                                 segment=TranscriptSegment(
                                     segment_id=segment_id,
                                     text="",
@@ -920,7 +903,7 @@ class RuntimeOrchestrator:
                                     source_lang=str(self.config_getter().get("source_lang", "auto")),
                                     provider=self._asr_engine.capabilities().provider_name,
                                     latency_ms=None,
-                                    sequence=self._sequence,
+                                    sequence=self._segment_state.sequence,
                                     revision=revision,
                                 ),
                             )
@@ -946,8 +929,7 @@ class RuntimeOrchestrator:
                         finals_prioritized_count=self._segment_queue.finals_prioritized_count,
                     )
                     if segment.kind == "final":
-                        self._active_segment_id = None
-                        self._active_segment_revision = 0
+                        self._segment_state.clear_active_segment()
         except asyncio.CancelledError:
             raise
         except Exception as exc:
@@ -1023,7 +1005,7 @@ class RuntimeOrchestrator:
                         asr_partial_ms=max(0.0, asr_elapsed_ms),
                         total_ms=total_elapsed_ms,
                     )
-                self._sequence += 1
+                self._next_sequence()
                 text = result.final if work_item.kind == "final" else result.partial
                 if text:
                     if self._should_drop_short_hallucination(
@@ -1072,7 +1054,7 @@ class RuntimeOrchestrator:
                         event=work_item.kind,
                         text=text,
                         device_id=self._device_id,
-                        sequence=self._sequence,
+                        sequence=self._segment_state.sequence,
                         lifecycle_event=lifecycle_event,
                         segment=segment,
                     )
@@ -1110,7 +1092,7 @@ class RuntimeOrchestrator:
                 lifecycle_event="segment_started",
                 text="",
                 device_id=f"{self._browser_worker_provider_name()}_worker",
-                sequence=self._sequence,
+                sequence=self._segment_state.sequence,
                 segment=TranscriptSegment(
                     segment_id=segment_id,
                     text="",
@@ -1121,7 +1103,7 @@ class RuntimeOrchestrator:
                     source_lang=source_lang,
                     provider=self._browser_worker_provider_name(),
                     latency_ms=None,
-                    sequence=self._sequence,
+                    sequence=self._segment_state.sequence,
                     revision=revision,
                 ),
             )
@@ -1140,8 +1122,7 @@ class RuntimeOrchestrator:
     async def _handle_browser_final_event(self, event: TranscriptEvent) -> None:
         self._increment_metric("finals_emitted")
         await self._transcript.handle_event(event)
-        self._active_segment_id = None
-        self._active_segment_revision = 0
+        self._segment_state.clear_active_segment()
         await self._set_listening_if_current(
             "listening",
             last_error=None,
@@ -1178,7 +1159,7 @@ class RuntimeOrchestrator:
             self._increment_metric("suppressed_partial_updates")
             return None
         self._mark_partial_emitted(segment_id, partial_text)
-        self._sequence += 1
+        self._next_sequence()
         backend_published_to_router_at_ms = int(time.time() * 1000)
         segment = self._build_external_transcript_segment(
             segment_id=segment_id,
@@ -1198,7 +1179,7 @@ class RuntimeOrchestrator:
             event="partial",
             text=partial_text,
             device_id=f"{self._browser_worker_provider_name()}_worker",
-            sequence=self._sequence,
+            sequence=self._segment_state.sequence,
             lifecycle_event="partial_updated",
             segment=segment,
             forced_final=bool(forced_final),
@@ -1230,7 +1211,7 @@ class RuntimeOrchestrator:
                 source_lang=source_lang,
             )
         self._clear_partial_tracking(segment_id)
-        self._sequence += 1
+        self._next_sequence()
         backend_published_to_router_at_ms = int(time.time() * 1000)
         segment = self._build_external_transcript_segment(
             segment_id=segment_id,
@@ -1250,7 +1231,7 @@ class RuntimeOrchestrator:
             event="final",
             text=final_text,
             device_id=f"{self._browser_worker_provider_name()}_worker",
-            sequence=self._sequence,
+            sequence=self._segment_state.sequence,
             lifecycle_event="segment_finalized",
             segment=segment,
             forced_final=bool(forced_final),
@@ -1282,7 +1263,7 @@ class RuntimeOrchestrator:
             source_lang=source_lang,
             provider=self._browser_worker_provider_name(),
             latency_ms=0.0,
-            sequence=self._sequence,
+            sequence=self._segment_state.sequence,
             revision=revision,
             asr_result_created_at_ms=asr_result_created_at_ms,
             worker_send_started_at_ms=worker_send_started_at_ms,
@@ -1329,13 +1310,7 @@ class RuntimeOrchestrator:
         self._browser_worker_state.reset_for_stop()
         browser_mode = self._current_asr_mode() if self._is_browser_asr_mode() else None
         self._browser_asr_gateway.worker_disconnected(browser_mode=browser_mode)
-        if hasattr(self, "_segment_state") and self._segment_state is not None:  # type: ignore[attr-defined]
-            self._segment_state.cleanup_on_browser_worker_disconnect()  # type: ignore[attr-defined]
-        else:
-            segment_id = self._active_segment_id
-            self._active_segment_id = None
-            self._active_segment_revision = 0
-            self._clear_partial_tracking(segment_id)
+        self._segment_state.cleanup_on_browser_worker_disconnect()
         await self.subtitle_router.clear_active_partial()
         if self._state.is_running and self._is_browser_asr_mode():
             await self._set_runtime_state(
@@ -2040,26 +2015,18 @@ class RuntimeOrchestrator:
             )
 
     def _assign_segment_tracking(self, kind: str, *, preferred_segment_id: str | None = None) -> tuple[str, int, bool]:
-        started_now = False
         _ = kind
-        normalized_preferred_segment_id = str(preferred_segment_id or "").strip() or None
-        if normalized_preferred_segment_id and normalized_preferred_segment_id != self._active_segment_id:
-            self._clear_partial_tracking(self._active_segment_id)
-            self._active_segment_id = normalized_preferred_segment_id
-            self._active_segment_revision = 0
-            started_now = True
-        elif self._active_segment_id is None:
-            self._segment_counter += 1
-            self._active_segment_id = f"segment-{self._segment_counter}"
-            self._active_segment_revision = 0
-            started_now = True
-        self._active_segment_revision += 1
-        return self._active_segment_id, self._active_segment_revision, started_now
+        segment_id, revision, started_now, previous_to_clear = self._segment_state.assign_segment_tracking(
+            preferred_segment_id=preferred_segment_id,
+        )
+        if previous_to_clear:
+            self._clear_partial_tracking(previous_to_clear)
+        return segment_id, revision, started_now
 
     def _build_transcript_segment(self, *, work_item: AsrWorkItem, text: str, latency_ms: float) -> TranscriptSegment:
         capabilities = self._asr_engine.capabilities()
         return TranscriptSegment(
-            segment_id=work_item.segment_id or f"segment-{self._sequence}",
+            segment_id=work_item.segment_id or f"segment-{self._segment_state.sequence}",
             text=text,
             is_partial=work_item.kind == "partial",
             is_final=work_item.kind == "final",
@@ -2068,6 +2035,6 @@ class RuntimeOrchestrator:
             source_lang=str(self.config_getter().get("source_lang", "auto")),
             provider=capabilities.provider_name,
             latency_ms=round(float(latency_ms), 2),
-            sequence=self._sequence,
+            sequence=self._segment_state.sequence,
             revision=work_item.revision,
         )
