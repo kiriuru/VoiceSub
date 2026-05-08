@@ -61,3 +61,11 @@ SST desktop remote SST/
 desktop remote clean/
 *-desktop-remote-release/
 *-desktop-remote-release-clean/
+
+# Local-only docs (do not publish)
+docs/MANUAL_SMOKE_*.md
+docs/SMOKE_CHECKLIST_*.md
+docs/RELEASE_HARDENING_*.md
+docs/REMOTE_*.md
+docs/desktop-bootstrap-roadmap.md
+docs/DESKTOP_RELEASE_CHANGELOG_0.2.9*.md

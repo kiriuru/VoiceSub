@@ -27,7 +27,7 @@ This README describes the current desktop product surface for the `0.3.0` code l
 - provider settings editing can follow the selected translation slot and warns when enabled lines are missing required credentials;
 - Browser Speech lifecycle is supervised and more resilient to `onend`, reconnect, stale worker state, and client-event/logging failures;
 - dashboard/runtime WebSocket paths are more defensive under reconnect and dead-socket scenarios;
-- desktop launcher/bootstrap logs and runtime models now stay under `user-data/`, with legacy root `logs/` migrated forward automatically;
+- user-facing logs live under root `logs/` (legacy `user-data/logs/` migrates on startup); local ASR models stay under `user-data/models/`;
 - `/google-asr-experimental` is documented as a separate experimental browser worker path;
 - local backend ASR is now limited to the supported Parakeet providers only.
 
@@ -207,6 +207,7 @@ Visual layout was not redesigned in `0.3.0`; the major change is the internal mo
 - Enable/disable translation.
 - Select a default provider for new lines and legacy fallback behavior.
 - Configure provider credentials/endpoints/model/prompt where applicable.
+- For the OpenAI provider, the dashboard can populate the model field from a short recommended list (no OpenAI API call from the browser).
 - `Google Cloud Translation - Advanced (v3)` is available as a separate provider and uses `project_id` plus OAuth access token instead of a v2 API key.
 - Configure up to five translation lines with their own enabled state, target language, provider, and optional label.
 - The Translation tab now shows each `translation_1 .. translation_5` slot as a separate card with an explicit per-line provider selector.
@@ -514,7 +515,7 @@ Run the current regression suite with:
 
 The current `0.3.0` verification run for the pending changes used:
 
-- `python -m compileall backend tests desktop`
+- `python -m compileall backend desktop tests`
 - `.venv\Scripts\python.exe -m unittest discover -s tests -p "test_*.py"`
 - `cmd /c build-desktop.bat`
 - `cmd /c build-bootstrap-launcher.bat`
@@ -522,7 +523,7 @@ The current `0.3.0` verification run for the pending changes used:
 
 Result:
 
-- `155 tests`
+- `231 tests`
 - `OK`
 - release artifacts refreshed:
   - `dist\Stream Subtitle Translator\Stream Subtitle Translator.exe`

@@ -1,6 +1,6 @@
 # SST Desktop 0.3.0 - Technical Architecture
 
-Актуально для линии кода, где `backend/versioning.py` содержит `PROJECT_VERSION = "0.3.0"`, включая текущие post-release follow-up изменения в `main`.
+Актуально для линии кода, где `backend/versioning.py` содержит `PROJECT_VERSION = "0.3.0"`, включая текущие post-release изменения в `main`.
 
 ## 1. Назначение и границы системы
 
@@ -78,6 +78,7 @@ flowchart LR
 - `backend/api/routes_logs.py`
 - `backend/api/routes_version.py`
 - `backend/api/routes_remote.py`
+- `backend/api/routes_openai_models.py` (вспомогательные endpoints для UI: curated list моделей OpenAI-провайдера)
 
 Эти handlers в `0.3.0` должны быть thin transport layer и делегировать orchestration в services.
 
@@ -353,6 +354,7 @@ Primary local endpoints:
 - `/api/exports`
 - `/api/exports/diagnostics`
 - `/api/logs/client-event`
+- `/api/openai/recommended-models` (curated list; без обращения к OpenAI API)
 
 Текущий контракт `POST /api/runtime/start`:
 
@@ -384,6 +386,8 @@ Remote endpoints:
 - `/api/remote/worker/runtime/stop`
 - `/api/remote/worker/runtime/status`
 - `/api/remote/worker/health`
+
+Примечание: Remote surface остаётся частью продукта как explicit LAN-only исключение, но подробные remote планы/roadmap документы не являются частью публичной документации по умолчанию.
 
 ## 8. WebSocket surface
 
@@ -673,6 +677,8 @@ All continue to be served by the Python application.
 
 ## 19. Testing
 
+Release-oriented manual steps: [RELEASE_HARDENING_CHECKLIST.md](./RELEASE_HARDENING_CHECKLIST.md).
+
 `0.3.0` expands deterministic local test coverage for:
 
 - backend architecture
@@ -691,7 +697,7 @@ All continue to be served by the Python application.
 
 Current verification command set used on the release work:
 
-- `python -m compileall backend tests desktop`
+- `python -m compileall backend desktop tests`
 - `.\.venv\Scripts\python.exe -m unittest discover -s tests -p "test_*.py"`
 - `cmd /c build-desktop.bat`
 - `cmd /c build-bootstrap-launcher.bat`
@@ -699,7 +705,7 @@ Current verification command set used on the release work:
 
 Observed result:
 
-- `155 tests`
+- `231 tests`
 - `OK`
 - refreshed artifacts:
   - `dist\Stream Subtitle Translator\Stream Subtitle Translator.exe`

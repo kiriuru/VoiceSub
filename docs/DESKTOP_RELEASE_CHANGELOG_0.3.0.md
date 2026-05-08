@@ -2,9 +2,6 @@
 
 Delta changelog относительно `0.2.9.2`.
 
-Предыдущий delta changelog:
-- [DESKTOP_RELEASE_CHANGELOG_0.2.9.2.md](./DESKTOP_RELEASE_CHANGELOG_0.2.9.2.md)
-
 Post-release изменения для текущей ветки `main` теперь живут в [CHANGELOG.md](./CHANGELOG.md) в секции `Unreleased`, чтобы заметки про shipped `0.3.0` оставались строго release-specific.
 
 Текущее примечание:
@@ -31,8 +28,6 @@ Post-release изменения для текущей ветки `main` тепе
   - `backend/core/subtitle_lifecycle_core.py`
   - `backend/core/subtitle_presentation.py`
   - `backend/core/subtitle_router.py` (publish facade + legacy import shim)
-- добавлен актуальный live smoke checklist для non-remote путей:
-  - `docs/SMOKE_CHECKLIST_NON_REMOTE.md`
 
 ## Кратко
 

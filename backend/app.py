@@ -14,6 +14,7 @@ from backend.api.routes_profiles import router as profiles_router
 from backend.api.routes_remote import router as remote_router
 from backend.api.routes_runtime import router as runtime_router
 from backend.api.routes_settings import router as settings_router
+from backend.api.routes_openai_models import router as openai_models_router
 from backend.api.routes_updates import router as updates_router
 from backend.api.routes_version import router as version_router
 from backend.config import settings
@@ -43,6 +44,7 @@ app.include_router(exports_router)
 app.include_router(logs_router)
 app.include_router(remote_router)
 app.include_router(version_router)
+app.include_router(openai_models_router)
 
 app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="frontend-static")
 app.mount("/overlay-assets", StaticFiles(directory=str(OVERLAY_DIR)), name="overlay-static")

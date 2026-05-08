@@ -2,6 +2,7 @@ import { subscribe } from "../core/store.js";
 import { LANGUAGES, PROVIDERS } from "../dashboard/constants.js";
 import {
   escapeHtml,
+  getCurrentLocale,
   getLanguageLabel,
   getProviderMeta,
   setElementVisibility,
@@ -192,8 +193,43 @@ function ensureLine(draft, slotId, seed = {}) {
   return nextLine;
 }
 
+/** Stable key for translation line cards — excludes selected slot (handled separately). */
+function computeLineCardsFingerprint(snapshot) {
+  const config = snapshot.config;
+  if (!config) {
+    return "no-config";
+  }
+  const locale = getCurrentLocale();
+  const translation = config.translation || {};
+  const lines = getLineCards(config).map((line) => {
+    const slotId = String(line.slot_id || "").toLowerCase();
+    const providerName = normalizeProviderName(line.provider, translation.provider);
+    const providerSettings = translation.provider_settings?.[providerName] || {};
+    const missingFields =
+      line.enabled !== false ? getMissingProviderFields(providerName, providerSettings) : [];
+    return {
+      slot_id: slotId,
+      enabled: line.enabled !== false,
+      target_lang: String(line.target_lang || "").toLowerCase(),
+      provider: providerName,
+      label: String(line.label || ""),
+      missing: missingFields.length,
+    };
+  });
+  const order = Array.isArray(config.subtitle_output?.display_order)
+    ? config.subtitle_output.display_order.map((item) => String(item || "").toLowerCase())
+    : [];
+  return JSON.stringify({ locale, lines, order });
+}
+
 export function mountTranslationPanel(root, { store, actions, logger }) {
   let manualSettingsProvider = null;
+  let lastLineCardsFingerprint = "";
+  let lastSelectedSlotForLines = "";
+  let lastResultsRenderKey = "";
+  let cachedProviderOptionsLocale = "";
+  let lastLoadedModelsKey = "";
+  let lastLoadedModels = [];
 
   const elements = {
     enabled: root.querySelector("#translation-enabled"),
@@ -223,6 +259,11 @@ export function mountTranslationPanel(root, { store, actions, logger }) {
     model: root.querySelector("#translation-model"),
     modelRow: root.querySelector("#translation-model-row"),
     modelLabel: root.querySelector("#translation-model-label"),
+    modelLoadBtn: root.querySelector("#translation-model-load-btn"),
+    modelPickerRow: root.querySelector("#translation-model-picker-row"),
+    modelSelect: root.querySelector("#translation-model-select"),
+    modelShowAll: root.querySelector("#translation-model-show-all"),
+    modelStatus: root.querySelector("#translation-model-status"),
     prompt: root.querySelector("#translation-custom-prompt"),
     promptRow: root.querySelector("#translation-prompt-row"),
     providerHint: root.querySelector("#translation-provider-hint"),
@@ -277,6 +318,27 @@ export function mountTranslationPanel(root, { store, actions, logger }) {
       return;
     }
     const entry = snapshot.translation?.currentEntry;
+    const resultsKey = !entry
+      ? "__empty__"
+      : JSON.stringify({
+          sequence: entry.sequence,
+          sourceText: entry.sourceText,
+          providerLabel: entry.providerLabel || "",
+          statusMessage: entry.statusMessage || "",
+          translations: (entry.translations || []).map((item) => ({
+            slot_id: item.slot_id,
+            target_lang: item.target_lang,
+            text: item.text,
+            success: item.success,
+            error: item.error || "",
+            cached: Boolean(item.cached),
+            provider: item.provider || "",
+          })),
+        });
+    if (resultsKey === lastResultsRenderKey) {
+      return;
+    }
+    lastResultsRenderKey = resultsKey;
     if (!entry) {
       elements.results.innerHTML = `<p class="muted">${escapeHtml(t("translation.result.empty"))}</p>`;
       return;
@@ -443,18 +505,49 @@ export function mountTranslationPanel(root, { store, actions, logger }) {
     });
   }
 
-  function render(snapshot) {
+  function updateLineCardActiveState(snapshot) {
+    if (!elements.languageOrder) {
+      return;
+    }
+    const selectedSlotId = getSelectedSlotId(snapshot);
+    elements.languageOrder.querySelectorAll(".translation-line-card").forEach((row) => {
+      if (!(row instanceof HTMLElement)) {
+        return;
+      }
+      const code = String(row.dataset.code || "").toLowerCase();
+      row.classList.toggle("active", code === selectedSlotId);
+    });
+  }
+
+  function ensureProviderSelectOptions() {
+    const locale = getCurrentLocale();
+    const localeChanged = cachedProviderOptionsLocale !== locale;
+    const missingOptions =
+      (elements.defaultProvider && !elements.defaultProvider.options.length) ||
+      (elements.settingsProvider && !elements.settingsProvider.options.length) ||
+      (elements.languageSelect && !elements.languageSelect.options.length);
+    if (!localeChanged && !missingOptions) {
+      return;
+    }
+    cachedProviderOptionsLocale = locale;
+    const providerMarkup = buildProviderOptions();
     if (elements.defaultProvider) {
-      elements.defaultProvider.innerHTML = buildProviderOptions();
+      elements.defaultProvider.innerHTML = providerMarkup;
     }
     if (elements.settingsProvider) {
-      elements.settingsProvider.innerHTML = buildProviderOptions();
+      elements.settingsProvider.innerHTML = providerMarkup;
     }
     if (elements.languageSelect) {
-      const currentLanguage = elements.languageSelect.value || "en";
-      elements.languageSelect.innerHTML = LANGUAGES.map((item) => `<option value="${item.code}">${escapeHtml(getLanguageLabel(item.code))}</option>`).join("");
-      elements.languageSelect.value = currentLanguage;
+      const preserved = elements.languageSelect.value || "en";
+      elements.languageSelect.innerHTML = LANGUAGES.map(
+        (item) => `<option value="${item.code}">${escapeHtml(getLanguageLabel(item.code))}</option>`
+      ).join("");
+      elements.languageSelect.value = preserved;
     }
+  }
+
+  function render(snapshot) {
+    ensureProviderSelectOptions();
     const config = snapshot.config;
     if (!config) {
       renderResults(snapshot);
@@ -508,6 +601,14 @@ export function mountTranslationPanel(root, { store, actions, logger }) {
       elements.prompt.disabled = !providerMeta.fields.includes("custom_prompt");
       elements.prompt.placeholder = t("translation.custom_prompt");
     }
+
+    const canLoadModels = providerBeingEdited === "openai";
+    setElementVisibility(elements.modelLoadBtn, canLoadModels);
+    setElementVisibility(elements.modelPickerRow, canLoadModels);
+    setElementVisibility(elements.modelStatus, canLoadModels);
+    if (elements.modelStatus && canLoadModels && !elements.modelStatus.textContent) {
+      elements.modelStatus.textContent = "";
+    }
     if (elements.apiKeyToggle) {
       elements.apiKeyToggle.textContent = elements.apiKey?.type === "password" ? t("security.show") : t("security.hide");
     }
@@ -558,8 +659,85 @@ export function mountTranslationPanel(root, { store, actions, logger }) {
         : "";
     }
 
-    renderLineEditor(snapshot);
+    const cardsKey = computeLineCardsFingerprint(snapshot);
+    const selectedSlotId = getSelectedSlotId(snapshot);
+    if (cardsKey !== lastLineCardsFingerprint) {
+      renderLineEditor(snapshot);
+      lastLineCardsFingerprint = cardsKey;
+      lastSelectedSlotForLines = selectedSlotId;
+    } else if (selectedSlotId !== lastSelectedSlotForLines) {
+      updateLineCardActiveState(snapshot);
+      lastSelectedSlotForLines = selectedSlotId;
+    }
     renderResults(snapshot);
+  }
+
+  function applyModelSelectOptions({ showAll } = {}) {
+    if (!elements.modelSelect) {
+      return;
+    }
+    const models = Array.isArray(lastLoadedModels) ? lastLoadedModels : [];
+    const visible = Boolean(showAll) ? models : models.filter((item) => item?.recommended);
+    elements.modelSelect.innerHTML = "";
+    visible.forEach((model) => {
+      const id = String(model?.id || "").trim();
+      if (!id) {
+        return;
+      }
+      const option = document.createElement("option");
+      option.value = id;
+      option.textContent = id;
+      elements.modelSelect.appendChild(option);
+    });
+    const current = String(elements.model?.value || "").trim();
+    if (current) {
+      elements.modelSelect.value = current;
+    }
+  }
+
+  async function loadOpenAiModelsClick() {
+    const snapshot = store.getState();
+    const { providerBeingEdited } = resolveProviderContext(snapshot);
+    if (providerBeingEdited !== "openai") {
+      return;
+    }
+    const requestKey = JSON.stringify([providerBeingEdited, "recommended"]);
+    if (requestKey === lastLoadedModelsKey && lastLoadedModels.length) {
+      applyModelSelectOptions({ showAll: elements.modelShowAll?.checked });
+      if (elements.modelStatus) {
+        const count = lastLoadedModels.length;
+        elements.modelStatus.textContent =
+          getCurrentLocale() === "ru" ? `Моделей загружено: ${count}.` : `Loaded ${count} models.`;
+      }
+      return;
+    }
+    if (elements.modelStatus) {
+      elements.modelStatus.textContent = getCurrentLocale() === "ru"
+        ? "Загрузка рекомендуемого списка..."
+        : "Loading recommended list...";
+    }
+    if (elements.modelSelect) {
+      elements.modelSelect.innerHTML = "";
+    }
+    try {
+      const data = await actions.listRecommendedOpenAiModels();
+      const ids = Array.isArray(data?.models) ? data.models : [];
+      const models = ids.map((id) => ({ id, recommended: true }));
+      lastLoadedModelsKey = requestKey;
+      lastLoadedModels = models;
+      applyModelSelectOptions({ showAll: elements.modelShowAll?.checked });
+      if (elements.modelStatus) {
+        elements.modelStatus.textContent = getCurrentLocale() === "ru"
+          ? `Список загружен: ${models.length} моделей.`
+          : `Loaded ${models.length} models.`;
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to load models.";
+      if (elements.modelStatus) {
+        elements.modelStatus.textContent =
+          getCurrentLocale() === "ru" ? `Ошибка: ${message}` : `Error: ${message}`;
+      }
+    }
   }
 
   elements.enabled?.addEventListener("change", () => {
@@ -609,6 +787,20 @@ export function mountTranslationPanel(root, { store, actions, logger }) {
   ]
     .filter(Boolean)
     .forEach((element) => element.addEventListener("input", syncProviderSettingsConfig));
+
+  elements.modelLoadBtn?.addEventListener("click", () => {
+    loadOpenAiModelsClick();
+  });
+  elements.modelShowAll?.addEventListener("change", () => {
+    applyModelSelectOptions({ showAll: elements.modelShowAll.checked });
+  });
+  elements.modelSelect?.addEventListener("change", () => {
+    if (!elements.model) {
+      return;
+    }
+    elements.model.value = elements.modelSelect.value || "";
+    syncProviderSettingsConfig();
+  });
   elements.apiKeyToggle?.addEventListener("click", () => {
     if (!elements.apiKey) {
       return;

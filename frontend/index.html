@@ -239,7 +239,19 @@
               <span id="translation-model-label" data-i18n="translation.model">Model</span>
               <input id="translation-model" type="text" placeholder="Model" data-i18n-placeholder="translation.model" />
             </label>
+            <button id="translation-model-load-btn" class="secondary" type="button" data-i18n="translation.model.load_recommended">Load recommended models</button>
           </div>
+          <div class="actions" id="translation-model-picker-row">
+            <label class="stack-field grow">
+              <span data-i18n="translation.model.pick">Pick from list</span>
+              <select id="translation-model-select"></select>
+            </label>
+            <label class="checkbox-row">
+              <input id="translation-model-show-all" type="checkbox" />
+              <span data-i18n="translation.model.show_all">Show all returned models</span>
+            </label>
+          </div>
+          <p id="translation-model-status" class="muted"></p>
           <div class="actions" id="translation-prompt-row">
             <label class="stack-field grow">
               <span data-i18n="translation.custom_prompt">Custom prompt override</span>

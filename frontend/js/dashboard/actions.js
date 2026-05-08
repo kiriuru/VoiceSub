@@ -488,7 +488,10 @@ export function createDashboardActions({ store, api, logger }) {
       transcript.partial = "";
       transcript.finals.unshift(text);
       transcript.finals = transcript.finals.slice(0, 12);
-      addTranslationEntry(nextState, Number(payload.sequence || 0), text);
+      // Preserve translation.* (e.g. lastResult) — addTranslationEntry merges into state.translation
+      const translationBag = { translation: clone(snapshot.translation || {}) };
+      addTranslationEntry(translationBag, Number(payload.sequence || 0), text);
+      nextState.translation = translationBag.translation;
     }
     nextState.transcript = transcript;
     store.updateState(nextState);
@@ -641,6 +644,28 @@ export function createDashboardActions({ store, api, logger }) {
     return runtimeStatus;
   }
 
+  async function listOpenAiModels({ apiKey, baseUrl, showAll } = {}) {
+    return api.listOpenAiModels({
+      api_key: apiKey || "",
+      base_url: baseUrl || null,
+      show_all: Boolean(showAll),
+    });
+  }
+
+  async function listUsableOpenAiModels({ apiKey, baseUrl, testAll, forceRefresh } = {}) {
+    return api.listUsableOpenAiModels({
+      api_key: apiKey || "",
+      base_url: baseUrl || null,
+      test_all: Boolean(testAll),
+      force_refresh: Boolean(forceRefresh),
+      max_checks: 25,
+    });
+  }
+
+  async function listRecommendedOpenAiModels() {
+    return api.listRecommendedOpenAiModels();
+  }
+
   function getPreviewPayload() {
     return buildPreviewPayload(store.getState());
   }
@@ -700,6 +725,9 @@ export function createDashboardActions({ store, api, logger }) {
     handleWsMessage,
     loadInitialData,
     pollRuntimeStatus,
+    listOpenAiModels,
+    listUsableOpenAiModels,
+    listRecommendedOpenAiModels,
     getPreviewPayload,
     navigateBrowserAsrWindow,
   };

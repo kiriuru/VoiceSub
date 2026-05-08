@@ -222,5 +222,14 @@ export function createDashboardApi(client) {
     downloadDiagnosticsBundle() {
       return client.apiDownload("/api/exports/diagnostics");
     },
+    listOpenAiModels(payload) {
+      return client.apiPost("/api/openai/models", payload || {}, { timeout: 25000 });
+    },
+    listUsableOpenAiModels(payload) {
+      return client.apiPost("/api/openai/usable-models", payload || {}, { timeout: 120000 });
+    },
+    listRecommendedOpenAiModels() {
+      return client.apiGet("/api/openai/recommended-models", { timeout: 10000 });
+    },
   };
 }
