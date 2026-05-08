@@ -10,6 +10,14 @@ from backend.core.structured_runtime_logger import StructuredRuntimeLogger
 
 
 class StructuredRuntimeLoggerTests(unittest.TestCase):
+    def test_init_truncates_existing_log(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            log_path = Path(temp_dir) / "runtime-events.jsonl"
+            log_path.write_text('{"old": true}\n', encoding="utf-8")
+            logger = StructuredRuntimeLogger(Path(temp_dir))
+            _ = logger
+            self.assertEqual(log_path.read_text(encoding="utf-8"), "")
+
     def test_writes_valid_jsonl(self) -> None:
         with TemporaryDirectory() as temp_dir:
             logger = StructuredRuntimeLogger(Path(temp_dir))

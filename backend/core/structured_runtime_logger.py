@@ -23,6 +23,27 @@ class StructuredRuntimeLogger:
         self._max_bytes = max(1_048_576, int(max_bytes))
         self._backup_count = max(1, int(backup_count))
         self._lock = threading.Lock()
+        self.reset()
+
+    def reset(self) -> None:
+        """
+        Truncate the current runtime events log on app startup.
+
+        The export service already treats `runtime-events.jsonl` as "latest" diagnostics; keeping old
+        runs in the same file makes session exports noisy and can confuse postmortem inspection.
+        Rotation is still used within a single run to cap disk usage.
+        """
+        try:
+            with self._lock:
+                self._logs_dir.mkdir(parents=True, exist_ok=True)
+                log_path = self._log_path()
+                log_path.write_text("", encoding="utf-8")
+                for index in range(1, self._backup_count + 1):
+                    rotated_path = log_path.with_suffix(f"{log_path.suffix}.{index}")
+                    if rotated_path.exists():
+                        rotated_path.unlink()
+        except Exception:
+            return
 
     def log(
         self,
