@@ -36,6 +36,65 @@ def _is_remote_version_newer(local_version: str, remote_version: str) -> bool:
     return remote_semver > local_semver
 
 
+def _format_semver(semver: tuple[int, int, int, int]) -> str:
+    major, minor, patch, build = semver
+    if build:
+        return f"{major}.{minor}.{patch}.{build}"
+    return f"{major}.{minor}.{patch}"
+
+
+def extract_latest_github_release_version(
+    releases_payload: Any,
+    *,
+    release_channel: str = "stable",
+) -> tuple[str | None, str]:
+    """
+    Given GitHub Releases API payload, determine the latest version tag.
+
+    release_channel:
+      - stable: ignore prereleases
+      - prerelease: allow prereleases
+    """
+    channel = str(release_channel or "stable").strip().lower()
+    if channel not in {"stable", "prerelease"}:
+        channel = "stable"
+
+    if not isinstance(releases_payload, list):
+        return None, "GitHub releases payload was not a list."
+
+    best: tuple[int, int, int, int] | None = None
+    best_raw: str | None = None
+    scanned = 0
+    for item in releases_payload:
+        if not isinstance(item, dict):
+            continue
+        scanned += 1
+        if bool(item.get("draft", False)):
+            continue
+        is_prerelease = bool(item.get("prerelease", False))
+        if channel == "stable" and is_prerelease:
+            continue
+        tag = str(item.get("tag_name", "") or "").strip()
+        if not tag:
+            tag = str(item.get("name", "") or "").strip()
+        if not tag:
+            continue
+        semver = _parse_semver(tag)
+        if semver is None:
+            continue
+        if best is None or semver > best:
+            best = semver
+            best_raw = tag
+
+    if best is None:
+        return None, f"No usable release versions found (scanned {scanned} releases)."
+    formatted = _format_semver(best)
+    raw = str(best_raw or "").lstrip("v").strip()
+    if raw and raw != formatted:
+        return formatted, f"Latest release tag: {raw} (normalized to {formatted})."
+    return formatted, f"Latest release version: {formatted}."
+
+
 def build_version_info_payload(config: dict[str, Any] | None) -> dict[str, Any]:
     payload = config if isinstance(config, dict) else {}
     raw_updates = payload.get("updates", {})
@@ -60,7 +119,9 @@ def build_version_info_payload(config: dict[str, Any] | None) -> dict[str, Any]:
 
     check_supported = bool(github_repo)
     message = (
-        "Release sync scaffold is ready. Live GitHub polling is not enabled in this build."
+        "Update check is available via /api/updates/check."
+        if enabled and check_supported
+        else "Update checks are disabled or not configured."
     )
 
     return {

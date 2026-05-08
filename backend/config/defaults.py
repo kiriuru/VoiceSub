@@ -12,6 +12,12 @@ def build_default_config(prefer_gpu_default: bool) -> dict[str, Any]:
         "profile": "default",
         "ui": {
             "language": "",
+            "theme": "dark",
+            "palette": {
+                "accent": "#6cc7ff",
+                "accent_secondary": "#ff6ce6",
+                "accent_tertiary": "#7ce3ad",
+            },
         },
         "source_lang": "auto",
         "targets": ["en"],
@@ -121,7 +127,7 @@ def build_default_config(prefer_gpu_default: bool) -> dict[str, Any]:
         "updates": {
             "enabled": False,
             "provider": "github_releases",
-            "github_repo": "",
+            "github_repo": "kiriuru/stream_sub_translator",
             "release_channel": "stable",
             "check_interval_hours": 12,
             "last_checked_utc": "",

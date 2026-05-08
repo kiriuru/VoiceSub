@@ -2,7 +2,13 @@
   "config_version": 6,
   "profile": "default",
   "ui": {
-    "language": ""
+    "language": "",
+    "theme": "dark",
+    "palette": {
+      "accent": "#6cc7ff",
+      "accent_secondary": "#ff6ce6",
+      "accent_tertiary": "#7ce3ad"
+    }
   },
   "source_lang": "auto",
   "targets": [
@@ -111,7 +117,7 @@
   "updates": {
     "enabled": false,
     "provider": "github_releases",
-    "github_repo": "",
+    "github_repo": "kiriuru/stream_sub_translator",
     "release_channel": "stable",
     "check_interval_hours": 12,
     "last_checked_utc": "",
@@ -204,7 +210,7 @@
   "subtitle_style": {
     "preset": "clean_default",
     "label": "Clean Default",
-    "description": "Balanced white subtitles with readable outline and no extra effects.",
+    "description": "",
     "built_in": true,
     "recommended_max_visible_lines": null,
     "base": {

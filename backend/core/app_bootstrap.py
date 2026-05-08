@@ -25,6 +25,7 @@ from backend.services import (
     RuntimeService,
     SettingsService,
     TranslationService,
+    UpdateService,
 )
 from backend.ws_manager import WebSocketManager
 
@@ -83,3 +84,4 @@ def initialize_app_state(app: FastAPI) -> None:
     app.state.model_manager_service = app.state.model_manager
     app.state.settings_service = SettingsService(app)
     app.state.runtime_service = RuntimeService(app)
+    app.state.update_service = UpdateService(app)

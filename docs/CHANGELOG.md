@@ -22,11 +22,16 @@ Post-`0.3.0` branch follow-up focused on internal modularization and runtime sta
 - each `translation_1 .. translation_5` slot is rendered as a stable card with explicit `enabled`, `target_lang`, `provider`, and `label` controls;
 - selecting a translation slot retargets the shared provider settings editor to that slot's provider, while the editor can still be switched manually when no slot is selected;
 - the dashboard now warns when enabled translation slots use providers with missing required settings;
+- the Style tab now includes a dashboard-wide UI theme (light/dark) plus an accent gradient palette applied to the dashboard and Browser Speech worker windows;
 - i18n coverage was extended across runtime progress labels, style slot editor controls, remote LAN tools, diagnostics strings, and other previously hard-coded dashboard copy.
 - translation slot cards now render only for lines explicitly added to `translation.lines` (empty slots no longer appear until added);
 - the runtime progress card switches to a compact layout automatically in Browser Speech modes;
 - switching the dashboard UI language persists immediately without requiring the global Save button;
 - development iteration no longer requires hard refresh: frontend routes and static assets are served with no-store cache headers.
+- the dashboard now includes a `Help / Помощь` tab after `Tools & Data`, organized as one-visible-topic-at-a-time wiki panels for overview, recognition/tuning, translation, subtitles/style, OBS, tools/diagnostics, and desktop/remote mode;
+- the Help remote topic documents the controller/worker startup order: start worker, start controller, check worker health, pair/refresh state, sync settings, prepare run, start/check worker runtime, keep bridge windows open, then start the controller dashboard;
+- the Tuning help and UI copy now keep quick recognition-feel controls separate from exact ASR timing controls, which are documented under `Tools & Data`;
+- experimental translation provider readiness remains visible as `experimental` in dashboard status badges instead of being normalized to `degraded`.
 
 ### Subtitle style follow-up
 
@@ -38,6 +43,11 @@ Post-`0.3.0` branch follow-up focused on internal modularization and runtime sta
 - legacy root `logs/` folders are migrated forward automatically during launcher/runtime startup;
 - local runtime model storage is aligned on `user-data/models/`;
 - release documentation and publish guidance now reflect the actual bootstrap release targets and current desktop layout.
+
+### Update checks
+
+- desktop bootstrap launcher now checks GitHub Releases for a newer version and prompts only when an update is available (Continue / Download);
+- backend now exposes `POST /api/updates/check` for an explicit manual GitHub Releases poll, persisting `updates.latest_known_version` and `updates.last_checked_utc`.
 
 ### Translation follow-up
 

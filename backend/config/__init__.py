@@ -172,7 +172,38 @@ class LocalConfigManager:
         language = str(current.get("language", defaults["language"]) or "").strip().lower()
         if language not in {"en", "ru"}:
             language = ""
-        return {"language": language}
+        theme = str(current.get("theme", defaults.get("theme", "dark")) or "dark").strip().lower()
+        if theme not in {"dark", "light"}:
+            theme = str(defaults.get("theme", "dark") or "dark").strip().lower()
+        palette = current.get("palette", {})
+        if not isinstance(palette, dict):
+            palette = {}
+
+        def _hex(value: Any, fallback: str) -> str:
+            raw = str(value or "").strip()
+            if not raw:
+                return fallback
+            if len(raw) in {4, 7} and raw.startswith("#"):
+                try:
+                    int(raw[1:], 16)
+                    return raw.lower()
+                except ValueError:
+                    return fallback
+            return fallback
+
+        defaults_palette = defaults.get("palette", {}) if isinstance(defaults.get("palette", {}), dict) else {}
+        accent_default = str(defaults_palette.get("accent", "#6cc7ff") or "#6cc7ff")
+        accent2_default = str(defaults_palette.get("accent_secondary", "#ff6ce6") or "#ff6ce6")
+        accent3_default = str(defaults_palette.get("accent_tertiary", "#7ce3ad") or "#7ce3ad")
+        return {
+            "language": language,
+            "theme": theme,
+            "palette": {
+                "accent": _hex(palette.get("accent"), accent_default),
+                "accent_secondary": _hex(palette.get("accent_secondary"), accent2_default),
+                "accent_tertiary": _hex(palette.get("accent_tertiary"), accent3_default),
+            },
+        }
 
     def _normalize(self, payload: dict[str, Any]) -> dict[str, Any]:
         normalized = self.default_config()

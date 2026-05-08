@@ -10,7 +10,7 @@ Post-release изменения для текущей ветки `main` тепе
 Текущее примечание:
 
 - выбор провайдера «на каждую линию перевода», slot-based идентичность перевода, и вынос провайдеров перевода из legacy слоя — это post-`0.3.0` follow-up в ветке `main` и документируется в [CHANGELOG.md](./CHANGELOG.md) -> `Unreleased`, а не в shipped `0.3.0` delta.
-- текущий follow-up в `main` также включает разделение UI вкладки Translation, более широкое покрытие i18n для dashboard, и выравнивание storage вокруг `logs/` и `user-data/models/`; эти изменения также отслеживаются в `Unreleased`.
+- текущий follow-up в `main` также включает разделение UI вкладки Translation, более широкое покрытие i18n для dashboard, выравнивание storage вокруг `logs/` и `user-data/models/`, а также добавление проверки обновлений через GitHub Releases (bootstrap prompt + backend `POST /api/updates/check`); эти изменения также отслеживаются в `Unreleased`.
 
 Важно:
 
@@ -137,6 +137,14 @@ Dashboard больше не держится на одном legacy `app.js`.
 - i18n/персист UI:
   - experimental browser worker `/google-asr-experimental` использует тот же i18n слой, что и classic `/google-asr`;
   - переключение языка интерфейса сохраняется сразу, без обязательного нажатия `Save`.
+- Help / Помощь:
+  - добавлена отдельная вкладка после `Tools & Data`;
+  - справка разбита на внутренние topic-tabs, где одновременно виден только один подробный раздел;
+  - разделы покрывают overview, recognition/tuning, translation, subtitles/style, OBS, tools/diagnostics и desktop/remote mode;
+  - remote-раздел фиксирует порядок запуска worker/controller, pairing, settings sync, prepare run, bridge windows и start controller dashboard.
+- status badges:
+  - `experimental` больше не нормализуется в `degraded` для экспериментальных translation providers;
+  - `degraded` остаётся для настоящих fallback/error состояний.
 - dev-итерация:
   - для frontend страниц и ассетов отключено HTTP-кеширование (обычный refresh подтягивает правки без “жёсткой” перезагрузки).
 - style effects:

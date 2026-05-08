@@ -21,16 +21,14 @@ function renderPreview(container, payload, state) {
     container.innerHTML = `<p class="muted">${escapeHtml(getCurrentLocale() === "ru" ? "По текущим настройкам сейчас нет видимых строк субтитров." : "No visible subtitle lines for the current settings yet.")}</p>`;
     return;
   }
-  const note = document.createElement("p");
-  note.className = "subtitle-stage-note";
-  note.textContent = state.overlay?.payload
-    ? (payload.completed_block_visible
-        ? (getCurrentLocale() === "ru" ? `Живой блок субтитров${payload.sequence ? ` #${payload.sequence}` : ""}.` : `Live subtitle block${payload.sequence ? ` #${payload.sequence}` : ""}.`)
-        : (getCurrentLocale() === "ru" ? "Предпросмотр live-partial." : "Live partial preview."))
-    : (getCurrentLocale() === "ru"
-        ? "Предпросмотр построен по текущему сохранённому порядку строк, схеме overlay и стилю субтитров."
-        : "Preview built from the current saved subtitle output order, overlay layout, and subtitle style.");
-  container.appendChild(note);
+  if (state.overlay?.payload) {
+    const note = document.createElement("p");
+    note.className = "subtitle-stage-note";
+    note.textContent = payload.completed_block_visible
+      ? (getCurrentLocale() === "ru" ? `Живой блок субтитров${payload.sequence ? ` #${payload.sequence}` : ""}.` : `Live subtitle block${payload.sequence ? ` #${payload.sequence}` : ""}.`)
+      : (getCurrentLocale() === "ru" ? "Предпросмотр live-partial." : "Live partial preview.");
+    container.appendChild(note);
+  }
 }
 
 export function mountOverlayPanel(root, { store, actions, logger }) {

@@ -14,6 +14,7 @@ from backend.api.routes_profiles import router as profiles_router
 from backend.api.routes_remote import router as remote_router
 from backend.api.routes_runtime import router as runtime_router
 from backend.api.routes_settings import router as settings_router
+from backend.api.routes_updates import router as updates_router
 from backend.api.routes_version import router as version_router
 from backend.config import settings
 from backend.core.api_errors import register_api_error_handlers
@@ -34,6 +35,7 @@ PROJECT_FONTS_DIR = app.state.paths.fonts_dir
 PROJECT_FONTS_DIR.mkdir(parents=True, exist_ok=True)
 
 app.include_router(settings_router)
+app.include_router(updates_router)
 app.include_router(runtime_router)
 app.include_router(devices_router)
 app.include_router(profiles_router)

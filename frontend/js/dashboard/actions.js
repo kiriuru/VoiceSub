@@ -15,6 +15,7 @@ import {
   normalizeSupportedUiLanguage,
   parseIntegerOr,
 } from "./helpers.js";
+import { applyUiThemeFromConfigPayload } from "../ui-theme.js";
 
 function getResolvedSubtitleStyle(config, presets) {
   if (!window.SubtitleStyleRenderer) {
@@ -190,6 +191,7 @@ export function createDashboardActions({ store, api, logger }) {
     if (window.I18n?.setLocale && locale !== getCurrentLocale()) {
       window.I18n.setLocale(locale);
     }
+    applyUiThemeFromConfigPayload(normalized);
     const nextState = store.getState();
     const configuredTranslationSlots = (Array.isArray(normalized.translation.lines) ? normalized.translation.lines : [])
       .map((line) => String(line?.slot_id || "").toLowerCase())

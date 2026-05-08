@@ -4,9 +4,13 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>SST Remote Controller Bridge</title>
+    <script type="module">
+      import { autoLoadAndApplyUiTheme } from "/static/js/ui-theme.js?v=20260508a";
+      autoLoadAndApplyUiTheme();
+    </script>
     <style>
       :root {
-        color-scheme: dark;
+        color-scheme: light dark;
         --sst-bg: #080a12;
         --sst-panel: rgba(12, 18, 32, 0.82);
         --sst-panel-strong: rgba(16, 24, 42, 0.95);
@@ -28,9 +32,9 @@
       body {
         margin: 0;
         background:
-          radial-gradient(circle at 16% 12%, rgba(124, 199, 255, 0.18), transparent 30%),
-          radial-gradient(circle at 84% 10%, rgba(255, 92, 122, 0.12), transparent 24%),
-          linear-gradient(180deg, #0b1422 0%, var(--sst-bg) 100%);
+          radial-gradient(circle at 16% 12%, rgb(var(--ui-accent-rgb, 108 199 255) / 0.18), transparent 30%),
+          radial-gradient(circle at 84% 10%, rgb(var(--ui-accent-secondary-rgb, 255 108 230) / 0.12), transparent 24%),
+          linear-gradient(180deg, color-mix(in srgb, var(--sst-bg) 18%, white) 0%, var(--sst-bg) 100%);
         color: var(--sst-text);
         font-family: "Segoe UI", Tahoma, sans-serif;
       }

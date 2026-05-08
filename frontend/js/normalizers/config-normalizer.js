@@ -124,6 +124,22 @@ function normalizeUiLanguage(value) {
   return ["en", "ru"].includes(current) ? current : "en";
 }
 
+function normalizeUiTheme(value) {
+  const current = String(value || "").trim().toLowerCase();
+  return ["dark", "light"].includes(current) ? current : "dark";
+}
+
+function normalizeHexColor(value, fallback) {
+  const current = String(value || "").trim();
+  if (!current) {
+    return fallback;
+  }
+  if (/^#[0-9a-fA-F]{6}$/.test(current) || /^#[0-9a-fA-F]{3}$/.test(current)) {
+    return current.toLowerCase();
+  }
+  return fallback;
+}
+
 export function normalizeConfigShape(config) {
   const normalized = config && typeof config === "object" ? structuredClone(config) : {};
   delete normalized.runtime;
@@ -133,6 +149,13 @@ export function normalizeConfigShape(config) {
     normalized.ui = {};
   }
   normalized.ui.language = normalizeUiLanguage(normalized.ui.language);
+  normalized.ui.theme = normalizeUiTheme(normalized.ui.theme);
+  if (!normalized.ui.palette || typeof normalized.ui.palette !== "object") {
+    normalized.ui.palette = {};
+  }
+  normalized.ui.palette.accent = normalizeHexColor(normalized.ui.palette.accent, "#6cc7ff");
+  normalized.ui.palette.accent_secondary = normalizeHexColor(normalized.ui.palette.accent_secondary, "#ff6ce6");
+  normalized.ui.palette.accent_tertiary = normalizeHexColor(normalized.ui.palette.accent_tertiary, "#7ce3ad");
 
   if (!normalized.audio || typeof normalized.audio !== "object") {
     normalized.audio = { input_device_id: null };

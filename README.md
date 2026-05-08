@@ -61,8 +61,16 @@ What it does:
 
 - ships as a single public `Stream Subtitle Translator.exe`;
 - contains an embedded managed payload built from the clean desktop runtime;
+- checks GitHub Releases for a newer version and prompts only when an update is available;
 - extracts and verifies the managed runtime next to itself on first launch;
 - repairs runtime files when `app-runtime/` or the internal runtime executable become corrupted.
+
+Update prompt behavior:
+
+- if no update is available (or the network/API is unavailable), startup proceeds normally with no extra UI;
+- if a newer version is available, a small dialog offers:
+  - `Continue`: launch as usual
+  - `Download`: open the release page in the browser and then continue launching
 
 Current extracted layout:
 
@@ -136,6 +144,7 @@ These folders are normal for the desktop flow and should be kept next to the exe
 - Optional OBS Closed Captions output.
 - Session export in `SRT` and `JSONL`.
 - Profile-based local settings management.
+- Configurable dashboard UI theme (light/dark) with a customizable accent gradient palette applied to both the dashboard and Browser Speech worker windows.
 - Local-first diagnostics and runtime logs.
 
 ## Architecture Summary
@@ -258,17 +267,31 @@ Visual layout was not redesigned in `0.3.0`; the major change is the internal mo
   - finalize speed
   - stability/noise sensitivity
 - Optional RNNoise path.
-- Practical tuning notes for live operation.
+- The tuning tab keeps only user-facing recognition feel controls; exact ASR timing values live under `Tools & Data`.
 
 ### Tools & Data
 
 - Runtime diagnostics and latency metrics.
-- Advanced ASR controls.
+- Runtime diagnostics cover latency, ASR state, translation queue/provider state, Browser Speech worker connectivity, OBS Closed Captions state, and local log locations.
+- Advanced ASR controls expose exact timing and gate values such as VAD mode, partial emit interval, min speech, silence hold, pause-to-finalize, max phrase length, chunk window/overlap, min RMS, voiced ratio, and first partial speech.
 - Live event feed with bounded logging behavior.
 - Wider dashboard localization coverage, including runtime progress, remote tools, style slot editor labels, and diagnostics strings.
 - Config save/export/import.
 - Profile load/save/delete.
 - `Export Diagnostics` creates a local ZIP with redacted config, runtime/preflight snapshots, latest session log, and backend log.
+
+### Help
+
+- The main dashboard now includes a dedicated `Help` tab after `Tools & Data`.
+- Help is organized as topic tabs, with only one detailed article visible at a time:
+  - overview
+  - recognition and tuning
+  - translation
+  - subtitles and style
+  - OBS
+  - tools and diagnostics
+  - desktop and remote mode
+- The remote help topic includes a practical controller/worker startup sequence, pairing order, bridge-window notes, and field explanations for `Worker Base URL`, `Session ID`, `Pair Code`, remote state, and worker runtime status.
 
 ## Recognition Modes
 
@@ -377,6 +400,20 @@ The repository still contains optional LAN remote controller/worker support:
 - remote worker runtime is AI-only and must not run browser speech modes;
 - remote worker sync also prevents drift into browser-worker paths during controller -> worker settings sync.
 
+Recommended remote startup order:
+
+1. Start the worker machine first with `Remote Worker` or `start-remote-worker.bat`.
+2. Start the controller machine with `Remote Controller` or `start-remote-controller.bat`.
+3. Enter the worker LAN URL in `Worker Base URL`.
+4. Run `Check Worker Health` before pairing or runtime start.
+5. Create/verify the local pair, then refresh remote state.
+6. Run `Sync Worker Settings`, then `Prepare Remote Run`.
+7. Start/check the worker runtime.
+8. Keep the controller and worker bridge windows open while the remote run is active.
+9. Press `Start` on the controller dashboard to begin microphone capture and remote audio/result flow.
+
+Experimental translation providers keep `experimental` as their dashboard status instead of being collapsed into `degraded`; true degraded states remain reserved for error/fallback conditions.
+
 ## Local Data and Logs
 
 Created next to the executable:
@@ -455,6 +492,11 @@ Build output:
 - Managed runtime must be rebuilt from scratch:
   - use the `Reset Runtime` button in the bootstrap window;
   - or run `Stream Subtitle Translator.exe --reset-runtime`.
+- Update checks:
+  - desktop bootstrap launcher checks GitHub Releases automatically and only prompts when an update is available.
+  - backend also exposes a manual check endpoint:
+    - enable `updates.enabled` in `user-data/config.json`
+    - run `POST /api/updates/check` (persists `updates.latest_known_version` + `updates.last_checked_utc`).
 - UI is unreachable:
   - ensure local port `8765` is not occupied by another process.
 - Browser Speech returns no text:

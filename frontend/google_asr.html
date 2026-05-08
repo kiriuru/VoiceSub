@@ -4,10 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Browser Speech Worker</title>
+    <script type="module">
+      import { autoLoadAndApplyUiTheme } from "/static/js/ui-theme.js?v=20260508a";
+      autoLoadAndApplyUiTheme();
+    </script>
     <style>
       :root {
-        color-scheme: dark;
+        color-scheme: light dark;
         --bg: #09111b;
+        --bg-top: #0b1422;
         --panel: rgba(14, 24, 40, 0.84);
         --panel-strong: rgba(7, 14, 24, 0.82);
         --line: rgba(160, 193, 255, 0.14);
@@ -28,10 +33,10 @@
         margin: 0;
         font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
         background:
-          radial-gradient(circle at top left, rgba(108, 199, 255, 0.2), transparent 34%),
-          radial-gradient(circle at top right, rgba(255, 108, 230, 0.18), transparent 30%),
-          radial-gradient(circle at center, rgba(124, 227, 173, 0.08), transparent 44%),
-          linear-gradient(180deg, #0b1422 0%, var(--bg) 100%);
+          radial-gradient(circle at top left, rgb(var(--ui-accent-rgb, 108 199 255) / 0.2), transparent 34%),
+          radial-gradient(circle at top right, rgb(var(--ui-accent-secondary-rgb, 255 108 230) / 0.18), transparent 30%),
+          radial-gradient(circle at center, rgb(var(--ui-accent-tertiary-rgb, 124 227 173) / 0.08), transparent 44%),
+          linear-gradient(180deg, var(--bg-top) 0%, var(--bg) 100%);
         color: var(--text);
         min-height: 100vh;
         display: flex;
@@ -66,10 +71,14 @@
         margin-top: 6px;
         padding: 14px 16px;
         border-radius: 16px;
-        border: 1px solid rgba(108, 199, 255, 0.18);
+        border: 1px solid color-mix(in srgb, var(--accent) 26%, transparent);
         background:
-          linear-gradient(135deg, rgba(108, 199, 255, 0.09), rgba(255, 108, 230, 0.08)),
-          rgba(7, 14, 24, 0.76);
+          linear-gradient(
+            135deg,
+            rgb(var(--ui-accent-rgb, 108 199 255) / 0.1),
+            rgb(var(--ui-accent-secondary-rgb, 255 108 230) / 0.08)
+          ),
+          color-mix(in srgb, var(--panel-strong) 92%, transparent);
       }
 
       .notice strong {
@@ -233,7 +242,7 @@
       }
 
       .secondary {
-        background: rgba(7, 14, 24, 0.74);
+        background: color-mix(in srgb, var(--panel-strong) 86%, transparent);
         color: var(--text);
         border: 1px solid var(--line-strong);
       }

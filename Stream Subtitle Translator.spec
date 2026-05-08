@@ -51,7 +51,12 @@ datas = [
 ]
 site_packages_root = project_root / ".venv" / "Lib" / "site-packages"
 datas += collect_local_site_package(site_packages_root, "lightning", "vendor/python-site-packages")
-datas += collect_local_site_package(site_packages_root, "lightning-2.4.0.dist-info", "vendor/python-site-packages")
+lightning_dist_info = sorted(site_packages_root.glob("lightning-*.dist-info"))
+if lightning_dist_info:
+    for dist_info_path in lightning_dist_info:
+        datas += collect_project_files(dist_info_path, "vendor/python-site-packages")
+else:
+    datas += collect_local_site_package(site_packages_root, "lightning-2.4.0.dist-info", "vendor/python-site-packages")
 datas += collect_project_files(
     project_root / "backend",
     "backend",
@@ -69,7 +74,10 @@ datas += collect_project_files(
     ],
 )
 datas += collect_data_files("webview")
-datas += collect_data_files("pythonnet")
+try:
+    datas += collect_data_files("pythonnet")
+except Exception:
+    pass
 
 hiddenimports = collect_submodules("webview")
 

@@ -656,17 +656,12 @@ export function mountTranslationPanel(root, { store, actions, logger }) {
       return;
     }
     actions.mutateConfig((draft) => {
-      const line = ensureLine(draft, selectedSlotId, {
-        enabled: false,
-        target_lang: "en",
-        provider: draft.translation.provider,
-        label: "EN",
-      });
-      line.enabled = false;
+      draft.translation.lines = (Array.isArray(draft.translation.lines) ? draft.translation.lines : [])
+        .filter((line) => String(line?.slot_id || "").toLowerCase() !== selectedSlotId);
       draft.subtitle_output.display_order = draft.subtitle_output.display_order.filter((item) => item !== selectedSlotId);
     });
     actions.updateTranslationSelection(null);
-    logger(`[translation] disabled line ${selectedSlotId}`);
+    logger(`[translation] removed line ${selectedSlotId}`);
   });
   elements.upBtn?.addEventListener("click", () => {
     const selectedSlotId = getSelectedSlotId(store.getState());

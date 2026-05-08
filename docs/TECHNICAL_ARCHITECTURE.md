@@ -299,6 +299,17 @@ Current translation package state:
 - dashboard может передать `config_payload` snapshot (даже несохранённый);
 - snapshot проходит нормализацию, применяется только в памяти, и помечается как `persisted=false`.
 
+4) Проверка обновлений:
+
+- конфиг секции `updates` нормализуется вместе с остальными (enabled/provider/github_repo/release_channel/check_interval_hours);
+- backend surface:
+  - `/api/version` возвращает version metadata + текущий `sync` статус из `updates.*` (последняя известная версия, время проверки и т.д.);
+  - `POST /api/updates/check` выполняет live polling GitHub Releases и сохраняет `updates.latest_known_version` + `updates.last_checked_utc` в `user-data/config.json`;
+- desktop bootstrap launcher surface:
+  - на старте тихо проверяет GitHub Releases и показывает диалог только если remote версия новее embedded `manifest.app_version`;
+  - если обновления нет (или сеть недоступна) — запуск идёт без дополнительного UI;
+  - кнопка Download открывает страницу релиза и затем запуск продолжается.
+
 ## 7. HTTP surface (локальный API)
 
 Primary local endpoints:
@@ -312,6 +323,7 @@ Primary local endpoints:
 - `/api/devices/audio-inputs`
 - `/api/obs/url`
 - `/api/version`
+- `/api/updates/check`
 - `/api/profiles`
 - `/api/profiles/{name}`
 - `/api/exports`
@@ -433,7 +445,12 @@ Runtime/event expectations:
 - the Translation tab now renders stable `translation_1 .. translation_5` slot cards instead of one flat language-order list;
 - each slot card owns `enabled`, `target_lang`, `provider`, and `label` editing for that slot;
 - the shared provider settings editor follows the selected slot's provider, but can still be switched manually when no slot is selected;
-- diagnostics and remote tools text now flow through the same `frontend/js/i18n.js` localization layer as the rest of the dashboard.
+- diagnostics and remote tools text now flow through the same `frontend/js/i18n.js` localization layer as the rest of the dashboard;
+- the dashboard includes a `Help / Помощь` tab after `Tools & Data`;
+- Help content is implemented as local topic tabs inside the dashboard, so only one wiki topic is visible at a time;
+- Help topics intentionally mirror product surfaces: overview, recognition/tuning, translation, subtitles/style, OBS, tools/diagnostics, and desktop/remote mode;
+- quick Tuning copy describes only the high-level recognition feel sliders and RNNoise controls, while exact ASR timing/gate controls are documented with `Tools & Data`;
+- dashboard UI status normalization preserves `experimental` as a first-class status for experimental translation providers instead of mapping it to `degraded`.
 
 ## 11. Browser Speech Classic Path
 
@@ -592,6 +609,16 @@ Constraints:
 
 - remote worker must not run browser speech mode;
 - remote worker sync enforces a local AI path rather than drifting into browser worker providers.
+
+Documented operator flow:
+
+1. Start the worker role first (`Remote Worker` profile or `start-remote-worker.bat`).
+2. Start the controller role second (`Remote Controller` profile or `start-remote-controller.bat`).
+3. Configure `Worker Base URL` on the controller and verify `Check Worker Health`.
+4. Create/verify pairing, then refresh remote state.
+5. Run worker settings sync before preparing or starting the remote run.
+6. Prepare the remote run, start/check worker runtime, and keep controller/worker bridge windows open.
+7. Start the controller dashboard runtime to begin microphone capture and remote audio/result flow.
 
 ## 18. Startup and Local Data
 

@@ -4,10 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Browser Speech Worker (Experimental)</title>
+    <script type="module">
+      import { autoLoadAndApplyUiTheme } from "/static/js/ui-theme.js?v=20260508a";
+      autoLoadAndApplyUiTheme();
+    </script>
     <style>
       :root {
-        color-scheme: dark;
+        color-scheme: light dark;
         --bg: #0b1422;
+        --bg-top: #0b1422;
         --panel: rgba(10, 19, 34, 0.88);
         --line: rgba(160, 193, 255, 0.18);
         --text: #f5f7fb;
@@ -25,8 +30,9 @@
         min-height: 100vh;
         font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
         background:
-          radial-gradient(circle at top left, rgba(108, 199, 255, 0.18), transparent 34%),
-          linear-gradient(180deg, #0b1422 0%, #09111b 100%);
+          radial-gradient(circle at top left, rgb(var(--ui-accent-rgb, 108 199 255) / 0.18), transparent 34%),
+          radial-gradient(circle at top right, rgb(var(--ui-accent-secondary-rgb, 255 108 230) / 0.14), transparent 32%),
+          linear-gradient(180deg, var(--bg-top) 0%, var(--bg) 100%);
         color: var(--text);
       }
 
@@ -145,7 +151,7 @@
       }
 
       .primary {
-        background: linear-gradient(135deg, var(--accent), #ff6ce6);
+        background: linear-gradient(135deg, var(--accent), var(--accent-strong, #ff6ce6));
         color: #07111c;
       }
 

@@ -10,6 +10,8 @@ from desktop.bootstrap_payload import (
     BOOTSTRAP_RUNTIME_HIDDEN_EXE,
     build_payload_manifest,
     create_payload_archive,
+    is_remote_version_newer,
+    parse_semver,
     install_or_repair_runtime,
     verify_runtime_files,
 )
@@ -61,6 +63,14 @@ class BootstrapPayloadTests(unittest.TestCase):
         verified, mismatches = verify_runtime_files(install_root, self.manifest)
         self.assertFalse(verified)
         self.assertTrue(any(item.startswith("sha256:") or item.startswith("size:") for item in mismatches))
+
+    def test_parse_semver_accepts_v_prefix_and_four_parts(self) -> None:
+        self.assertEqual(parse_semver("v0.2.9.2"), (0, 2, 9, 2))
+        self.assertEqual(parse_semver("0.2.9.0"), (0, 2, 9, 0))
+
+    def test_is_remote_version_newer(self) -> None:
+        self.assertTrue(is_remote_version_newer("0.2.9.0", "0.2.9.2"))
+        self.assertFalse(is_remote_version_newer("0.3.0", "0.2.9.2"))
 
 
 if __name__ == "__main__":

@@ -47,7 +47,7 @@
       clean_default: {
         preset: "clean_default",
         label: "Clean Default",
-        description: "Balanced white subtitles with readable outline and no extra effects.",
+        description: "",
         built_in: true,
         base: clone(DEFAULT_BASE_STYLE),
         line_slots: buildEmptyLineSlots(),

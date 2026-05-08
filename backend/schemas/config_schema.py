@@ -29,8 +29,16 @@ SupportedTranslationProvider = Literal[
 ]
 
 
+class UiPaletteConfig(SchemaModel):
+    accent: str = "#6cc7ff"
+    accent_secondary: str = "#ff6ce6"
+    accent_tertiary: str = "#7ce3ad"
+
+
 class UiConfig(SchemaModel):
     language: Literal["", "en", "ru"] = ""
+    theme: Literal["dark", "light"] = "dark"
+    palette: UiPaletteConfig = Field(default_factory=UiPaletteConfig)
 
 
 class OverlayConfig(SchemaModel):

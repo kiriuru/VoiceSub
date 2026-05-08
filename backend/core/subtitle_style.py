@@ -82,7 +82,7 @@ _STYLE_PRESETS: dict[str, dict[str, Any]] = {
     "clean_default": _preset_style(
         preset="clean_default",
         label="Clean Default",
-        description="Balanced white subtitles with readable outline and no extra effects.",
+        description="",
         base={},
     ),
     "streamer_bold": _preset_style(

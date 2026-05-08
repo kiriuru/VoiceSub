@@ -199,7 +199,7 @@ export function appendTextLog(target, message) {
   target.scrollTop = target.scrollHeight;
 }
 
-const UI_STATUSES = new Set(["ready", "running", "disabled", "warning", "error", "degraded", "loading", "unknown"]);
+const UI_STATUSES = new Set(["ready", "running", "disabled", "warning", "error", "degraded", "experimental", "loading", "unknown"]);
 
 export function normalizeUiStatus(value, fallback = "unknown") {
   const normalized = String(value || "").trim().toLowerCase();
@@ -220,9 +220,6 @@ export function normalizeUiStatus(value, fallback = "unknown") {
   }
   if (normalized === "partial") {
     return "warning";
-  }
-  if (normalized === "experimental") {
-    return "degraded";
   }
   if (normalized === "idle") {
     return "ready";

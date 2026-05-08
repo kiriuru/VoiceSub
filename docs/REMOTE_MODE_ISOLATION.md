@@ -32,3 +32,18 @@
 2. Remote mode работает в пределах одного LAN при явном включении.
 3. Overlay и export остаются на стороне Controller.
 4. Worker может выполнять AI-only pipeline из входящего remote audio.
+
+## Документированный порядок запуска
+
+Dashboard Help теперь фиксирует операторский порядок для remote mode:
+
+1. Сначала запускается Worker (`Remote Worker` profile или `start-remote-worker.bat`).
+2. Затем запускается Controller (`Remote Controller` profile или `start-remote-controller.bat`).
+3. На Controller задаётся `Worker Base URL`.
+4. Перед pairing и runtime start выполняется `Check Worker Health`.
+5. Создаётся/проверяется pair, затем обновляется remote state.
+6. Выполняется `Sync Worker Settings`, чтобы Worker остался на local AI path.
+7. Выполняется `Prepare Remote Run`.
+8. Запускается и проверяется Worker runtime.
+9. Controller/Worker bridge windows остаются открытыми на время remote session.
+10. `Start` в основном dashboard запускает microphone capture и remote audio/result flow.

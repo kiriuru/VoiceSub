@@ -7,6 +7,7 @@ from backend.services.overlay_service import OverlayService
 from backend.services.runtime_service import RuntimeService
 from backend.services.settings_service import SettingsService
 from backend.services.translation_service import TranslationService
+from backend.services.update_service import UpdateService
 
 __all__ = [
     "AsrService",
@@ -18,4 +19,5 @@ __all__ = [
     "RuntimeService",
     "SettingsService",
     "TranslationService",
+    "UpdateService",
 ]

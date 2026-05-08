@@ -77,6 +77,21 @@ Implemented in this step:
 - `Remote LAN` panel now includes one-click orchestration:
   - `Prepare Remote Run` performs worker sync + worker runtime start + opens controller bridge
 
+## Operator startup order documented in dashboard Help
+
+The main dashboard `Help / Помощь` tab now documents the recommended manual order for a reliable LAN run:
+
+1. Start the worker machine first with `Remote Worker` or `start-remote-worker.bat`.
+2. Start the controller machine with `Remote Controller` or `start-remote-controller.bat`.
+3. On the controller, enter the worker LAN address in `Worker Base URL`.
+4. Run `Check Worker Health` before pairing/runtime start.
+5. Create or verify the local pair, then refresh remote state.
+6. Run `Sync Worker Settings`.
+7. Run `Prepare Remote Run`.
+8. Start and check the worker runtime.
+9. Keep controller and worker bridge windows open while remote mode is active.
+10. Press `Start` on the controller dashboard to begin microphone capture and remote result flow.
+
 ## Правила совместимости
 
 - Local mode остаётся default и полностью работает без remote setup.
