@@ -1,4 +1,4 @@
-# SST Desktop Changelog
+# Журнал изменений SST Desktop
 
 Единая история изменений desktop-версии.
 
@@ -6,192 +6,190 @@
 
 ## Unreleased
 
-Post-`0.3.0` branch follow-up focused on internal modularization and runtime start behavior, without changing the local-first product default or the public version source of truth.
+После ветки `0.3.0`: внутренняя модульность и поведение старта рантайма, **без** смены local-first продукта и **без** изменения публичного источника версии (`PROJECT_VERSION`).
 
-### UI: OpenAI model picker
+### UI: выбор модели OpenAI
 
-- OpenAI provider now exposes a curated list of popular models through `GET /api/openai/recommended-models`.
-- The dashboard Translation provider settings panel can populate the `model` field from that recommended list without calling OpenAI from the browser.
+- провайдер OpenAI отдаёт курируемый список популярных моделей через `GET /api/openai/recommended-models`;
+- панель настроек провайдера перевода на дашборде может заполнить поле `model` из этого списка без вызова OpenAI из браузера.
 
-### Runtime modularization (prior checkpoint)
+### Модульность рантайма (промежуточный этап)
 
-- Runtime metrics state moved into `RuntimeMetricsController` (`backend/core/runtime/runtime_metrics_controller.py`).
-- Browser worker connection/session/generation/signature state is now owned by `BrowserWorkerStateController` (`backend/core/runtime/browser_worker_state_controller.py`).
-- `RuntimeOrchestrator` delegates those low-risk state mutations to the controllers without changing runtime status payload shape or WebSocket behavior.
-- Added unit tests for metrics and browser worker state ownership (`tests/test_runtime_metrics_controller.py`, `tests/test_browser_worker_state_controller.py`).
-- Runtime session identity/timestamps/export records moved into `RuntimeSessionController` (`backend/core/runtime/runtime_session_controller.py`), with `RuntimeOrchestrator` delegating completed export record handling and export payload prep.
-- Added unit tests covering session/export state ownership (`tests/test_runtime_session_controller.py`) and updated exporter runtime regression coverage.
-- Segment sequence/counter/active segment/partial coalescing tracking state moved into `SegmentStateController` (`backend/core/runtime/segment_state_controller.py`).
-- `RuntimeOrchestrator` delegates segment/partial bookkeeping to `SegmentStateController` without intentionally changing ASR/audio/VAD/transcript behavior.
-- Added unit tests for segment state ownership and partial tracking behavior (`tests/test_segment_state_controller.py`).
+- состояние метрик рантайма перенесено в `RuntimeMetricsController` (`backend/core/runtime/runtime_metrics_controller.py`);
+- состояние подключения/сессии/generation/signature браузерного worker-а принадлежит `BrowserWorkerStateController` (`backend/core/runtime/browser_worker_state_controller.py`);
+- `RuntimeOrchestrator` делегирует эти низкорисковые мутации контроллерам, не меняя форму payload статуса рантайма и поведение WebSocket;
+- добавлены модульные тесты на владение метриками и состоянием browser worker (`tests/test_runtime_metrics_controller.py`, `tests/test_browser_worker_state_controller.py`);
+- идентичность сессии рантайма, метки времени и записи экспорта перенесены в `RuntimeSessionController` (`backend/core/runtime/runtime_session_controller.py`), `RuntimeOrchestrator` делегирует завершённые записи экспорта и подготовку payload экспорта;
+- добавлены тесты сессии/экспорта (`tests/test_runtime_session_controller.py`) и обновлено регрессионное покрытие экспортёра;
+- счётчик сегментов, активный сегмент и учёт partial coalescing перенесены в `SegmentStateController` (`backend/core/runtime/segment_state_controller.py`);
+- `RuntimeOrchestrator` делегирует учёт сегментов/partial в `SegmentStateController`, намеренно не меняя поведение ASR/audio/VAD/transcript;
+- добавлены тесты состояния сегментов и partial (`tests/test_segment_state_controller.py`).
 
-### P1 runtime stabilization (facade + controllers)
+### Стабилизация рантайма P1 (фасад и контроллеры)
 
-- `TranslationDispatcher` is now restart-safe: `stop()` no longer permanently bricks the dispatcher for subsequent runtime sessions; `start()` resets internal stopped state and tests cover `stop() -> start()` reuse.
-- config and profiles are now written atomically (Windows-safe same-directory temp + `os.replace()`), reducing the chance of partial writes/corruption on power loss or crash.
-- corrupted `user-data/config.json` is recovered automatically:
-  - invalid JSON is moved aside to a timestamped backup;
-  - defaults are restored so the app can still boot;
-  - migrations/normalizers still run on the recovered payload.
-- `RuntimeOrchestrator` is now a thinner facade over explicit controllers under `backend/core/runtime/`, with ordered lifecycle coordination:
-  - runtime state broadcast coalescing (`RuntimeStateController`);
-  - ASR mode resolution and pinning (`AsrModeController`);
-  - translation lifecycle and dispatcher recreation (`TranslationRuntimeController`);
-  - subtitle presentation wrapper (`SubtitlePresentationController`);
-  - unified outbound fanout for WS/OBS (`OutputFanoutController`);
-  - transcript pipeline orchestration (`TranscriptController`);
-  - explicit speech source abstraction + factory (`SpeechSource*`);
-  - deterministic start/stop ordering (`RuntimeLifecycleCoordinator`);
-  - extracted reset/session/task/audio/worker/export helpers (see technical doc).
-- `ConfigStateService` now uses an explicit lock so the active in-memory config snapshot is safe under concurrent runtime + settings operations.
-- translation dispatch now has per-provider concurrency and basic rate limiting (guarding bursty providers while keeping target-parallel behavior).
-- local endpoint readiness checks are now cached with background refresh to avoid blocking hot paths on repeated connectivity probes.
-- `SubtitleRouter` is now split into:
-  - `SubtitleLifecycleCore` (lifecycle state machine, TTL/relevance, promotion/expiry),
-  - `SubtitlePresentation` (payload building, ordering, style-slot mapping, partial+completed merge),
-  - `SubtitleRouter` (facade that publishes to overlay/WS and wires core+presentation).
+- `TranslationDispatcher` стал перезапускаемым: `stop()` больше не «ломает» диспетчер для следующих сессий; `start()` сбрасывает внутреннее состояние остановки, тесты покрывают сценарий `stop() -> start()`;
+- config и профили пишутся атомарно (Windows: временный файл в той же папке + `os.replace()`), снижая риск частичной записи при обрыве питания или падении;
+- повреждённый `user-data/config.json` восстанавливается автоматически:
+  - невалидный JSON переносится в резервную копию с меткой времени;
+  - восстанавливаются значения по умолчанию, приложение может загрузиться;
+  - миграции и нормализаторы выполняются и для восстановленного payload;
+- `RuntimeOrchestrator` стал тоньше как фасад над явными контроллерами в `backend/core/runtime/` с упорядоченной координацией жизненного цикла:
+  - coalescing broadcast статуса рантайма (`RuntimeStateController`);
+  - разрешение и фиксация режима ASR (`AsrModeController`);
+  - жизненный цикл перевода и пересоздание диспетчера (`TranslationRuntimeController`);
+  - обёртка презентации субтитров (`SubtitlePresentationController`);
+  - единый исходящий fanout для WS/OBS (`OutputFanoutController`);
+  - оркестрация конвейера транскриптов (`TranscriptController`);
+  - явная абстракция источника речи + фабрика (`SpeechSource*`);
+  - детерминированный порядок start/stop (`RuntimeLifecycleCoordinator`);
+  - вынесенные помощники reset/session/task/audio/worker/export (см. техдок).
+- `ConfigStateService` использует явную блокировку: активный in-memory снимок конфига безопасен при конкурентных операциях рантайма и настроек;
+- очередь перевода: ограничение параллелизма по провайдеру и базовый rate limiting (защита от «пачек» при сохранении параллелизма по целевым языкам);
+- проверки готовности локальных endpoint-ов кэшируются с фоновым обновлением, чтобы не блокировать горячие пути повторными пробами;
+- `SubtitleRouter` разделён на:
+  - `SubtitleLifecycleCore` (конечный автомат жизненного цикла, TTL/релевантность, promotion/expiry),
+  - `SubtitlePresentation` (сборка payload, порядок, слоты стилей, слияние partial и финала),
+  - `SubtitleRouter` (фасад публикации в overlay/WS, связывает core+presentation).
 
-### Architecture follow-up
+### Архитектура: последующие шаги
 
-- monolithic `backend/config.py` has been replaced by the `backend/config/` package with explicit `defaults.py`, `secrets.py`, and domain normalizers under `backend/config/normalizers/`;
-- `RuntimeOrchestrator` now physically lives in `backend/core/runtime_orchestrator.py`, while `backend/core/subtitle_router.py` keeps subtitle lifecycle logic and a compatibility-only import shim;
-- subtitle lifecycle internals were extracted from `backend/core/subtitle_router.py` into `backend/core/subtitle_lifecycle_core.py` and `backend/core/subtitle_presentation.py`, with `backend/core/subtitle_router.py` remaining as a facade and legacy import shim;
-- runtime orchestration is now split further across `backend/core/runtime/` helpers, with `backend/core/runtime_orchestrator.py` used directly by bootstrap wiring;
-- translation provider extraction is now completed for the current provider set under `backend/translation/providers/`, while `backend/core/translation_engine.py` remains the compatibility engine/shim entrypoint;
-- the docs now describe the real launcher profile surface: `Quick Start (Browser Speech)`, `NVIDIA GPU (CUDA)`, `CPU-only`, `Remote Controller`, and `Remote Worker`.
+- монолитный `backend/config.py` заменён пакетом `backend/config/` с явными `defaults.py`, `secrets.py` и доменными нормализаторами в `backend/config/normalizers/`;
+- `RuntimeOrchestrator` физически находится в `backend/core/runtime_orchestrator.py`, а `backend/core/subtitle_router.py` сохраняет логику жизненного цикла субтитров и shim только для совместимости импорта;
+- внутренности жизненного цикла субтитров вынесены из `backend/core/subtitle_router.py` в `backend/core/subtitle_lifecycle_core.py` и `backend/core/subtitle_presentation.py`, `subtitle_router.py` остаётся фасадом и shim;
+- оркестрация рантайма дальше разнесена по помощникам `backend/core/runtime/`, bootstrap подключает `backend/core/runtime_orchestrator.py` напрямую;
+- провайдеры перевода вынесены в `backend/translation/providers/`, `backend/core/translation_engine.py` остаётся точкой совместимости/shim;
+- документация описывает реальные профили лаунчера: «Быстрый старт (Browser Speech)», `NVIDIA GPU (CUDA)`, `CPU-only`, `Remote Controller`, `Remote Worker`.
 
-### Dashboard and UX follow-up
+### Дашборд и UX: последующие шаги
 
-- the Translation tab is now split into a routing/slot panel plus a separate provider settings panel;
-- each `translation_1 .. translation_5` slot is rendered as a stable card with explicit `enabled`, `target_lang`, `provider`, and `label` controls;
-- selecting a translation slot retargets the shared provider settings editor to that slot's provider, while the editor can still be switched manually when no slot is selected;
-- the dashboard now warns when enabled translation slots use providers with missing required settings;
-- the Style tab now includes a dashboard-wide UI theme (light/dark) plus an accent gradient palette applied to the dashboard and Browser Speech worker windows;
-- i18n coverage was extended across runtime progress labels, style slot editor controls, remote LAN tools, diagnostics strings, and other previously hard-coded dashboard copy.
-- translation slot cards now render only for lines explicitly added to `translation.lines` (empty slots no longer appear until added);
-- the runtime progress card switches to a compact layout automatically in Browser Speech modes;
-- switching the dashboard UI language persists immediately without requiring the global Save button;
-- development iteration no longer requires hard refresh: frontend routes and static assets are served with no-store cache headers.
-- the dashboard now includes a `Help / Помощь` tab after `Tools & Data`, organized as one-visible-topic-at-a-time wiki panels for overview, recognition/tuning, translation, subtitles/style, OBS, tools/diagnostics, and desktop/remote mode;
-- the Help remote topic documents the controller/worker startup order: start worker, start controller, check worker health, pair/refresh state, sync settings, prepare run, start/check worker runtime, keep bridge windows open, then start the controller dashboard;
-- the Tuning help and UI copy now keep quick recognition-feel controls separate from exact ASR timing controls, which are documented under `Tools & Data`;
-- experimental translation provider readiness remains visible as `experimental` in dashboard status badges instead of being normalized to `degraded`.
+- вкладка Translation разделена на панель маршрутизации/слотов и отдельную панель настроек провайдера;
+- каждый слот `translation_1 .. translation_5` — стабильная карточка с полями `enabled`, `target_lang`, `provider`, `label`;
+- выбор слота перевода перенастраивает общий редактор настроек провайдера на провайдер этого слота; редактор можно переключать вручную, если слот не выбран;
+- дашборд предупреждает, если включённые слоты используют провайдеры с незаполненными обязательными настройками;
+- вкладка Style: тема интерфейса (светлая/тёмная) и палитра акцентного градиента для дашборда и окон Browser Speech;
+- расширено покрытие i18n: прогресс рантайма, редактор слотов стиля, remote LAN, диагностика и прочий ранее захардкоженный текст;
+- карточки слотов перевода показываются только для строк, явно добавленных в `translation.lines`;
+- карточка прогресса рантайма в режимах Browser Speech переключается на компактный вид;
+- смена языка UI сохраняется сразу, без обязательного глобального Save;
+- для разработки: маршруты и статика отдаются с заголовками no-store, обычный refresh подхватывает правки;
+- добавлена вкладка «Справка / Помощь» после «Tools & Data»: одна видимая тема за раз (wiki-панели): обзор, распознавание/тюнинг, перевод, субтитры/стиль, OBS, инструменты/диагностика, desktop/remote;
+- в справке по remote зафиксирован порядок: worker → controller → проверка health worker → pairing/обновление состояния → синхронизация настроек → подготовка запуска → старт/проверка рантайма worker → открытые bridge-окна → старт рантайма на дашборде controller;
+- тюнинг и тексты UI разделяют «быстрые» ползунки ощущения распознавания и точные тайминги ASR (последние в «Tools & Data»);
+- готовность экспериментального провайдера перевода в бейджах остаётся `experimental`, а не нормализуется в `degraded`.
 
-### Subtitle style follow-up
+### Стили субтитров: последующие шаги
 
-- added additional built-in subtitle entrance effects: `slide_up`, `zoom_in`, `blur_in`, and `glow` (shared by dashboard preview and OBS overlay).
+- добавлены встроенные эффекты появления: `slide_up`, `zoom_in`, `blur_in`, `glow` (общие для превью дашборда и OBS overlay).
 
-### Desktop storage and release alignment
+### Хранилище desktop и выравнивание релиза
 
-- backend and desktop runtime now store user-facing logs in root `logs/` (legacy `user-data/logs/` is migrated on startup);
-- legacy root `logs/` folders are migrated forward automatically during launcher/runtime startup;
-- local runtime model storage is aligned on `user-data/models/`;
-- release documentation and publish guidance now reflect the actual bootstrap release targets and current desktop layout.
+- пользовательские логи бэкенда и desktop — в корневом `logs/` (устаревший `user-data/logs/` мигрируется при старте);
+- устаревшие корневые `logs/` мигрируются вперёд при старте лаунчера/рантайма;
+- локальные модели — в `user-data/models/`;
+- документация релиза и сценарий публикации отражают bootstrap-цели и текущую структуру desktop.
 
-### Update checks
+### Проверка обновлений
 
-- desktop bootstrap launcher now checks GitHub Releases for a newer version and prompts only when an update is available (Continue / Download);
-- backend now exposes `POST /api/updates/check` for an explicit manual GitHub Releases poll, persisting `updates.latest_known_version` and `updates.last_checked_utc`.
+- bootstrap-лаунчер проверяет GitHub Releases и показывает диалог только при доступной более новой версии (Продолжить / Скачать);
+- бэкенд: `POST /api/updates/check` для явного опроса GitHub Releases, сохранение `updates.latest_known_version` и `updates.last_checked_utc`.
 
-### Translation follow-up
+### Перевод: последующие шаги
 
-- translation configuration now supports per-line provider selection through `translation.lines`;
-- each translation line keeps a stable `slot_id` such as `translation_1`, and that slot id is now the primary identity for overlay ordering and rendering;
-- duplicate target languages are now supported as long as the lines use different slots;
-- translation cache keys now include `provider_name`, preventing collisions when two providers translate the same source into the same language;
-- legacy `translation.provider` and `translation.target_languages` are preserved for compatibility and are regenerated from normalized slot configuration when needed;
-- legacy `subtitle_output.display_order` entries based on language codes are migrated to translation slot ids.
+- конфигурация перевода поддерживает выбор провайдера на строку через `translation.lines`;
+- у каждой строки стабильный `slot_id` (например `translation_1`), он — основной идентификатор для порядка и рендера в overlay;
+- дубли целевых языков допустимы, если слоты разные;
+- ключи кэша перевода включают `provider_name`, исключая коллизии при двух провайдерах на один язык;
+- legacy `translation.provider` и `translation.target_languages` сохранены для совместимости и при необходимости восстанавливаются из нормализованных слотов;
+- legacy `subtitle_output.display_order` по кодам языков мигрируется в id слотов перевода.
 
-### Runtime start contract
+### Контракт старта рантайма
 
-- `POST /api/runtime/start` now accepts an optional `config_payload` snapshot alongside `device_id`;
-- the dashboard sends its current normalized in-memory config snapshot when the user presses `Start`, so runtime-only changes can take effect immediately without forcing `Save Settings` first;
-- runtime start applies the snapshot in memory only, tracks it as active config state metadata, and does not persist it to `user-data/config.json` unless the user explicitly saves settings;
-- remote session preload now also reads `remote.session_id` and `remote.pair_code` from that runtime-start snapshot so controller/worker pairing can follow unsaved UI changes cleanly.
+- `POST /api/runtime/start` принимает опциональный снимок `config_payload` вместе с `device_id`;
+- дашборд отправляет текущий нормализованный in-memory конфиг при нажатии «Старт», чтобы изменения только в рантайме применялись без обязательного «Save Settings»;
+- снимок применяется только в памяти, фиксируется метаданными активного конфига и **не** пишется в `user-data/config.json`, пока пользователь явно не сохранит настройки;
+- предзагрузка remote-сессии читает `remote.session_id` и `remote.pair_code` из этого снимка, чтобы pairing следовал несохранённым правкам UI.
 
-### Tests and verification
+### Тесты и верификация
 
-- added API coverage proving that `/api/runtime/start` uses the unsaved config snapshot without mutating persisted config payloads;
-- added runtime status coverage for `active_config_source`, `active_config_persisted`, and `active_config_hash`;
-- added architecture coverage asserting that the new `backend/config/`, `backend/core/runtime/`, `backend/asr/parakeet/`, and `backend/translation/` entrypoints exist and import cleanly;
-- added desktop path regression coverage for root `logs/` placement and legacy `user-data/logs/` migration in the launcher/runtime flow;
-- verified the current branch with:
+- API-тесты: `/api/runtime/start` использует несохранённый снимок конфига без изменения payload на диске;
+- покрытие статуса рантайма: `active_config_source`, `active_config_persisted`, `active_config_hash`;
+- архитектурные тесты: наличие и чистый импорт `backend/config/`, `backend/core/runtime/`, `backend/asr/parakeet/`, `backend/translation/`;
+- регрессия путей desktop: корневой `logs/` и миграция `user-data/logs/` в потоке лаунчера/рантайма;
+- на ветке прогнано:
   - `python -m compileall backend desktop tests`
   - `.\.venv\Scripts\python.exe -m unittest discover -s tests`
-- verification result:
-  - `231 tests`
-  - `OK`
- - recorded non-remote smoke verification output in `docs/MANUAL_SMOKE_RESULTS_NON_REMOTE.md` (manual-only items remain NOT TESTED unless executed with microphone/OBS/browser windows).
+- результат: `231 tests`, `OK`;
+- вывод ручной non-remote smoke зафиксирован в `docs/MANUAL_SMOKE_RESULTS_NON_REMOTE.md` (пункты только с микрофоном/OBS/браузером остаются NOT TESTED без фактического прогона).
 
-### Non-remote runtime stabilization pass
+### Пакет стабилизации non-remote рантайма
 
-- `RuntimeOrchestrator` lifecycle sanity: single `stop()` implementation and explicit idempotency checks covered by unit tests.
-- Added focused unit/contract tests for:
-  - `RuntimeLifecycleCoordinator` start/stop canonical ordering;
-  - non-remote SpeechSource/controller lifecycles (`BrowserSpeechSource`, `LocalParakeetSpeechSource`, `AudioCaptureController`, `ProcessingTasksController`);
-  - `SubtitleRouter` split regressions (partial/final/translation relevance, reset behavior, legacy display_order mapping).
-- Added `docs/MANUAL_SMOKE_CHECKLIST_NON_REMOTE.md` to keep the main local/browser runtime smoke flow reproducible without touching remote.
+- согласованность жизненного цикла `RuntimeOrchestrator`: единая реализация `stop()`, идемпотентность, покрыто тестами;
+- добавлены узкие тесты для:
+  - канонического порядка start/stop `RuntimeLifecycleCoordinator`;
+  - жизненного цикла non-remote SpeechSource/контроллеров (`BrowserSpeechSource`, `LocalParakeetSpeechSource`, `AudioCaptureController`, `ProcessingTasksController`);
+  - регрессий разделения `SubtitleRouter` (partial/final/релевантность перевода, сброс, legacy display_order).
+- добавлен `docs/MANUAL_SMOKE_CHECKLIST_NON_REMOTE.md` для воспроизводимого smoke без remote.
 
 ## 0.3.0
 
-Архитектурный релиз с переносом backend на явные services/schemas/bootstrap слои, модульным frontend без build step, config migrations/schema export, новым runtime/browser ASR robustness layer и документированным experimental browser worker path.
+Архитектурный релиз с переносом backend на явные слои services/schemas/bootstrap, модульным frontend без шага сборки, миграциями конфига и экспортом схемы, новым слоем устойчивости рантайма/browser ASR и документированным experimental-путём браузерного worker.
 
 ### Основные изменения
 
 - backend разделён на `api/routes`, `services`, `core`, `schemas` без смены базового local-first продукта;
 - `app.state` больше не собирается вручную в одном `app.py`, а поднимается через централизованный bootstrap;
-- config получил явные `config_version` migrations и JSON Schema export;
+- config получил явные migrations `config_version` и экспорт JSON Schema;
 - dashboard переведён с монолитного `app.js` на ES modules с `core/`, `dashboard/`, `panels/`, `normalizers/`;
-- Browser Speech lifecycle вынесен в отдельный supervisor/session manager и стал устойчивее к `onend`, `no-speech`, reconnect и stale worker state;
-- `/ws/events` и `/ws/asr_worker` получили более безопасную обработку reconnect/dead socket/stale browser generation сценариев;
-- client-event logging стал best-effort и больше не должен валить backend из-за проблем записи live event log;
-- overlay/runtime event path теперь лучше переживает duplicate/stale event storm и поздние translation updates;
-- отдельная experimental страница `/google-asr-experimental` включена в релиз как поддерживаемый experimental path на базе `SpeechRecognition.start(audioTrack)`;
-- локальный AI path и `browser_google` не удалены; Parakeet остаётся доступным;
-- unsupported backend ASR experiment removed from the active product surface; only Parakeet + browser worker modes remain.
+- жизненный цикл Browser Speech вынесен в отдельный supervisor/session manager и стал устойчивее к `onend`, `no-speech`, reconnect и устаревшему состоянию worker;
+- `/ws/events` и `/ws/asr_worker` получили более безопасную обработку сценариев reconnect, мёртвого сокета и устаревшей generation браузерного worker;
+- логирование client-event в режиме best-effort и больше не должно валить backend из-за ошибок записи live event log;
+- путь overlay/рантайма лучше переживает шторм дубликатов/устаревших событий и поздние обновления перевода;
+- отдельная experimental-страница `/google-asr-experimental` включена в релиз как поддерживаемый experimental-путь на базе `SpeechRecognition.start(audioTrack)`;
+- локальный AI-путь и `browser_google` не удалены; Parakeet остаётся доступным;
+- неподдерживаемые эксперименты backend ASR убраны с активной продуктовой поверхности; остаются только Parakeet и режимы browser worker.
 
-### Backend Architecture
+### Архитектура backend
 
 - добавлены и подключены `backend/services/runtime_service.py`, `settings_service.py`, `asr_service.py`, `translation_service.py`, `diagnostics_service.py`, `export_service.py`, `overlay_service.py`, `model_manager_service.py`;
-- введён `backend/core/app_bootstrap.py` как единая точка инициализации runtime paths, managers, services и orchestrator wiring;
-- выделены shared utilities:
+- введён `backend/core/app_bootstrap.py` как единая точка инициализации путей рантайма, менеджеров, сервисов и связывания orchestrator;
+- выделены общие утилиты:
   - `backend/core/paths.py`
   - `backend/core/logging_setup.py`
   - `backend/core/api_errors.py`
   - `backend/core/redaction.py`
-- `backend/runtime_paths.py` оставлен как совместимый shim поверх нового paths layer;
-- routes стали тоньше и делегируют orchestration в app services;
-- `backend/api/routes_profiles.py` переведён на более структурированный API error payload.
+- `backend/runtime_paths.py` оставлен как совместимый shim поверх нового слоя путей;
+- маршруты стали тоньше и делегируют оркестрацию сервисам приложения;
+- `backend/api/routes_profiles.py` переведён на более структурированный payload ошибок API.
 
-### Config, Migrations, Schema
+### Конфигурация, миграции, схема
 
 - config переведён на явные migrations через `backend/core/config_migrations.py`;
-- profiles и основной config теперь проходят общий migration/normalization pipeline;
-- добавлен schema export через `backend/core/config_schema_export.py`;
-- schema публикуется в `backend/data/config.schema.json`;
+- профили и основной config проходят общий pipeline миграции/нормализации;
+- добавлен экспорт схемы через `backend/core/config_schema_export.py`;
+- схема публикуется в `backend/data/config.schema.json`;
 - расширены Pydantic schema-модули в `backend/schemas/` для config/runtime/asr/translation/overlay/diagnostics;
 - migration v3 переводит `official_eu_parakeet_realtime` на `official_eu_parakeet_low_latency`;
-- unsupported historical backend ASR settings are normalized back to the supported Parakeet defaults.
+- устаревшие настройки исторического backend ASR при нормализации возвращаются к поддерживаемым дефолтам Parakeet.
 
-### Frontend Modularization
+### Модульность фронтенда
 
-- dashboard entrypoint переведён на `frontend/js/main.js`;
-- новый module stack:
+- точка входа dashboard — `frontend/js/main.js`;
+- новый стек модулей:
   - `frontend/js/core/`
   - `frontend/js/dashboard/`
   - `frontend/js/panels/`
   - `frontend/js/normalizers/`
 - store/API/WebSocket/events/logging вынесены в отдельные модули;
-- panel logic разделён по доменам вместо наращивания одного файла;
-- normalizers стали отдельными testable pure functions;
-- при этом стек остался прежним:
+- логика панелей разделена по доменам вместо разрастания одного файла;
+- normalizers — отдельные чистые функции, удобные для тестов;
+- стек без изменений по принципу:
   - plain HTML/CSS/JS
-  - FastAPI static serving
-  - без Node.js, React, Vite, Webpack и любого build pipeline.
+  - раздача через FastAPI static
+  - без Node.js, React, Vite, Webpack и любого конвейера сборки.
 
-### Browser Speech Robustness
+### Устойчивость Browser Speech
 
-- lifecycle browser recognition вынесен в `frontend/js/browser-asr-session-manager.js`;
+- жизненный цикл распознавания в браузере вынесен в `frontend/js/browser-asr-session-manager.js`;
 - введён supervisor с состояниями:
   - `idle`
   - `starting`
@@ -200,16 +198,16 @@ Post-`0.3.0` branch follow-up focused on internal modularization and runtime sta
   - `restarting`
   - `backoff`
   - `fatal`
-- убран старый хаотичный `start/stop/onend` loop;
-- `recognition.start()` больше не вызывается поверх `stopping`, а откладывается до controlled restart;
-- добавлены reason-aware cooldowns:
+- убран старый хаотичный цикл `start/stop/onend`;
+- `recognition.start()` больше не вызывается поверх `stopping`, а откладывается до контролируемого перезапуска;
+- добавлены cooldown с учётом причины:
   - `normal_onend`
   - `settings_change`
   - `websocket_reconnect`
   - `watchdog_stall`
   - `no_speech`
   - `network`
-- добавлены worker diagnostics:
+- добавлена диагностика worker:
   - `generation_id`
   - `session_id`
   - `recognition_state`
@@ -222,50 +220,50 @@ Post-`0.3.0` branch follow-up focused on internal modularization and runtime sta
   - `duplicate_partial_suppressed`
   - `duplicate_final_suppressed`
   - `late_forced_final_suppressed`
-  - mic health fields (`mic_track_ready_state`, `mic_track_muted`, `mic_rms`, `mic_active_recent_ms`, `last_mic_activity_at`)
-- browser worker reconnects теперь не должны оставлять runtime в stale `listening/stopping`;
-- classic `/google-asr` worker приоритизирует собственные `localStorage` settings и только потом зеркалит их в backend config;
-- experimental `/google-asr-experimental` worker синхронизирован с тем же base FSM и больше не должен ломаться из-за устаревшего subclass API.
+  - поля здоровья микрофона (`mic_track_ready_state`, `mic_track_muted`, `mic_rms`, `mic_active_recent_ms`, `last_mic_activity_at`)
+- переподключения browser worker не должны оставлять рантайм в устаревшем `listening/stopping`;
+- classic `/google-asr` в приоритете использует собственные настройки `localStorage`, затем зеркалит их в config бэкенда;
+- experimental `/google-asr-experimental` синхронизирован с тем же базовым FSM и не должен ломаться из-за устаревшего subclass API.
 
-### WebSocket and Runtime Event Resilience
+### Устойчивость WebSocket и событий рантайма
 
-- `backend/ws_manager.py` стал concurrency-safe и tolerant к disconnect/send failures;
-- dead sockets удаляются после `WebSocketDisconnect`, `RuntimeError`, `OSError`, `ConnectionResetError`, `BrokenPipeError`;
-- повторный disconnect/close больше не должен валить manager;
-- runtime/browser worker events получают sequence-aware/stale-aware handling;
-- duplicate `runtime_status -> listening` flood подавляется coalescing logic;
-- reconnect `/ws/events` не должен размножать active client loops и старые timers;
-- Windows close errors уровня `WinError 10022` обрабатываются как disconnect cleanup, а не как fatal runtime failure.
+- `backend/ws_manager.py` стал безопаснее при конкуренции и терпимее к disconnect/ошибкам send;
+- мёртвые сокеты удаляются после `WebSocketDisconnect`, `RuntimeError`, `OSError`, `ConnectionResetError`, `BrokenPipeError`;
+- повторный disconnect/close не должен валить менеджер;
+- события рантайма/browser worker обрабатываются с учётом sequence и устаревания;
+- лавина дубликатов `runtime_status -> listening` подавляется логикой coalescing;
+- reconnect `/ws/events` не должен плодить активные client loops и старые таймеры;
+- ошибки закрытия Windows уровня `WinError 10022` обрабатываются как очистка disconnect, а не как фатальный сбой рантайма.
 
-### Logging and Diagnostics
+### Логирование и диагностика
 
-- `/api/logs/client-event` переведён в best-effort режим;
-- проблемы записи live event log больше не должны приводить к backend `500`;
-- `SessionLogger` создаёт log directory заранее, не держит проблемный file handle постоянно и считает dropped events;
-- client log counters добавлены в runtime diagnostics;
-- redaction применяется к чувствительным полям (`token`, `secret`, `password`, `pair_code`, `api_key`, credential-like keys);
-- structured runtime logs усилены для browser recognition, runtime metrics и provider-specific paths.
+- `/api/logs/client-event` переведён в режим best-effort;
+- проблемы записи live event log больше не должны давать backend `500`;
+- `SessionLogger` создаёт каталог логов заранее, не держит проблемный file handle постоянно и считает отброшенные события;
+- счётчики клиентских логов добавлены в диагностику рантайма;
+- редактирование чувствительных полей (`token`, `secret`, `password`, `pair_code`, `api_key`, ключи вида credential);
+- структурированные логи рантайма усилены для browser recognition, метрик рантайма и провайдер-специфичных путей.
 
-### Overlay and Translation Consistency
+### Согласованность overlay и перевода
 
-- overlay/runtime path стал лучше защищён от stale translation mismatch;
-- late/stale translation updates больше не должны так легко прилипать к новому source segment;
-- duplicate runtime noise не должен лишний раз дёргать overlay payload;
-- subtitle router и overlay broadcaster получили дополнительное suppression/coalescing поведение.
+- путь overlay/рантайма лучше защищён от несоответствия устаревшего перевода;
+- поздние/устаревшие обновления перевода не должны так легко прилипать к новому сегменту источника;
+- шум дубликатов рантайма не должен лишний раз дёргать payload overlay;
+- subtitle router и overlay broadcaster получили дополнительное подавление/coalescing.
 
-### ASR Surface Cleanup
+### Очистка поверхности ASR
 
-- current ASR surface is limited to local Parakeet and the two browser worker modes;
-- removed/unsupported backend ASR experiments are normalized away during config migration and save/load;
-- dashboard and schema no longer expose deprecated backend transport settings.
+- текущая поверхность ASR ограничена локальным Parakeet и двумя режимами browser worker;
+- удалённые/неподдерживаемые эксперименты backend ASR вычищаются при миграции и save/load конфига;
+- дашборд и схема больше не показывают устаревшие настройки транспорта backend ASR.
 
-### Remote Mode and Startup
+### Remote-режим и запуск
 
-- remote mode сохранён как explicit LAN-only exception;
-- remote worker sync дополнительно фиксирует локальный AI provider, чтобы worker не уходил в browser worker path;
-- default startup остаётся local-first;
+- remote mode сохранён как явное исключение только для LAN;
+- синхронизация remote worker дополнительно фиксирует локальный AI-провайдер, чтобы worker не уходил в browser worker;
+- запуск по умолчанию остаётся local-first;
 - `start.bat` по смыслу не превращён в remote bootstrap;
-- dashboard/overlay/browser worker pages по-прежнему обслуживаются локальным FastAPI backend.
+- дашборд/overlay/browser worker по-прежнему обслуживаются локальным FastAPI backend.
 
 ### Документация
 
@@ -278,19 +276,19 @@ Post-`0.3.0` branch follow-up focused on internal modularization and runtime sta
 
 Добавлено/обновлено покрытие для:
 
-- backend architecture
-- config migrations
-- config schema export
-- browser worker contract
-- browser ASR service and gateway
-- runtime event coalescing
-- WebSocket manager dead-socket cleanup
-- session logger failure tolerance
-- frontend modular architecture
-- dashboard logging contract
-- runtime status contract
-- ASR provider selection and legacy-config migration cleanup
-- remote flow and versioning
+- архитектуры backend
+- миграций конфига
+- экспорта схемы конфига
+- контракта browser worker
+- browser ASR service и gateway
+- coalescing событий рантайма
+- очистки мёртвых сокетов WebSocket manager
+- устойчивости session logger к сбоям
+- модульной архитектуры frontend
+- контракта логирования дашборда
+- контракта статуса рантайма
+- выбора провайдера ASR и очистки legacy-конфига
+- remote-потока и версионирования
 
 Проверка на актуальном наборе изменений:
 
