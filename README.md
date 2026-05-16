@@ -18,21 +18,21 @@ This README describes the current desktop product surface for the `0.4.0` code l
 
 ## Release Highlights
 
-`0.4.0` adds **Browser Speech observability and resilience** on the backend (structured `basr.*` events, monotonic timekeeping, L2 ingress, operational FSM + recovery policy, JSONL replay, bounded WebSocket queues, preview translation supersession) and **desktop packaging/UX**: optional **`Stream Subtitle Translator Only Web.exe`**, **Browser Speech quick start profile lock** (`asr.desktop_profile_lock`), and **non-blocking dashboard** boot. Public HTTP routes and subtitle lifecycle invariants are unchanged; `config_version` stays **7**.
+`0.4.0` adds **Browser Speech observability** on the backend (trace/replay, stale ingress rejection, bounded WebSocket queues, preview translation supersession) and **desktop installer fixes**: **`Stream Subtitle Translator Only Web.exe`** (new), **Parakeet lock** after Web Speech quick start (`asr.desktop_profile_lock`), and **non-blocking dashboard** boot. Public HTTP routes and subtitle lifecycle invariants are unchanged; `config_version` stays **7**.
 
 The **`0.3.2`** baseline still applies (post-ASR word replacement, Web Speech policy/session manager, subtitle style presets, Parakeet architecture chapter). See [docs/DESKTOP_RELEASE_CHANGELOG_0.3.2.md](./docs/DESKTOP_RELEASE_CHANGELOG_0.3.2.md).
 
 - `backend/versioning.py::PROJECT_VERSION = "0.4.0"` is the single source of truth.
 - **Browser ASR observability:** `backend/core/runtime/browser_asr_*.py`, `timekeeping.py`.
 - **Desktop:** `Only Web.exe`, profile lock, `frontend/js/dashboard/desktop-profile-lock.js`, non-blocking `main.js` / `desktop.js`.
-- **Tests:** full suite **336** tests, `OK` (including `tests/test_browser_asr_observability.py`, `tests/test_desktop_profile_lock.py`).
+- **Tests:** **336** tests locally, `OK` on GitHub-tracked suite (including `tests/test_browser_asr_observability.py`).
 
 ## Release Package
 
-The desktop release ships as one or both public executables:
+GitHub releases attach bootstrap **exe** (built locally; sources under `desktop/` are not in the public repo):
 
-- `Stream Subtitle Translator.exe` — full splash with startup profiles
-- `Stream Subtitle Translator Only Web.exe` — Web Speech-only variant (optional second artifact in the same release folders)
+- `Stream Subtitle Translator.exe` — standard 0.4.0 bootstrap
+- `Stream Subtitle Translator Only Web.exe` — **new in 0.4.0**, Web Speech only
 
 On first launch the bootstrap launcher extracts the managed runtime next to itself and then starts the desktop runtime from disk.
 

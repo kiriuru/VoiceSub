@@ -29,13 +29,10 @@
 - `backend/ws_manager.py`: bounded per-connection queues, drop-oldest; `replay_last` в обход очереди (см. `docs/TECHNICAL_ARCHITECTURE.md` §9).
 - `backend/core/translation_dispatcher.py`: preview supersession (pre-provider skip + отброс устаревшего результата после вычисления); метрика `translation_provider_skipped_before_call`.
 
-### Desktop: Web Speech-only bootstrap (отдельный exe)
+### Desktop: Only Web.exe (новая локальная сборка)
 
-- **`Stream Subtitle Translator Only Web.exe`** — one-file bootstrap без выбора профиля на splash; сразу Web Speech quick start (`--web-speech-only`).
-- `desktop/bootstrap_launcher_web_only.py`, `Stream Subtitle Translator Bootstrap Web Only.spec`.
-- Сборка: `build-bootstrap-launcher-web-only.bat` → `dist\bootstrap-launcher-web-only\`.
-- Публикация: `publish-desktop-releases-web-only.ps1` (копирует Only Web exe в те же release-папки, что и стандартный launcher).
-- `desktop/launcher.py`: `web_speech_only`, пропуск ожидания выбора профиля; компактный splash (`SPLASH_WINDOW_WEB_ONLY` в `desktop/splash_screen.py`).
+- **`Stream Subtitle Translator Only Web.exe`** — отдельный bootstrap: Web Speech без splash (`--web-speech-only`; локально `desktop/bootstrap_launcher_web_only.py`, `build-bootstrap-launcher-web-only.bat`, `publish-desktop-releases-web-only.ps1`).
+- Стандартный `Stream Subtitle Translator.exe` в 0.4.0 — те же профили запуска, что в 0.3.2; в delta входят исправления lock и быстрого дашборда ниже.
 
 ### Desktop: блокировка Local Parakeet в Browser Speech quick start
 
@@ -52,7 +49,7 @@
 
 - Восстановлен публичный `RuntimeOrchestrator.browser_asr_worker_connected()` (регрессия ломала WebSocket worker сразу после connect).
 - Регрессии: `tests/test_browser_asr_service.py`, `tests/test_ws_manager.py`, `tests/test_translation_dispatcher.py`, `tests/test_api_and_websockets.py`.
-- Desktop profile lock и UI boot: `tests/test_desktop_profile_lock.py`; расширены `tests/test_launcher.py`, `tests/test_browser_worker_contract.py`.
+- Регрессии в репозитории: `tests/test_browser_asr_observability.py`, расширен `tests/test_browser_worker_contract.py`. Desktop-only тесты (`test_launcher`, `test_desktop_profile_lock`, …) — локально, не в Git.
 
 ### Документация
 
