@@ -1,53 +1,51 @@
 # SST Desktop 0.4.0
 
-Delta для установочных **bootstrap-exe** поверх **0.3.2**. Исходники на GitHub — под `start.bat`; папка `desktop/` и скрипты сборки остаются локальными.
+## Stream Subtitle Translator 0.4.0
 
-## Русский
+EN:
 
-### Вложения релиза
+This release updates the desktop bootstrap payload to app version **0.4.0** and adds a second Web Speech-only installer.
 
-| Файл | Что нового в этой сборке |
-|------|---------------------------|
-| `Stream Subtitle Translator.exe` | Стандартный bootstrap **0.4.0** (те же профили запуска, что и раньше) + исправления ниже |
-| `Stream Subtitle Translator Only Web.exe` | **Новый** one-file bootstrap: сразу Web Speech, без splash выбора профиля |
+Included in this release:
 
-### Изменения 0.4.0 (не из 0.3.2)
+- added **compact dashboard layout** (`ui.layout = compact`): vertical shell, icon navigation rail, sticky save/runtime chrome; layout choice is saved in config;
+- desktop shell **resizes the main window** when switching standard ↔ compact (separate min/size targets for each layout);
+- fixed **Web Speech quick start** so Local Parakeet cannot be selected afterward (`asr.desktop_profile_lock` is written to config and survives save/load; Recognition removes the local option until a GPU/CPU launch clears the lock);
+- fixed **slow dashboard startup** in the desktop shell (panels mount immediately; settings and launch context load in the background instead of blocking on pywebview);
+- backend: Browser ASR observability (trace/replay, stale ingress rejection), bounded WebSocket queues, preview-translation supersession;
+- fix: browser speech worker WebSocket no longer drops immediately after connect.
 
-**Backend (общий для desktop и `start.bat`)**
+### Desktop release format
 
-- Наблюдаемость Browser ASR: trace id, monotonic time, operational FSM, JSONL replay, отсев stale/overlap на ingress.
-- Bounded WebSocket-очереди; preview-переводы с supersession.
-- Исправление: `browser_asr_worker_connected()` — worker WebSocket не обрывается сразу после connect.
+- `Stream Subtitle Translator.exe` — bootstrap launcher (same startup profiles as before; payload inside is 0.4.0);
+- `Stream Subtitle Translator Only Web.exe` — **new** bootstrap: starts Web Speech without the profile splash; compact splash only.
 
-**Desktop-сборка (только в exe)**
+### Change history
 
-- **Блокировка Parakeet** после Web Speech quick start / Only Web: `asr.desktop_profile_lock` в схеме config и после save/load; в Recognition убирается пункт Local Parakeet до следующего старта с GPU/CPU.
-- **Быстрый дашборд**: панели сразу, `DesktopBridge` и настройки в фоне (без ожидания pywebview до 12 с).
-- **Only Web.exe** — отдельная сборка и publish-скрипт (локально: `build-bootstrap-launcher-web-only.bat`, `publish-desktop-releases-web-only.ps1`).
+- full changelog: [docs/CHANGELOG.md](./CHANGELOG.md)
+- version notes: this file
 
-`config_version` — **7**. Версия приложения — **0.4.0** (`backend/versioning.py`).
+---
 
-## English
+## RU
 
-### Release assets
+Релиз обновляет payload внутри desktop bootstrap до версии приложения **0.4.0** и добавляет второй установщик только под Web Speech.
 
-| File | What is new in this build |
-|------|---------------------------|
-| `Stream Subtitle Translator.exe` | Standard **0.4.0** bootstrap (same startup profiles as before) plus the fixes below |
-| `Stream Subtitle Translator Only Web.exe` | **New** one-file bootstrap: Web Speech only, no profile splash |
+Что вошло:
 
-### 0.4.0 changes (not in 0.3.2)
+- **компактный режим дашборда** (`ui.layout = compact`): вертикальная оболочка, боковая навигация иконками, липкий блок Start/Save; выбор режима сохраняется в config;
+- **ресайз окна** desktop-shell при переключении standard ↔ compact (отдельные размеры и min-size для каждого режима);
+- исправлен **Web Speech quick start**: после него нельзя выбрать Local Parakeet (`asr.desktop_profile_lock` пишется в config и переживает save/load; пункт local убирается из Recognition до запуска с GPU/CPU);
+- исправлен **долгий старт дашборда** в desktop (панели сразу; настройки и launch context в фоне, без блокировки на pywebview);
+- backend: наблюдаемость Browser ASR (trace/replay, отсев stale на ingress), bounded WebSocket, supersession preview-переводов;
+- fix: WebSocket browser worker не обрывается сразу после connect.
 
-**Backend (desktop and `start.bat`)**
+### Формат desktop release
 
-- Browser ASR observability: trace ids, monotonic clocks, operational FSM, JSONL replay, stale/overlap ingress rejection.
-- Bounded WebSocket queues; preview translation supersession.
-- Fix: restored `browser_asr_worker_connected()` so the worker socket stays up after connect.
+- `Stream Subtitle Translator.exe` — bootstrap (профили запуска те же; внутри — приложение 0.4.0);
+- `Stream Subtitle Translator Only Web.exe` — **новый** bootstrap: сразу Web Speech, без splash выбора профиля.
 
-**Desktop installers only**
+### История изменений
 
-- **Parakeet lock** after Web Speech quick start / Only Web: `desktop_profile_lock` persists in config; Local Parakeet hidden in Recognition until a GPU/CPU launch clears the lock.
-- **Faster dashboard**: panels mount immediately; bridge and settings load in the background.
-- **Only Web.exe**: separate build/publish scripts (local-only in the dev tree).
-
-`config_version` stays **7**. App version **0.4.0**.
+- полный changelog: [docs/CHANGELOG.md](./CHANGELOG.md)
+- заметки версии: этот файл

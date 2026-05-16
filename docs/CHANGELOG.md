@@ -29,21 +29,26 @@
 - `backend/ws_manager.py`: bounded per-connection queues, drop-oldest; `replay_last` в обход очереди (см. `docs/TECHNICAL_ARCHITECTURE.md` §9).
 - `backend/core/translation_dispatcher.py`: preview supersession (pre-provider skip + отброс устаревшего результата после вычисления); метрика `translation_provider_skipped_before_call`.
 
+### Dashboard: компактный режим и ресайз окна (desktop)
+
+- `ui.layout`: `standard` | `compact` в схеме config; переключатель в Settings.
+- `frontend/css/compact-layout.css`, `frontend/js/layout/layout-controller.js` — вертикальная оболочка, icon rail, sticky chrome.
+- Desktop shell меняет размер/min-size окна при смене layout (`pywebview` `resize_main_window`; compact ~400×844, standard ~1440×940).
+
 ### Desktop: Only Web.exe (новая локальная сборка)
 
-- **`Stream Subtitle Translator Only Web.exe`** — отдельный bootstrap: Web Speech без splash (`--web-speech-only`; локально `desktop/bootstrap_launcher_web_only.py`, `build-bootstrap-launcher-web-only.bat`, `publish-desktop-releases-web-only.ps1`).
-- Стандартный `Stream Subtitle Translator.exe` в 0.4.0 — те же профили запуска, что в 0.3.2; в delta входят исправления lock и быстрого дашборда ниже.
+- **`Stream Subtitle Translator Only Web.exe`** — bootstrap без splash профилей (`--web-speech-only`; локально `desktop/bootstrap_launcher_web_only.py`, `build-bootstrap-launcher-web-only.bat`, `publish-desktop-releases-web-only.ps1`).
 
-### Desktop: блокировка Local Parakeet в Browser Speech quick start
+### Desktop: блокировка Local Parakeet после Web Speech quick start
 
-- **`asr.desktop_profile_lock`** (`""` | `"browser_speech"`) в `backend/schemas/config_schema.py` — сохраняется через `ConfigSchema` / `LocalConfigManager`.
-- Launcher при **Quick Start (Web Speech)** и **Only Web** пишет lock + `asr.mode: browser_google`; при **NVIDIA GPU** / **CPU-only** снимает lock и возвращает `asr.mode: local`.
-- `backend/config/normalizers/asr.py`, `frontend/js/dashboard/desktop-profile-lock.js`, `asr-panel.js`, `actions.js`, `config-normalizer.js`.
+- **`asr.desktop_profile_lock`** в `backend/schemas/config_schema.py` — save/load через `ConfigSchema`.
+- Launcher пишет lock при Web Speech quick start / Only Web; снимает при GPU/CPU.
+- `frontend/js/dashboard/desktop-profile-lock.js`, `asr-panel.js`, `actions.js`, `config-normalizer.js`.
 
-### Desktop: неблокирующий старт dashboard
+### Desktop: старт дашборда без блокировки на pywebview
 
-- `frontend/js/main.js` — панели сразу; `getContext()` и `loadInitialData()` в фоне.
-- `frontend/js/desktop.js` — `immediateDesktopContext()`, `scheduleContextRefresh()`; без блокировки UI на `pywebviewready`.
+- `frontend/js/main.js` — mount панелей до `loadInitialData()`.
+- `frontend/js/desktop.js` — `immediateDesktopContext()`, `scheduleContextRefresh()`.
 
 ### Исправления
 

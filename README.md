@@ -18,7 +18,7 @@ This README describes the current desktop product surface for the `0.4.0` code l
 
 ## Release Highlights
 
-`0.4.0` adds **Browser Speech observability** on the backend (trace/replay, stale ingress rejection, bounded WebSocket queues, preview translation supersession) and **desktop installer fixes**: **`Stream Subtitle Translator Only Web.exe`** (new), **Parakeet lock** after Web Speech quick start (`asr.desktop_profile_lock`), and **non-blocking dashboard** boot. Public HTTP routes and subtitle lifecycle invariants are unchanged; `config_version` stays **7**.
+`0.4.0` adds **compact dashboard layout** with desktop window resize, **Browser Speech observability** on the backend, **Parakeet lock** after Web Speech quick start, **non-blocking dashboard** boot in the desktop shell, and a second installer **`Stream Subtitle Translator Only Web.exe`**. Public HTTP routes and subtitle lifecycle invariants are unchanged; `config_version` stays **7**.
 
 The **`0.3.2`** baseline still applies (post-ASR word replacement, Web Speech policy/session manager, subtitle style presets, Parakeet architecture chapter). See [docs/DESKTOP_RELEASE_CHANGELOG_0.3.2.md](./docs/DESKTOP_RELEASE_CHANGELOG_0.3.2.md).
 
