@@ -4,69 +4,35 @@
 
 Этот файл — канонический changelog для релизов SST Desktop. Версионные release notes в `docs/DESKTOP_RELEASE_CHANGELOG_*.md` остаются как delta-документы по конкретным релизам, но основной историей изменений считается этот файл.
 
+**Формат записей (как [GitHub Release v0.2.9.2](https://github.com/kiriuru/stream_sub_translator/releases/tag/v0.2.9.2)):** одно предложение о версии; буллеты «что вошло» — только факты изменений; для desktop-exe — блок «формат release» (структура поставки, без перечисления старых профилей как новинки). Подробные installer notes: `docs/DESKTOP_RELEASE_CHANGELOG_*.md`.
+
 ## Unreleased
 
 Изменений после релиза `0.4.0` в этом журнале пока нет.
 
 ## 0.4.0
 
-### Версия
+Релиз поверх `0.3.2`. `PROJECT_VERSION = "0.4.0"`; `config_version` остаётся **7**. Публичные HTTP/WebSocket-контракты и жизненный цикл субтитров сохранены. Installer delta: [docs/DESKTOP_RELEASE_CHANGELOG_0.4.0.md](./DESKTOP_RELEASE_CHANGELOG_0.4.0.md).
 
-- `backend/versioning.py`: `PROJECT_VERSION = "0.4.0"` (источник правды для `GET /api/version` и проверки обновлений).
-- `config_version` **не менялся** (остаётся `7`); публичные HTTP-маршруты и контракт субтитров/overlay сохранены.
+### Что вошло
 
-### Browser ASR observability (backend)
-
-- Новые модули: `backend/core/timekeeping.py` (`MonotonicClock`), `backend/core/runtime/browser_asr_observability.py`, `browser_asr_trace.py`, `browser_asr_normalized_event.py`, `browser_asr_operational_fsm.py`, `browser_asr_recovery_policy.py`, `browser_asr_replay.py`, `translation_preview_lineage.py`.
-- Интеграция в `browser_asr_service.py`, `browser_speech_source.py`, `runtime_orchestrator.py`, `browser_asr_gateway.py`, `app_bootstrap.py`.
-- L2 ingress: отсев stale transport / speech_source, overlap, структурированные reject-логи с `basr_event_id` / `basr_causal_parent_id`.
-- L4 operational FSM + recovery policy (advisory actions, audit accepted/rejected).
-- L6 JSONL recorder + operational replay (`tests/fixtures/browser_asr_replay_min.jsonl`, `tests/test_browser_asr_observability.py`).
-- Опциональные trace/lineage поля на `TranscriptSegment` (`backend/models.py`).
-
-### WebSocket и перевод
-
-- `backend/ws_manager.py`: bounded per-connection queues, drop-oldest; `replay_last` в обход очереди (см. `docs/TECHNICAL_ARCHITECTURE.md` §9).
-- `backend/core/translation_dispatcher.py`: preview supersession (pre-provider skip + отброс устаревшего результата после вычисления); метрика `translation_provider_skipped_before_call`.
-
-### Dashboard: компактный режим и ресайз окна (desktop)
-
-- `ui.layout`: `standard` | `compact` в схеме config; переключатель в Settings.
-- `frontend/css/compact-layout.css`, `frontend/js/layout/layout-controller.js` — вертикальная оболочка, icon rail, sticky chrome.
-- Desktop shell меняет размер/min-size окна при смене layout (`pywebview` `resize_main_window`; compact ~400×844, standard ~1440×940).
-
-### Desktop: Only Web.exe (новая локальная сборка)
-
-- **`Stream Subtitle Translator Only Web.exe`** — bootstrap без splash профилей (`--web-speech-only`; локально `desktop/bootstrap_launcher_web_only.py`, `build-bootstrap-launcher-web-only.bat`, `publish-desktop-releases-web-only.ps1`).
-
-### Desktop: блокировка Local Parakeet после Web Speech quick start
-
-- **`asr.desktop_profile_lock`** в `backend/schemas/config_schema.py` — save/load через `ConfigSchema`.
-- Launcher пишет lock при Web Speech quick start / Only Web; снимает при GPU/CPU.
-- `frontend/js/dashboard/desktop-profile-lock.js`, `asr-panel.js`, `actions.js`, `config-normalizer.js`.
-
-### Desktop: старт дашборда без блокировки на pywebview
-
-- `frontend/js/main.js` — mount панелей до `loadInitialData()`.
-- `frontend/js/desktop.js` — `immediateDesktopContext()`, `scheduleContextRefresh()`.
-
-### Исправления
-
-- Восстановлен публичный `RuntimeOrchestrator.browser_asr_worker_connected()` (регрессия ломала WebSocket worker сразу после connect).
-- Регрессии: `tests/test_browser_asr_service.py`, `tests/test_ws_manager.py`, `tests/test_translation_dispatcher.py`, `tests/test_api_and_websockets.py`.
-- Регрессии в репозитории: `tests/test_browser_asr_observability.py`, расширен `tests/test_browser_worker_contract.py`. Desktop-only тесты (`test_launcher`, `test_desktop_profile_lock`, …) — локально, не в Git.
-
-### Документация
-
-- `docs/TECHNICAL_ARCHITECTURE.md`: §9 WebSocket/replay, §11.4 browser ASR observability, §12.2 preview supersession, §14–16 desktop (Only Web, profile lock, dashboard boot).
-- `AGENTS.md`: observability, preview supersession, desktop profile lock и packaging.
-- `README.md` / `README.ru.md`, `docs/DESKTOP_RELEASE_CHANGELOG_0.4.0.md`, `backend/data/config.example.json`.
+- **Browser ASR observability:** `timekeeping.py`, `browser_asr_*` (trace, normalized ingest, operational FSM, recovery policy, JSONL replay); L2 ingress (stale transport / overlap); trace-поля на `TranscriptSegment`.
+- **WebSocket:** bounded per-connection queues, drop-oldest; `replay_last` (§9 `TECHNICAL_ARCHITECTURE.md`).
+- **Перевод:** preview supersession в `translation_dispatcher.py`.
+- **Компактный дашборд:** `ui.layout` `standard` | `compact`; `compact-layout.css`, `layout/layout-controller.js`; ресайз окна desktop-shell при смене layout (~1440×940 vs ~400×844).
+- **Desktop exe:** второй bootstrap `Stream Subtitle Translator Only Web.exe` (Web Speech без splash профилей); в стандартном exe — payload 0.4.0 с теми же splash-профилями, что раньше.
+- **Web Speech quick start:** `asr.desktop_profile_lock` в схеме config и после save/load; Recognition без Local Parakeet до запуска с GPU/CPU (`desktop-profile-lock.js`, нормализаторы, packaged launcher).
+- **Desktop dashboard:** панели монтируются сразу; `desktop.js` / `main.js` не блокируют UI на `pywebviewready`.
+- **Fix:** `RuntimeOrchestrator.browser_asr_worker_connected()` — worker WS не обрывается сразу после connect.
+- **Тесты (GitHub):** `test_browser_asr_observability.py`, расширены ws/translation/browser contracts. Desktop packaging tests — только локально.
 
 ### Тесты
 
-- Полный прогон: `python -m unittest discover -s tests` — **336** тестов, `OK`.
+- `python -m unittest discover -s tests` — **336** tests, `OK` (локально с desktop-only тестами; в публичном репозитории — tracked suite без `desktop/`).
 
 ## 0.3.2
+
+Релиз поверх `0.3.1`. `PROJECT_VERSION = "0.3.2"`; `config_version = 7` (`source_text_replacement`). Installer delta: [docs/DESKTOP_RELEASE_CHANGELOG_0.3.2.md](./DESKTOP_RELEASE_CHANGELOG_0.3.2.md).
 
 ### Версия и конфигурация
 
@@ -105,7 +71,7 @@
 
 ## 0.3.1
 
-Релиз `0.3.1` — это стабилизация поверх уже выпущенного `0.3.0`. Архитектурные изменения (`RuntimeOrchestrator` → контроллеры, разделение `SubtitleRouter`, пакет `backend/translation/` с пакетом `providers/`, `cache_manager`, `atomic_io`, `ConfigStateService`, `POST /api/updates/check`, OpenAI helper endpoints, карточки `translation_1..translation_5`, тема/палитра UI, вкладка Help, supervisor Web Speech, запуск worker'а Google Chrome в отдельном окне с изолированным профилем) **уже входили в `0.3.0`** и здесь не дублируются. Базовый local-first продукт и публичные `/api`/WebSocket-контракты не меняются.
+Релиз стабилизации поверх `0.3.0`. `PROJECT_VERSION = "0.3.1"`. Installer delta: [docs/DESKTOP_RELEASE_CHANGELOG_0.3.1.md](./DESKTOP_RELEASE_CHANGELOG_0.3.1.md) (архитектура `0.3.0` там не дублируется). Публичные `/api`/WebSocket без изменений.
 
 ### Версия и идентификация
 
@@ -114,7 +80,7 @@
 
 ### Bootstrap-лаунчер
 
-- В репозитории впервые отслеживаются `desktop/bootstrap_launcher.py` и `desktop/bootstrap_payload.py` (раньше существовали локально, но не были зафиксированы в git).
+- В полном dev-дереве: `desktop/bootstrap_launcher.py`, `desktop/bootstrap_payload.py` (в публичном GitHub-клоне каталог `desktop/` может отсутствовать).
 - Проверка обновлений в bootstrap игнорирует `v2.x` теги, когда встроенная версия — `0.x`: старые `v2.8.x` релизы больше не показываются как «новее `0.3.x`». Регрессия — `tests/test_bootstrap_release_tag_filter.py`.
 
 ### Web Speech: дополнительная защита Windows-окна Chrome worker'а

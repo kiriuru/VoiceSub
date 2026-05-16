@@ -18,14 +18,9 @@ This README describes the current desktop product surface for the `0.4.0` code l
 
 ## Release Highlights
 
-`0.4.0` adds **compact dashboard layout** with desktop window resize, **Browser Speech observability** on the backend, **Parakeet lock** after Web Speech quick start, **non-blocking dashboard** boot in the desktop shell, and a second installer **`Stream Subtitle Translator Only Web.exe`**. Public HTTP routes and subtitle lifecycle invariants are unchanged; `config_version` stays **7**.
+`0.4.0` — see [docs/DESKTOP_RELEASE_CHANGELOG_0.4.0.md](./docs/DESKTOP_RELEASE_CHANGELOG_0.4.0.md) (same bullet style as [v0.2.9.2](https://github.com/kiriuru/stream_sub_translator/releases/tag/v0.2.9.2)): compact dashboard + window resize, Browser ASR observability, Web Speech quick-start Parakeet lock, non-blocking dashboard boot, second installer **Only Web.exe**. `PROJECT_VERSION = "0.4.0"`; `config_version` stays **7**; public `/api` and subtitle contracts unchanged.
 
-The **`0.3.2`** baseline still applies (post-ASR word replacement, Web Speech policy/session manager, subtitle style presets, Parakeet architecture chapter). See [docs/DESKTOP_RELEASE_CHANGELOG_0.3.2.md](./docs/DESKTOP_RELEASE_CHANGELOG_0.3.2.md).
-
-- `backend/versioning.py::PROJECT_VERSION = "0.4.0"` is the single source of truth.
-- **Browser ASR observability:** `backend/core/runtime/browser_asr_*.py`, `timekeeping.py`.
-- **Desktop:** `Only Web.exe`, profile lock, `frontend/js/dashboard/desktop-profile-lock.js`, non-blocking `main.js` / `desktop.js`.
-- **Tests:** **336** tests locally, `OK` on GitHub-tracked suite (including `tests/test_browser_asr_observability.py`).
+Prior release: [docs/DESKTOP_RELEASE_CHANGELOG_0.3.2.md](./docs/DESKTOP_RELEASE_CHANGELOG_0.3.2.md). Full history: [docs/CHANGELOG.md](./docs/CHANGELOG.md).
 
 ## Release Package
 
@@ -85,13 +80,17 @@ Current extracted layout:
 - app logs: `logs/`
 - local models: `user-data/models/`
 
-Build from source:
+Build desktop installers (local dev tree only — not in the public GitHub repo):
 
-- Standard: `build-bootstrap-launcher.bat` → `dist\bootstrap-launcher\Stream Subtitle Translator.exe`
-- Web Speech-only: `build-bootstrap-launcher-web-only.bat` → `dist\bootstrap-launcher-web-only\Stream Subtitle Translator Only Web.exe`
-- Publish both to release folders: `publish-desktop-releases.ps1` and `publish-desktop-releases-web-only.ps1`
+- `build-bootstrap-launcher.bat` → `Stream Subtitle Translator.exe`
+- `build-bootstrap-launcher-web-only.bat` → `Stream Subtitle Translator Only Web.exe`
+- `publish-desktop-releases.ps1` / `publish-desktop-releases-web-only.ps1`
+
+Develop the app from a GitHub clone with **`start.bat`** (backend + frontend; no `desktop/` folder).
 
 ## Startup Profiles
+
+Splash profiles are unchanged from earlier releases. **New in 0.4.0:** `Quick Start (Web Speech)` and **Only Web** set `asr.desktop_profile_lock` (details in [0.4.0 delta](./docs/DESKTOP_RELEASE_CHANGELOG_0.4.0.md)).
 
 - `Quick Start (Web Speech)`:
   - fastest startup path;
@@ -312,7 +311,7 @@ Visual layout was not redesigned in the `0.3.x` line; major work remains interna
 
 ### Web Speech
 
-- After **Quick Start (Web Speech)** or **Only Web**, the dashboard enforces `asr.desktop_profile_lock = browser_speech`: Recognition mode has no Local Parakeet entry, and save/load keeps `asr.mode` on `browser_google` until you launch with **NVIDIA GPU** or **CPU-only** (launcher clears the lock). Implementation: `frontend/js/dashboard/desktop-profile-lock.js`, `desktop/launcher.py`, `backend/config/normalizers/asr.py`, `backend/schemas/config_schema.py` (`AsrConfig.desktop_profile_lock`).
+- After **Quick Start (Web Speech)** or **Only Web**, the dashboard enforces `asr.desktop_profile_lock = browser_speech`: Recognition has no Local Parakeet entry until a **GPU/CPU** launch clears the lock. Code: `frontend/js/dashboard/desktop-profile-lock.js`, packaged desktop launcher (local tree), `backend/config/normalizers/asr.py`, `backend/schemas/config_schema.py`.
 - Uses a separate dedicated **Google Chrome** worker window (`/google-asr`).
 - On desktop, Overview → Recognition can pick **Auto** or **Google Chrome** for that worker (`asr.browser.worker_launch_browser`: `auto` or `google_chrome`); both resolve to launching Chrome. The launcher reads this from `config.json` each time the worker URL is opened. The same control is hidden in the web-only dashboard (`start.bat` in a normal browser), where `window.open` always follows the OS default browser.
 - Desktop behavior is fixed:
@@ -530,11 +529,14 @@ To update SST Desktop:
 
 ## Building From Source
 
-- Provision the local dev runtime with `start.bat`.
-- Build the desktop one-folder package with `build-desktop.bat`.
-- Build the bootstrap one-file launcher with `build-bootstrap-launcher.bat`.
-- Build the Web Speech-only bootstrap with `build-bootstrap-launcher-web-only.bat`.
-- Publish clean release folders with `publish-desktop-releases.ps1` and `publish-desktop-releases-web-only.ps1`.
+**From a public GitHub clone** (tracked sources only):
+
+- Provision and run with `start.bat` (backend + dashboard; no desktop packaging in the repo).
+
+**Desktop exe packaging** (full local dev tree with `desktop/`, build scripts — not on GitHub):
+
+- `build-desktop.bat`, `build-bootstrap-launcher.bat`, `build-bootstrap-launcher-web-only.bat`
+- `publish-desktop-releases.ps1`, `publish-desktop-releases-web-only.ps1`
 
 Build output:
 
@@ -572,25 +574,13 @@ Build output:
 
 ## Automated Tests
 
-Run the current regression suite with:
+GitHub-tracked suite:
 
-- `.venv\Scripts\python.exe -m unittest discover -s tests -p "test_*.py"`
+```
+.\.venv\Scripts\python.exe -m unittest discover -s tests -p "test_*.py"
+```
 
-The current `0.4.0` verification run used:
-
-- `python -m compileall backend desktop tests`
-- `.venv\Scripts\python.exe -m unittest discover -s tests -p "test_*.py"`
-- `cmd /c build-desktop.bat`
-- `cmd /c build-bootstrap-launcher.bat`
-- `powershell -NoProfile -ExecutionPolicy Bypass -File .\publish-desktop-releases.ps1`
-
-Result for `0.4.0`:
-
-- **336** tests, `OK`
-- release artifacts refreshed:
-  - `dist\bootstrap-launcher\Stream Subtitle Translator.exe`
-  - `dist\bootstrap-launcher-web-only\Stream Subtitle Translator Only Web.exe`
-  - both exes under `F:\AI\stream-sub-translator-desktop-release` and `-clean`
+For `0.4.0`: **336** tests `OK` in a full local tree (includes desktop-only modules); the public repo runs the tracked subset (includes `tests/test_browser_asr_observability.py`). Bootstrap build verification is local-only — see [docs/TECHNICAL_ARCHITECTURE.md](./docs/TECHNICAL_ARCHITECTURE.md) §20.
 
 ## Privacy and Runtime Scope
 
