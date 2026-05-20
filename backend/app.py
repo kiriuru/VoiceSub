@@ -138,7 +138,8 @@ async def overlay() -> FileResponse:
 async def ws_events(websocket: WebSocket) -> None:
     manager = websocket.app.state.ws_manager
     await manager.connect(websocket)
-    await websocket.send_json({"type": "hello", "message": "connected"})
+    if not await manager.send_direct(websocket, {"type": "hello", "message": "connected"}):
+        return
     await manager.replay_last(
         websocket,
         message_types=[
@@ -151,7 +152,7 @@ async def ws_events(websocket: WebSocket) -> None:
         while True:
             _ = await websocket.receive_text()
     except WebSocketDisconnect:
-        await manager.disconnect(websocket)
+        pass
     finally:
         await manager.disconnect(websocket)
 
@@ -163,7 +164,10 @@ async def ws_asr_worker(websocket: WebSocket) -> None:
     await websocket.accept()
     transport_id = await browser_asr_service.register_connection(websocket)
     await browser_asr_service.worker_connected()
-    await websocket.send_json({"type": "hello", "message": "browser_asr_worker_connected"})
+    if not await browser_asr_service.send_hello(websocket):
+        # send_hello already routed cleanup through ``disconnect`` on failure;
+        # bail out so the endpoint does not race a partially-disconnected state.
+        return
     try:
         while True:
             message = await websocket.receive_json()

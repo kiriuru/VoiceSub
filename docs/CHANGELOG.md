@@ -2,17 +2,68 @@
 
 Единая история изменений desktop-версии.
 
-Этот файл — канонический changelog для релизов SST Desktop. Версионные release notes в `docs/DESKTOP_RELEASE_CHANGELOG_*.md` остаются как delta-документы по конкретным релизам, но основной историей изменений считается этот файл.
+Этот файл — канонический changelog для релизов SST Desktop. Installer delta для текущей линии: [DESKTOP_RELEASE_CHANGELOG_0.4.1.md](./DESKTOP_RELEASE_CHANGELOG_0.4.1.md). Старые per-version delta (`0.3.x`, `0.4.0`) удалены — история только здесь.
 
-**Формат записей (как [GitHub Release v0.2.9.2](https://github.com/kiriuru/stream_sub_translator/releases/tag/v0.2.9.2)):** одно предложение о версии; буллеты «что вошло» — только факты изменений; для desktop-exe — блок «формат release» (структура поставки, без перечисления старых профилей как новинки). Подробные installer notes: `docs/DESKTOP_RELEASE_CHANGELOG_*.md`.
+**Формат записей (как [GitHub Release v0.2.9.2](https://github.com/kiriuru/stream_sub_translator/releases/tag/v0.2.9.2)):** одно предложение о версии; буллеты «что вошло» — только факты изменений; для desktop-exe — блок «формат release» (структура поставки, без перечисления старых профилей как новинки).
 
 ## Unreleased
 
-Изменений после релиза `0.4.0` в этом журнале пока нет.
+Инженерный hardening поверх релиза `0.4.1`. `PROJECT_VERSION` в `backend/versioning.py` по-прежнему **0.4.1**; `config_version` **7**. Публичные HTTP/WebSocket route contracts и subtitle/translation lifecycle **не менялись**.
+
+### Runtime orchestrator и local Parakeet
+
+- **`RuntimeOrchestrator`** (`backend/core/runtime_orchestrator.py`, ~380 строк) — тонкий фасад с mixin-модулями: `runtime_orchestrator_{lifecycle,local_asr,browser_worker,diagnostics,state_metrics,remote_ingress}_mixin.py`.
+- Вынесены модули local ASR: `local_asr_pipeline`, `local_asr_realtime_settings`, `local_asr_recognition_processing`, `local_asr_hallucination_filter`, `local_asr_vad_tuning`, `local_parakeet_transcript_segment`, `segment_audio_enqueue`, `partial_emit_coordinator`, `realtime_transcript_emit_policy`, `asr_diagnostics_assembler`, `browser_worker_transcript_builders`.
+- `PartialEmitCoordinator`: исправлен порядок mark → duplicate check для partial emit.
+- `prepare_recognition_audio_bytes`: legacy `experimental_noise_reduction_enabled` + type guard (согласовано с `apply_recognition_processing_settings`).
+- `parakeet_provider`: кэш результата `nvidia-smi` (не блокировать event loop на каждом diagnostics/status).
+
+### WebSocket и Browser ASR transport
+
+- **`WebSocketManager`**: per-connection `asyncio.Lock` для сериализации `send_json` (`_send_json_locked`); `send_direct` для bootstrap `hello` на `/ws/events`; регрессии в `test_ws_manager.py`.
+- **`BrowserAsrService`**: `_send_lock` для worker socket; `send_hello`; idempotent `disconnect`; отклонение stale session rollback по `generation_id`; регрессии в `test_browser_asr_service.py`.
+
+### Dashboard UI и конфиг (frontend)
+
+- **`store.js`**: `emit()` — snapshot listeners + `try/catch` per listener (сбой одной панели не останавливает остальные).
+- **`dom.js`**: `setInputValueIfChanged`, `setCheckedIfChanged` — idempotent render без сброса caret/focus.
+- Панели: diagnostics `configJson`, ASR/OBS/overlay/translation/profiles/remote — idempotent DOM updates; ASR/OBS — один `change` handler на checkbox/select; remote panel — без двойной подписки на config; translation panel — импорт `getLineMap`.
+- **`config-normalizer.js`**: `asr.browser.continuous_results` default **true** (`!== false`), согласовано с backend.
+
+### Desktop launcher и bootstrap
+
+- **`desktop/launcher.py`**: ротация `desktop-launcher.log` → `desktop-launcher.old.log` (и sibling live logs) при старте.
+- **`desktop/bootstrap_launcher.py`**: ротация `bootstrap-launcher.log`; GitHub update check timeout **2.5 s**.
+- Новые тесты: `test_desktop_launcher_config.py`, `test_desktop_bootstrap_payload.py`, `test_desktop_runtime_bootstrap.py`.
+
+### Документация
+
+- `docs/TECHNICAL_ARCHITECTURE.md` — полное обновление §6, §9, §14, §16–§17, §20–§21.
+- `README.md` / `README.ru.md` — architecture summary, recognition, desktop logs, dashboard UX stability.
+
+### Тесты
+
+- `python -m unittest discover -s tests -p "test_*.py"` — **462** collected, **461** OK (1 pre-existing loader error: `test_browser_asr_observability` import `tests.test_translation_dispatcher`).
+
+## 0.4.1
+
+Релиз поверх `0.4.0`. `PROJECT_VERSION = "0.4.1"`; `config_version` остаётся **7**. Публичные HTTP/WebSocket-контракты и жизненный цикл субтитров сохранены. Delta: [docs/DESKTOP_RELEASE_CHANGELOG_0.4.1.md](./DESKTOP_RELEASE_CHANGELOG_0.4.1.md).
+
+### Что вошло
+
+- **Local Parakeet realtime:** streaming decode, `word_growth` partial policy, delta ASR queue, overlay partial dedup bypass; `LocalAsrPipeline` и `local_asr_realtime_settings`.
+- **Dashboard:** пресеты задержки на Tuning, согласованные слайдеры с пресетами, подсказки Save + Stop/Start; строка runtime с сохранённым realtime-профилем; Tools → поля `streaming_decode`, `partial_emit_mode`, `partial_min_new_words`, зеркало пресета.
+- **Продукт:** только `official_eu_parakeet_low_latency` в UI; миграция старых `official_eu_parakeet` в low latency.
+- **Диагностика:** расширенный `AsrDiagnostics` (preset / streaming / emit mode / min words).
+- **Документация:** обновлён `docs/TECHNICAL_ARCHITECTURE.md` (пайплайн Parakeet 0.4.1).
+
+### Тесты
+
+- `python -m unittest discover -s tests` — прогон после изменений (tracked suite; desktop-only тесты — локально при наличии `desktop/`).
 
 ## 0.4.0
 
-Релиз поверх `0.3.2`. `PROJECT_VERSION = "0.4.0"`; `config_version` остаётся **7**. Публичные HTTP/WebSocket-контракты и жизненный цикл субтитров сохранены. Installer delta: [docs/DESKTOP_RELEASE_CHANGELOG_0.4.0.md](./DESKTOP_RELEASE_CHANGELOG_0.4.0.md).
+Релиз поверх `0.3.2`. `PROJECT_VERSION = "0.4.0"`; `config_version` остаётся **7**. Публичные HTTP/WebSocket-контракты и жизненный цикл субтитров сохранены.
 
 ### Что вошло
 
@@ -33,7 +84,7 @@
 
 ## 0.3.2
 
-Релиз поверх `0.3.1`. `PROJECT_VERSION = "0.3.2"`; `config_version = 7` (`source_text_replacement`). Installer delta: [docs/DESKTOP_RELEASE_CHANGELOG_0.3.2.md](./DESKTOP_RELEASE_CHANGELOG_0.3.2.md).
+Релиз поверх `0.3.1`. `PROJECT_VERSION = "0.3.2"`; `config_version = 7` (`source_text_replacement`).
 
 ### Версия и конфигурация
 
@@ -63,8 +114,7 @@
 ### Документация
 
 - `docs/TECHNICAL_ARCHITECTURE.md`: актуализация под `0.3.2`, `config_version` 7, поток `source_text_replacement`, **расширенный раздел про локальный NVIDIA Parakeet** (VAD, очередь сегментов, RNNoise, два провайдера quality vs low-latency, связь с `subtitle_lifecycle`).
-- `README.md` / `README.ru.md`: версия `0.3.2`, ссылка на `docs/DESKTOP_RELEASE_CHANGELOG_0.3.2.md`.
-- `docs/DESKTOP_RELEASE_CHANGELOG_0.3.2.md`: delta release notes для установленных папок релиза.
+- `README.md` / `README.ru.md`: версия `0.3.2`.
 
 ### Тесты
 
@@ -72,7 +122,7 @@
 
 ## 0.3.1
 
-Релиз стабилизации поверх `0.3.0`. `PROJECT_VERSION = "0.3.1"`. Installer delta: [docs/DESKTOP_RELEASE_CHANGELOG_0.3.1.md](./DESKTOP_RELEASE_CHANGELOG_0.3.1.md) (архитектура `0.3.0` там не дублируется). Публичные `/api`/WebSocket без изменений.
+Релиз стабилизации поверх `0.3.0`. `PROJECT_VERSION = "0.3.1"`. Публичные `/api`/WebSocket без изменений.
 
 ### Версия и идентификация
 
@@ -118,7 +168,7 @@
 ### Документация
 
 - `docs/CHANGELOG.md` и `docs/TECHNICAL_ARCHITECTURE.md` приведены к единому русскому изложению.
-- `docs/DESKTOP_RELEASE_CHANGELOG_0.3.0.md` заменён на `docs/DESKTOP_RELEASE_CHANGELOG_0.3.1.md`; в новом файле явно отделено «реально новое в 0.3.1» от «уже было в 0.3.0».
+- Per-version installer delta для `0.3.1` (ранее отдельный файл; содержимое в этом CHANGELOG).
 
 ### Что было уже в 0.3.0 и не считается новым в 0.3.1
 

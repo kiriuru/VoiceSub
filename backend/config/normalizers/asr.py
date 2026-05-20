@@ -36,8 +36,24 @@ def normalize_realtime_asr_config(payload: Any, *, defaults: dict[str, Any]) -> 
     if latency_preset not in {"ultra_low_latency", "balanced", "quality", "custom"}:
         latency_preset = "balanced"
 
+    partial_emit_mode = str(current.get("partial_emit_mode", defaults.get("partial_emit_mode", "word_growth")) or "word_growth").strip().lower()
+    if partial_emit_mode not in {"word_growth", "char_delta"}:
+        partial_emit_mode = str(defaults.get("partial_emit_mode", "word_growth") or "word_growth").strip().lower()
+    if partial_emit_mode not in {"word_growth", "char_delta"}:
+        partial_emit_mode = "word_growth"
+
+    streaming_decode = current.get("streaming_decode", defaults.get("streaming_decode", True))
+    if streaming_decode is None:
+        streaming_decode = defaults.get("streaming_decode", True)
+    streaming_decode = bool(streaming_decode)
+
+    partial_min_new_words = clamp_int("partial_min_new_words", 1, 8)
+
     return {
         "latency_preset": latency_preset,
+        "partial_emit_mode": partial_emit_mode,
+        "partial_min_new_words": partial_min_new_words,
+        "streaming_decode": streaming_decode,
         "vad_mode": clamp_int("vad_mode", 0, 3),
         "energy_gate_enabled": bool(current.get("energy_gate_enabled", defaults["energy_gate_enabled"])),
         "min_rms_for_recognition": clamp_float("min_rms_for_recognition", 0.0, 0.05),
@@ -52,6 +68,8 @@ def normalize_realtime_asr_config(payload: Any, *, defaults: dict[str, Any]) -> 
         "chunk_overlap_ms": chunk_overlap_ms,
         "partial_min_delta_chars": clamp_int("partial_min_delta_chars", 0, 64),
         "partial_coalescing_ms": clamp_int("partial_coalescing_ms", 0, 2000),
+        "vad_speech_attack_frames": clamp_int("vad_speech_attack_frames", 1, 12),
+        "vad_speech_preroll_frames": clamp_int("vad_speech_preroll_frames", 0, 24),
     }
 
 
@@ -61,9 +79,7 @@ def normalize_asr_config(payload: Any, *, defaults: dict[str, Any]) -> dict[str,
     if asr_mode not in {"local", "browser_google", "browser_google_experimental"}:
         asr_mode = "local"
 
-    provider_preference = str(asr.get("provider_preference", "official_eu_parakeet_low_latency")).strip().lower()
-    if provider_preference not in {"official_eu_parakeet", "official_eu_parakeet_low_latency"}:
-        provider_preference = "official_eu_parakeet_low_latency"
+    provider_preference = "official_eu_parakeet_low_latency"
 
     try:
         rnnoise_strength = int(asr.get("rnnoise_strength", 70) or 70)

@@ -125,9 +125,13 @@ class AsrProviderContractTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(status.asr.effective_provider, "official_eu_parakeet_low_latency")
         self.assertEqual(status.asr.provider_kind, "local_parakeet")
 
-    def test_frontend_provider_selection_keeps_local_mode_without_removed_provider_flags(self) -> None:
+    def test_frontend_does_not_expose_legacy_local_provider_selector(self) -> None:
         source = ASR_PANEL_JS.read_text(encoding="utf-8")
-        self.assertIn('draft.asr.mode = "local";', source)
+        normalizer = (PROJECT_ROOT / "frontend" / "js" / "normalizers" / "config-normalizer.js").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("localAsrProviderSelect", source)
+        self.assertIn('provider_preference = "official_eu_parakeet_low_latency"', normalizer)
         self.assertNotIn("_".join(["google", "legacy", "http"]), source)
 
 

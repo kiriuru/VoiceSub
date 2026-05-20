@@ -8,7 +8,13 @@ from backend.core.vad import VadEngine
 
 class VadEngineTests(unittest.TestCase):
     def test_buffer_keeps_incomplete_frame_until_next_chunk(self) -> None:
-        engine = VadEngine(sample_rate=16000, frame_duration_ms=30, energy_gate_enabled=False)
+        engine = VadEngine(
+            speech_attack_frames=1,
+            speech_preroll_frames=0,
+            sample_rate=16000,
+            frame_duration_ms=30,
+            energy_gate_enabled=False,
+        )
         # force speech for all frames so the engine would admit once a full frame is available
         engine.vad.is_speech = mock.Mock(return_value=True)  # type: ignore[method-assign]
 
@@ -33,9 +39,38 @@ class VadEngineTests(unittest.TestCase):
             min_rms_for_recognition=0.0,
             min_voiced_ratio=0.0,
             first_partial_min_speech_ms=0,
+            speech_attack_frames=2,
+            speech_preroll_frames=0,
         )
         self.assertEqual(engine.silence_hold_frames, 7)
         self.assertEqual(engine.finalization_hold_frames, 7)
+
+    def test_speech_attack_requires_consecutive_voiced_frames(self) -> None:
+        engine = VadEngine(
+            sample_rate=16000,
+            frame_duration_ms=30,
+            energy_gate_enabled=False,
+            silence_hold_ms=3000,
+            finalization_hold_ms=3000,
+            min_speech_ms=0,
+            partial_emit_interval_ms=450,
+            max_segment_ms=6000,
+            min_rms_for_recognition=0.0,
+            min_voiced_ratio=0.0,
+            first_partial_min_speech_ms=0,
+            speech_attack_frames=2,
+            speech_preroll_frames=0,
+        )
+        engine.vad.is_speech = mock.Mock(side_effect=[True, False, True, True])  # type: ignore[method-assign]
+
+        def _frame() -> bytes:
+            return b"\xff\x7f" * (engine.frame_bytes // 2)
+
+        self.assertEqual(engine.process_chunk(_frame()), [])
+        self.assertEqual(engine.process_chunk(_frame()), [])
+        self.assertEqual(engine.process_chunk(_frame()), [])
+        segs = engine.process_chunk(_frame())
+        self.assertTrue(segs)
 
 
 if __name__ == "__main__":

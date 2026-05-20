@@ -93,6 +93,17 @@ class ConfigMigrationTests(unittest.TestCase):
         self.assertEqual(migrated["config_version"], CURRENT_CONFIG_VERSION)
         self.assertEqual(migrated["asr"]["provider_preference"], "official_eu_parakeet_low_latency")
 
+    def test_migrate_config_maps_non_low_latency_parakeet_to_low_latency(self) -> None:
+        migrated = migrate_config(
+            {
+                "config_version": 2,
+                "asr": {"provider_preference": "official_eu_parakeet"},
+            }
+        )
+
+        self.assertEqual(migrated["config_version"], CURRENT_CONFIG_VERSION)
+        self.assertEqual(migrated["asr"]["provider_preference"], "official_eu_parakeet_low_latency")
+
     def test_removed_legacy_provider_preference_migrates_to_low_latency_parakeet(self) -> None:
         migrated = migrate_config(
             {

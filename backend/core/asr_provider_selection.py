@@ -8,8 +8,10 @@ BROWSER_GOOGLE_MODE = "browser_google"
 BROWSER_GOOGLE_EXPERIMENTAL_MODE = "browser_google_experimental"
 DEFAULT_PARAKEET_PROVIDER = "official_eu_parakeet_low_latency"
 VALID_LOCAL_PROVIDER_PREFERENCES = {
-    "official_eu_parakeet",
     "official_eu_parakeet_low_latency",
+}
+REMOVED_NON_LOW_LATENCY_PARAKEET = {
+    "official_eu_parakeet",
 }
 REMOVED_LOCAL_PROVIDER_PREFERENCES = {
     "auto",
@@ -28,7 +30,7 @@ def _normalize_provider_preference(raw_value: Any) -> str:
     normalized = str(raw_value or DEFAULT_PARAKEET_PROVIDER).strip().lower()
     if normalized in VALID_LOCAL_PROVIDER_PREFERENCES:
         return normalized
-    if normalized in REMOVED_LOCAL_PROVIDER_PREFERENCES:
+    if normalized in REMOVED_LOCAL_PROVIDER_PREFERENCES or normalized in REMOVED_NON_LOW_LATENCY_PARAKEET:
         return DEFAULT_PARAKEET_PROVIDER
     return DEFAULT_PARAKEET_PROVIDER
 

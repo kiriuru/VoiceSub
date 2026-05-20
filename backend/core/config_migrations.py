@@ -125,7 +125,7 @@ def migrate_parakeet_provider_name(payload: dict[str, Any]) -> dict[str, Any]:
     migrated = deepcopy(payload if isinstance(payload, dict) else {})
     asr = _as_dict(migrated.get("asr"))
     provider_preference = str(asr.get("provider_preference", "") or "").strip().lower()
-    if provider_preference == "official_eu_parakeet_realtime":
+    if provider_preference in {"official_eu_parakeet_realtime", "official_eu_parakeet"}:
         asr["provider_preference"] = "official_eu_parakeet_low_latency"
     migrated["asr"] = asr
     return migrated

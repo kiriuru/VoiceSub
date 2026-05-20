@@ -226,7 +226,7 @@ class AsrProviderSelectionTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(runtime._asr_task)  # noqa: SLF001
         await runtime.stop()
 
-    async def test_local_parakeet_selected_without_browser_worker(self) -> None:
+    async def test_legacy_non_low_latency_provider_preference_maps_to_low_latency(self) -> None:
         config = _config("local", "official_eu_parakeet")
         runtime = self._build_runtime(config)
         init_calls = 0
@@ -235,27 +235,27 @@ class AsrProviderSelectionTests(unittest.IsolatedAsyncioTestCase):
             nonlocal init_calls
             init_calls += 1
             return AsrProviderStatus(
-                provider="official_eu_parakeet",
+                provider="official_eu_parakeet_low_latency",
                 ready=True,
                 message="ready",
-                partials_supported=False,
-                supports_partials=False,
-                supports_streaming=False,
+                partials_supported=True,
+                supports_partials=True,
+                supports_streaming=True,
                 selected_device="cpu",
-                selected_execution_provider="nemo_baseline",
+                selected_execution_provider="nemo_streaming",
                 runtime_initialized=True,
             )
 
         def _diagnostics() -> AsrProviderDiagnostics:
             return AsrProviderDiagnostics(
-                provider_name="official_eu_parakeet",
+                provider_name="official_eu_parakeet_low_latency",
                 supports_gpu=True,
-                supports_partials=False,
-                supports_streaming=False,
+                supports_partials=True,
+                supports_streaming=True,
                 gpu_requested=False,
                 gpu_available=False,
                 actual_selected_device="cpu",
-                actual_execution_provider="nemo_baseline",
+                actual_execution_provider="nemo_streaming",
                 ready=True,
                 message="ready",
                 runtime_initialized=True,
@@ -267,7 +267,7 @@ class AsrProviderSelectionTests(unittest.IsolatedAsyncioTestCase):
             state = await runtime.start(has_audio_inputs=True, device_id="mic0")
 
         self.assertTrue(state.is_running)
-        self.assertEqual(state.asr.provider, "official_eu_parakeet")
+        self.assertEqual(state.asr.provider, "official_eu_parakeet_low_latency")
         self.assertEqual(init_calls, 1)
         self.assertEqual(len(_FakeAudioCapture.created), 1)
         self.assertIsNotNone(runtime._asr_task)  # noqa: SLF001

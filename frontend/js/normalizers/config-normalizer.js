@@ -287,15 +287,7 @@ export function normalizeConfigShape(config) {
   } else {
     delete normalized.asr.desktop_profile_lock;
   }
-  normalized.asr.provider_preference = String(
-    normalized.asr.provider_preference || "official_eu_parakeet_low_latency"
-  ).toLowerCase();
-  if (![ "official_eu_parakeet_low_latency", "official_eu_parakeet" ].includes(normalized.asr.provider_preference)) {
-    normalized.asr.provider_preference = "official_eu_parakeet_low_latency";
-  }
-  if (normalized.asr.provider_preference === removedLegacyProviderPreference()) {
-    normalized.asr.provider_preference = "official_eu_parakeet_low_latency";
-  }
+  normalized.asr.provider_preference = "official_eu_parakeet_low_latency";
   normalized.asr.prefer_gpu = normalized.asr.prefer_gpu !== false;
   if (!normalized.asr.browser || typeof normalized.asr.browser !== "object") {
     normalized.asr.browser = {};
@@ -310,7 +302,7 @@ export function normalizeConfigShape(config) {
     ? launchBrowser
     : "auto";
   normalized.asr.browser.interim_results = normalized.asr.browser.interim_results !== false;
-  normalized.asr.browser.continuous_results = normalized.asr.browser.continuous_results === true;
+  normalized.asr.browser.continuous_results = normalized.asr.browser.continuous_results !== false;
   normalized.asr.browser.force_finalization_enabled = normalized.asr.browser.force_finalization_enabled !== false;
   normalized.asr.browser.force_finalization_timeout_ms = Math.max(
     300,
@@ -403,6 +395,27 @@ export function normalizeConfigShape(config) {
     0,
     parseIntegerOr(normalized.asr.realtime.partial_coalescing_ms ?? 160, 160)
   );
+  const latencyPresets = new Set(["ultra_low_latency", "balanced", "quality", "custom"]);
+  let latencyPreset = String(normalized.asr.realtime.latency_preset || "balanced")
+    .trim()
+    .toLowerCase();
+  if (!latencyPresets.has(latencyPreset)) {
+    latencyPreset = "balanced";
+  }
+  normalized.asr.realtime.latency_preset = latencyPreset;
+  const partialEmitModes = new Set(["word_growth", "char_delta"]);
+  let partialEmitMode = String(normalized.asr.realtime.partial_emit_mode || "word_growth")
+    .trim()
+    .toLowerCase();
+  if (!partialEmitModes.has(partialEmitMode)) {
+    partialEmitMode = "word_growth";
+  }
+  normalized.asr.realtime.partial_emit_mode = partialEmitMode;
+  normalized.asr.realtime.partial_min_new_words = Math.max(
+    1,
+    parseIntegerOr(normalized.asr.realtime.partial_min_new_words ?? 1, 1)
+  );
+  normalized.asr.realtime.streaming_decode = normalized.asr.realtime.streaming_decode !== false;
 
   if (!normalized.subtitle_lifecycle || typeof normalized.subtitle_lifecycle !== "object") {
     normalized.subtitle_lifecycle = {};

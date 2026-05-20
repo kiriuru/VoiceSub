@@ -1,6 +1,7 @@
-import { collectElements } from "../core/dom.js";
+import { collectElements, setInputValueIfChanged } from "../core/dom.js";
 import { createPanelMount } from "../core/panel-mount.js";
-import { formatMetric, formatOptionalMetric, t } from "../dashboard/helpers.js";
+import { selectAsrMode } from "../core/selectors.js";
+import { formatMetric, formatOptionalMetric, isBrowserRecognitionMode, t } from "../dashboard/helpers.js";
 
 function renderDiagnosticsPanel(snapshot, elements) {
   const diagnostics = snapshot.diagnostics?.asr || {};
@@ -8,6 +9,31 @@ function renderDiagnosticsPanel(snapshot, elements) {
   const metrics = snapshot.diagnostics?.metrics || {};
   const obs = snapshot.diagnostics?.obs || {};
   const browserWorker = diagnostics.browser_worker || null;
+
+  if (elements.localParakeetSavedConfigSummary) {
+    const mode = selectAsrMode(snapshot);
+    if (isBrowserRecognitionMode(mode)) {
+      elements.localParakeetSavedConfigSummary.hidden = true;
+      elements.localParakeetSavedConfigSummary.textContent = "";
+    } else {
+      elements.localParakeetSavedConfigSummary.hidden = false;
+      const rt = snapshot.config?.asr?.realtime || {};
+      const preset = String(rt.latency_preset || "balanced");
+      const incremental = rt.streaming_decode !== false;
+      const emitMode = String(rt.partial_emit_mode || "word_growth");
+      const minWords = Math.max(1, Number(rt.partial_min_new_words ?? 1) || 1);
+      const raw = snapshot.diagnostics?.asr?.raw;
+      const engineKnown = raw && typeof raw === "object" && "true_streaming" in raw;
+      const engine = engineKnown ? (raw.true_streaming === true ? t("common.yes") : t("common.no")) : t("common.not_available");
+      elements.localParakeetSavedConfigSummary.textContent = t("runtime.local_realtime.line", {
+        preset,
+        incremental: incremental ? t("common.on") : t("common.off"),
+        emitMode,
+        minWords: String(minWords),
+        engine,
+      });
+    }
+  }
 
   if (elements.latencyMetricsText) {
     elements.latencyMetricsText.textContent = [
@@ -82,12 +108,18 @@ function renderDiagnosticsPanel(snapshot, elements) {
     elements.logsDiscoverabilityText.textContent = t("tools.runtime.logs_location");
   }
   if (elements.configJson && snapshot.config) {
-    elements.configJson.value = JSON.stringify(snapshot.config, null, 2);
+    // JSON.stringify on the full config is expensive and the textarea is one
+    // of the rare controls users actively edit. Skip the write while the user
+    // is focused inside the editor (so unrelated ws/runtime ticks never reset
+    // the caret) and avoid redundant DOM writes when the serialized form is
+    // already up to date.
+    setInputValueIfChanged(elements.configJson, JSON.stringify(snapshot.config, null, 2));
   }
 }
 
 const collectDiagnosticsElements = (root) =>
   collectElements(root, {
+    localParakeetSavedConfigSummary: "#local-parakeet-saved-config-summary",
     latencyMetricsText: "#latency-metrics-text",
     asrDiagnosticsText: "#asr-diagnostics-text",
     translationDiagnosticsText: "#translation-diagnostics-text",

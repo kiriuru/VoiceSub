@@ -26,18 +26,18 @@ class VersioningTests(unittest.TestCase):
                     "enabled": True,
                     "provider": "github_releases",
                     "github_repo": "example/repo",
-                    "latest_known_version": "0.4.1",
+                    "latest_known_version": "0.4.2",
                 }
             }
         )
 
-        self.assertEqual(payload["current_version"], "0.4.0")
+        self.assertEqual(payload["current_version"], "0.4.1")
         self.assertTrue(payload["sync"]["update_available"])
 
     def test_extract_latest_release_prefers_highest_semver(self) -> None:
         releases = [
             {"tag_name": "v0.3.2", "draft": False, "prerelease": False},
-            {"tag_name": "v0.4.0", "draft": False, "prerelease": True},
+            {"tag_name": "v0.4.1", "draft": False, "prerelease": True},
             {"tag_name": "0.3.10", "draft": False, "prerelease": False},
         ]
         latest, _ = extract_latest_github_release_version(releases, release_channel="stable")
@@ -46,10 +46,10 @@ class VersioningTests(unittest.TestCase):
     def test_extract_latest_release_allows_prereleases(self) -> None:
         releases = [
             {"tag_name": "0.3.2", "draft": False, "prerelease": False},
-            {"tag_name": "0.4.0", "draft": False, "prerelease": True},
+            {"tag_name": "0.4.1", "draft": False, "prerelease": True},
         ]
         latest, _ = extract_latest_github_release_version(releases, release_channel="prerelease")
-        self.assertEqual(latest, "0.4.0")
+        self.assertEqual(latest, "0.4.1")
 
     def test_extract_latest_release_ignores_drafts_and_unparseable(self) -> None:
         releases = [

@@ -1,19 +1,20 @@
-import { collectElements } from "../core/dom.js";
+import { collectElements, setInputValueIfChanged } from "../core/dom.js";
 import { createPanelMount } from "../core/panel-mount.js";
-import { subscribeSelector } from "../core/store.js";
-import { selectConfig } from "../core/selectors.js";
 import { t } from "../dashboard/helpers.js";
 
 function fillRemoteFieldsFromConfig(elements, config) {
   const remote = config?.remote || {};
+  // Preserve a value the user is actively typing: only seed the field when
+  // it is empty and not focused. setInputValueIfChanged additionally guards
+  // against caret reset if the value happens to match.
   if (elements.workerUrl && !elements.workerUrl.value) {
-    elements.workerUrl.value = remote.controller?.worker_url || "";
+    setInputValueIfChanged(elements.workerUrl, remote.controller?.worker_url || "");
   }
   if (elements.sessionId && !elements.sessionId.value) {
-    elements.sessionId.value = remote.session_id || "";
+    setInputValueIfChanged(elements.sessionId, remote.session_id || "");
   }
   if (elements.pairCode && !elements.pairCode.value) {
-    elements.pairCode.value = remote.pair_code || "";
+    setInputValueIfChanged(elements.pairCode, remote.pair_code || "");
   }
 }
 
@@ -162,8 +163,10 @@ function bindRemoteEvents(elements, { store, actions, api, logger }) {
     await window.DesktopBridge?.openExternalUrl?.(url);
   });
 
-  const unsubscribeConfig = subscribeSelector(selectConfig, (config) => fillRemoteFieldsFromConfig(elements, config));
-
+  // Note: createPanelMount already subscribes renderRemotePanel to the store,
+  // which calls fillRemoteFieldsFromConfig on every snapshot. A second
+  // subscribeSelector here used to fire the same fill twice per state tick;
+  // dropping it keeps the behaviour while halving the per-tick work.
   refreshRemoteState().catch(() => {
     if (elements.stateText) {
       elements.stateText.textContent = t("remote.tools.state.failed");
@@ -172,7 +175,6 @@ function bindRemoteEvents(elements, { store, actions, api, logger }) {
 
   return () => {
     handlers.forEach((off) => off());
-    unsubscribeConfig();
   };
 }
 

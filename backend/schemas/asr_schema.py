@@ -141,11 +141,16 @@ class AsrDiagnostics(SchemaModel):
     vad_energy_gate_enabled: bool = False
     vad_min_rms_for_recognition: float | None = None
     vad_min_voiced_ratio: float | None = None
+    vad_speech_attack_frames: int | None = None
+    vad_speech_preroll_frames: int | None = None
     realtime_chunk_window_ms: int | None = None
     realtime_chunk_overlap_ms: int | None = None
     partial_min_delta_chars: int | None = None
     partial_coalescing_ms: int | None = None
     active_latency_preset: str | None = None
+    streaming_decode: bool | None = None
+    partial_emit_mode: str | None = None
+    partial_min_new_words: int | None = None
     recognition_noise_reduction_enabled: bool = False
     rnnoise_strength: int = 0
     rnnoise_available: bool = False

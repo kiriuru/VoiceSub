@@ -19,10 +19,15 @@ const collectAsrElements = (root) =>
     workerBrowserSelect: "#recognition-worker-browser-select",
     workerBrowserWebNote: "#recognition-worker-browser-web-note",
     modeHint: "#recognition-mode-hint",
-    localAsrProviderRow: "#local-asr-provider-row",
-    localAsrProviderSelect: "#local-asr-provider-select",
     audioInputSelect: "#audio-input-select",
     audioInputMeta: "#audio-input-meta",
+    parakeetLatencyPresetRow: "#parakeet-latency-preset-row",
+    parakeetLatencyPreset: "#parakeet-latency-preset",
+    rtToolsLocalParakeetExtras: "#rt-tools-local-parakeet-extras",
+    rtToolsLatencyPreset: "#rt-tools-latency-preset",
+    rtStreamingDecode: "#rt-streaming-decode",
+    rtPartialEmitMode: "#rt-partial-emit-mode",
+    rtPartialMinNewWords: "#rt-partial-min-new-words",
     simpleAppearanceSpeed: "#simple-appearance-speed",
     simpleAppearanceLabel: "#simple-appearance-label",
     simpleFinishSpeed: "#simple-finish-speed",
@@ -53,7 +58,8 @@ const collectAsrElements = (root) =>
   });
 
 function bindAsrEvents(elements, { store, actions, logger }, rerender) {
-  const { mutateRealtimeFromControls, mutateSimpleTuning } = createAsrConfigMutators(elements, actions);
+  const { mutateRealtimeFromControls, mutateSimpleTuning, applyParakeetLatencyPreset } =
+    createAsrConfigMutators(elements, actions);
   const handlers = [];
   const add = (element, event, handler) => {
     if (!element) {
@@ -93,20 +99,28 @@ function bindAsrEvents(elements, { store, actions, logger }, rerender) {
         : "[asr] Web Speech worker will use the selected browser on next open (desktop)"
     );
   });
-  add(elements.localAsrProviderSelect, "change", () => {
-    if (isDesktopBrowserQuickStartLocked(store.getState().config)) {
-      logger("[asr] backend provider selection is locked for this desktop quick start profile");
-      return;
-    }
-    actions.mutateConfig((draft) => {
-      const nextProvider = elements.localAsrProviderSelect.value || "official_eu_parakeet_low_latency";
-      draft.asr.provider_preference = nextProvider;
-      draft.asr.mode = "local";
-    });
-    logger(`[asr] backend provider -> ${elements.localAsrProviderSelect.value}`);
-  });
   add(elements.audioInputSelect, "change", () => {
     actions.setSelectedAudioInput(elements.audioInputSelect.value || null);
+  });
+
+  add(elements.rtToolsLatencyPreset, "change", () => {
+    const presetId = elements.rtToolsLatencyPreset?.value || "custom";
+    if (presetId === "custom") {
+      return;
+    }
+    applyParakeetLatencyPreset(presetId);
+    rerender(store.getState());
+    logger(`[asr] tools latency preset -> ${presetId}`);
+  });
+
+  add(elements.parakeetLatencyPreset, "change", () => {
+    const presetId = elements.parakeetLatencyPreset?.value || "custom";
+    if (presetId === "custom") {
+      return;
+    }
+    applyParakeetLatencyPreset(presetId);
+    rerender(store.getState());
+    logger(`[asr] parakeet latency preset -> ${presetId}`);
   });
 
   [elements.simpleAppearanceSpeed, elements.simpleFinishSpeed, elements.simpleStability]
@@ -134,6 +148,9 @@ function bindAsrEvents(elements, { store, actions, logger }, rerender) {
     elements.rtMinRms,
     elements.rtMinVoicedRatio,
     elements.rtFirstPartialMinSpeech,
+    elements.rtStreamingDecode,
+    elements.rtPartialEmitMode,
+    elements.rtPartialMinNewWords,
     elements.subtitleCompletedSourceTtl,
     elements.subtitleCompletedTranslationTtl,
     elements.subtitleSyncExpiry,
@@ -143,8 +160,21 @@ function bindAsrEvents(elements, { store, actions, logger }, rerender) {
   ]
     .filter(Boolean)
     .forEach((element) => {
-      const eventName = element.type === "checkbox" ? "change" : "input";
-      add(element, eventName, mutateRealtimeFromControls);
+      const isCheckboxOrSelect = element.type === "checkbox" || element.tagName === "SELECT";
+      const liveEvent = isCheckboxOrSelect ? "change" : "input";
+      // For text/number inputs we want a live "input" sync as the user types
+      // and an extra "change" listener that also writes the log line on
+      // commit (blur / Enter). For checkbox/select there is only "change",
+      // so binding both would fire the mutator twice per toggle and double
+      // every store update.
+      if (isCheckboxOrSelect) {
+        add(element, "change", () => {
+          mutateRealtimeFromControls();
+          logger("[asr] realtime tuning updated locally");
+        });
+        return;
+      }
+      add(element, liveEvent, mutateRealtimeFromControls);
       add(element, "change", () => {
         mutateRealtimeFromControls();
         logger("[asr] realtime tuning updated locally");

@@ -49,8 +49,21 @@ function clone(value) {
 
 function emit() {
   const snapshot = getState();
-  listeners.forEach((listener) => {
-    listener(snapshot);
+  // Iterate over a snapshot so listeners that unsubscribe during dispatch
+  // don't skip later subscribers. Wrap each call so a thrown listener does
+  // not silently halt the rest of the panel/diagnostics tree (e.g. a typo
+  // in one panel must not freeze runtime status or transcript updates in
+  // every other panel).
+  Array.from(listeners).forEach((listener) => {
+    try {
+      listener(snapshot);
+    } catch (error) {
+      try {
+        console.error("[store] listener error", error);
+      } catch (_logError) {
+        // last-resort: swallow logging error so we never bubble out of emit.
+      }
+    }
   });
 }
 

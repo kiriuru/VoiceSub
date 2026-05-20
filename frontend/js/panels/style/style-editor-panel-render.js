@@ -5,7 +5,7 @@ import {
   getLineSlotNames,
   getUiThemePresets,
   inheritLabel,
-  isStyleNumberInput,
+  shouldSkipStyleControlRenderSync,
   normalizeOverrideFieldValue,
   normalizeStyle,
   setSelectOptions,
@@ -222,20 +222,20 @@ export function renderStyleEditorPanel(snapshot, elements, { actions }, catalogS
       elements.uiTheme.preset.value = "custom";
     }
   }
-  if (elements.uiTheme.accent) {
+  if (elements.uiTheme.accent && !shouldSkipStyleControlRenderSync(elements.uiTheme.accent)) {
     elements.uiTheme.accent.value = String(palette?.accent || "#6cc7ff");
   }
-  if (elements.uiTheme.accentSecondary) {
+  if (elements.uiTheme.accentSecondary && !shouldSkipStyleControlRenderSync(elements.uiTheme.accentSecondary)) {
     elements.uiTheme.accentSecondary.value = String(palette?.accent_secondary || "#ff6ce6");
   }
-  if (elements.uiTheme.accentTertiary) {
+  if (elements.uiTheme.accentTertiary && !shouldSkipStyleControlRenderSync(elements.uiTheme.accentTertiary)) {
     elements.uiTheme.accentTertiary.value = String(palette?.accent_tertiary || "#7ce3ad");
   }
   Object.entries(elements.fields).forEach(([key, element]) => {
     if (!element) {
       return;
     }
-    if (isStyleNumberInput(element) && document.activeElement === element) {
+    if (shouldSkipStyleControlRenderSync(element)) {
       return;
     }
     element.value = String(style.base?.[key] ?? "");
@@ -269,7 +269,7 @@ export function renderStyleEditorPanel(snapshot, elements, { actions }, catalogS
     if (!element) {
       return;
     }
-    if (isStyleNumberInput(element) && document.activeElement === element) {
+    if (shouldSkipStyleControlRenderSync(element)) {
       return;
     }
     const raw = slotStyle?.[key];

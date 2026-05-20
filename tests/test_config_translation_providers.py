@@ -267,7 +267,7 @@ class ConfigTranslationProviderTests(unittest.TestCase):
         self.assertEqual(loaded["ui"]["language"], "ru")
         self.assertEqual(loaded["audio"]["input_device_id"], "mic-2")
         self.assertEqual(loaded["asr"]["mode"], "browser_google")
-        self.assertEqual(loaded["asr"]["provider_preference"], "official_eu_parakeet")
+        self.assertEqual(loaded["asr"]["provider_preference"], "official_eu_parakeet_low_latency")
         self.assertFalse(loaded["asr"]["prefer_gpu"])
         self.assertEqual(loaded["asr"]["browser"]["recognition_language"], "en-US")
         self.assertFalse(loaded["asr"]["browser"]["continuous_results"])

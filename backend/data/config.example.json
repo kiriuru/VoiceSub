@@ -64,7 +64,12 @@
       "chunk_window_ms": 0,
       "chunk_overlap_ms": 0,
       "partial_min_delta_chars": 4,
-      "partial_coalescing_ms": 160
+      "partial_coalescing_ms": 160,
+      "streaming_decode": true,
+      "partial_emit_mode": "word_growth",
+      "partial_min_new_words": 1,
+      "vad_speech_attack_frames": 2,
+      "vad_speech_preroll_frames": 5
     }
   },
   "overlay": {
@@ -86,8 +91,8 @@
     },
     "timing": {
       "send_partials": true,
-      "partial_throttle_ms": 250,
-      "min_partial_delta_chars": 3,
+      "partial_throttle_ms": 140,
+      "min_partial_delta_chars": 1,
       "final_replace_delay_ms": 0,
       "clear_after_ms": 2500,
       "avoid_duplicate_text": true

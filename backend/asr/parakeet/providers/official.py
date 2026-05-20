@@ -1,5 +1,8 @@
-from __future__ import annotations
+"""Backward-compatible import path; low-latency streaming NeMo is the only product backend."""
 
-from backend.core.parakeet_provider import OfficialEuParakeetProvider
+from backend.core.parakeet_provider import OfficialEuParakeetRealtimeProvider
 
-__all__ = ["OfficialEuParakeetProvider"]
+# Historical name (file-based non-streaming provider) removed in favor of realtime.
+OfficialEuParakeetProvider = OfficialEuParakeetRealtimeProvider
+
+__all__ = ["OfficialEuParakeetProvider", "OfficialEuParakeetRealtimeProvider"]

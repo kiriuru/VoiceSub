@@ -1,5 +1,11 @@
-import { fillSelectOptions } from "../../core/dom.js";
+import { fillSelectOptions, setCheckedIfChanged, setInputValueIfChanged } from "../../core/dom.js";
 import { BROWSER_RECOGNITION_LANGUAGES, SIMPLE_TUNING_OPTIONS } from "../../dashboard/constants.js";
+import {
+  applyParakeetLatencyPresetToDraft,
+  markParakeetLatencyPresetCustom,
+  getParakeetSimpleTuningLevelsForRender,
+  resolveParakeetLatencyPresetFromConfig,
+} from "../../normalizers/parakeet-latency-presets.js";
 import {
   findClosestSimpleLevel,
   formatSecondsFromMs,
@@ -52,9 +58,15 @@ export function fillAudioInputDevices(elements, snapshot) {
   }
 }
 
+function isLocalParakeetMode(config) {
+  const mode = config?.asr?.mode || "local";
+  return !isBrowserRecognitionMode(mode) && !isDesktopBrowserQuickStartLocked(config);
+}
+
 export function createAsrConfigMutators(elements, actions) {
   function mutateRealtimeFromControls() {
     actions.mutateConfig((draft) => {
+      markParakeetLatencyPresetCustom(draft);
       const realtime = draft.asr.realtime;
       const lifecycle = draft.subtitle_lifecycle;
       draft.asr.rnnoise_enabled = Boolean(elements.rnnoiseEnabled?.checked);
@@ -73,6 +85,13 @@ export function createAsrConfigMutators(elements, actions) {
       realtime.min_rms_for_recognition = Number(elements.rtMinRms?.value || 0.0018);
       realtime.min_voiced_ratio = Number(elements.rtMinVoicedRatio?.value || 0);
       realtime.first_partial_min_speech_ms = Number(elements.rtFirstPartialMinSpeech?.value || realtime.min_speech_ms);
+      draft.asr.realtime.streaming_decode = elements.rtStreamingDecode ? Boolean(elements.rtStreamingDecode.checked) : true;
+      const pem = String(elements.rtPartialEmitMode?.value || "word_growth").trim().toLowerCase();
+      draft.asr.realtime.partial_emit_mode = pem === "char_delta" ? "char_delta" : "word_growth";
+      draft.asr.realtime.partial_min_new_words = Math.max(
+        1,
+        Number.parseInt(String(elements.rtPartialMinNewWords?.value || "1"), 10) || 1
+      );
       lifecycle.completed_source_ttl_ms = parseSecondsToMs(elements.subtitleCompletedSourceTtl?.value, 4500, 500);
       lifecycle.completed_translation_ttl_ms = parseSecondsToMs(elements.subtitleCompletedTranslationTtl?.value, 4500, 500);
       lifecycle.sync_source_and_translation_expiry = Boolean(elements.subtitleSyncExpiry?.checked);
@@ -84,6 +103,7 @@ export function createAsrConfigMutators(elements, actions) {
 
   function mutateSimpleTuning() {
     actions.mutateConfig((draft) => {
+      markParakeetLatencyPresetCustom(draft);
       const realtime = draft.asr.realtime;
       const lifecycle = draft.subtitle_lifecycle;
       const appearance = getSimpleTuningOption("appearance", elements.simpleAppearanceSpeed?.value ?? 3);
@@ -91,15 +111,31 @@ export function createAsrConfigMutators(elements, actions) {
       const stability = getSimpleTuningOption("stability", elements.simpleStability?.value ?? 3);
       realtime.partial_emit_interval_ms = appearance.partial_emit_interval_ms;
       realtime.min_speech_ms = appearance.min_speech_ms;
+      realtime.first_partial_min_speech_ms = appearance.min_speech_ms;
       realtime.silence_hold_ms = finish.silence_hold_ms;
       realtime.finalization_hold_ms = finish.pause_to_finalize_ms;
       lifecycle.pause_to_finalize_ms = finish.pause_to_finalize_ms;
       realtime.partial_min_delta_chars = stability.partial_min_delta_chars;
       realtime.partial_coalescing_ms = stability.partial_coalescing_ms;
     });
+    if (elements.parakeetLatencyPreset) {
+      elements.parakeetLatencyPreset.value = "custom";
+    }
+    if (elements.rtToolsLatencyPreset) {
+      elements.rtToolsLatencyPreset.value = "custom";
+    }
   }
 
-  return { mutateRealtimeFromControls, mutateSimpleTuning };
+  function applyParakeetLatencyPreset(presetId) {
+    if (!presetId || presetId === "custom") {
+      return;
+    }
+    actions.mutateConfig((draft) => {
+      applyParakeetLatencyPresetToDraft(draft, presetId);
+    });
+  }
+
+  return { mutateRealtimeFromControls, mutateSimpleTuning, applyParakeetLatencyPreset };
 }
 
 export function renderAsrPanel(snapshot, elements) {
@@ -122,7 +158,6 @@ export function renderAsrPanel(snapshot, elements) {
   const quickStartLocked = isDesktopBrowserQuickStartLocked(config);
   const mode = config.asr?.mode || "local";
   const browserMode = isBrowserRecognitionMode(mode);
-  const localProvider = config.asr?.provider_preference || "official_eu_parakeet_low_latency";
   if (elements.modeSelect) {
     syncRecognitionModeSelectLock(elements.modeSelect, quickStartLocked);
     elements.modeSelect.value = browserMode ? mode : quickStartLocked ? "browser_google" : mode;
@@ -142,11 +177,6 @@ export function renderAsrPanel(snapshot, elements) {
   if (elements.workerBrowserWebNote) {
     elements.workerBrowserWebNote.textContent = t("overview.recognition.worker_browser.web_hint");
   }
-  setElementVisibility(elements.localAsrProviderRow, !browserMode && !quickStartLocked);
-  if (elements.localAsrProviderSelect) {
-    elements.localAsrProviderSelect.value = localProvider;
-    elements.localAsrProviderSelect.disabled = quickStartLocked || browserMode;
-  }
   if (elements.modeHint) {
     if (quickStartLocked) {
       elements.modeHint.textContent = t("overview.recognition.hint.browser_quick_start_locked");
@@ -165,30 +195,60 @@ export function renderAsrPanel(snapshot, elements) {
     }
   }
   fillAudioInputDevices(elements, snapshot);
+  const localParakeetUi = isLocalParakeetMode(config);
+  setElementVisibility(elements.parakeetLatencyPresetRow, localParakeetUi);
+  setElementVisibility(elements.rtToolsLocalParakeetExtras, localParakeetUi);
   const realtime = config.asr?.realtime || {};
   const lifecycle = config.subtitle_lifecycle || {};
-  const appearanceLevel = findClosestSimpleLevel("appearance", realtime);
-  const finishLevel = findClosestSimpleLevel("finish", {
+  if (elements.parakeetLatencyPreset) {
+    elements.parakeetLatencyPreset.value = resolveParakeetLatencyPresetFromConfig(realtime, lifecycle);
+  }
+  if (elements.rtToolsLatencyPreset) {
+    elements.rtToolsLatencyPreset.value = resolveParakeetLatencyPresetFromConfig(realtime, lifecycle);
+  }
+  const presetResolved = resolveParakeetLatencyPresetFromConfig(realtime, lifecycle);
+  const appearanceClosest = findClosestSimpleLevel("appearance", realtime);
+  const finishClosest = findClosestSimpleLevel("finish", {
     silence_hold_ms: realtime.silence_hold_ms,
     pause_to_finalize_ms: lifecycle.pause_to_finalize_ms,
   });
-  const stabilityLevel = findClosestSimpleLevel("stability", realtime);
+  const stabilityClosest = findClosestSimpleLevel("stability", realtime);
+  const tuningLevels = getParakeetSimpleTuningLevelsForRender(
+    presetResolved,
+    appearanceClosest,
+    finishClosest,
+    stabilityClosest
+  );
   if (elements.simpleAppearanceSpeed) {
-    elements.simpleAppearanceSpeed.value = String(appearanceLevel);
+    setInputValueIfChanged(elements.simpleAppearanceSpeed, tuningLevels.appearance);
     elements.simpleAppearanceLabel.textContent = getSimpleTuningLabel(
       "appearance",
-      SIMPLE_TUNING_OPTIONS.appearance[appearanceLevel - 1].label
+      SIMPLE_TUNING_OPTIONS.appearance[tuningLevels.appearance - 1].label
     );
   }
   if (elements.simpleFinishSpeed) {
-    elements.simpleFinishSpeed.value = String(finishLevel);
-    elements.simpleFinishLabel.textContent = getSimpleTuningLabel("finish", SIMPLE_TUNING_OPTIONS.finish[finishLevel - 1].label);
+    setInputValueIfChanged(elements.simpleFinishSpeed, tuningLevels.finish);
+    elements.simpleFinishLabel.textContent = getSimpleTuningLabel(
+      "finish",
+      SIMPLE_TUNING_OPTIONS.finish[tuningLevels.finish - 1].label
+    );
   }
   if (elements.simpleStability) {
-    elements.simpleStability.value = String(stabilityLevel);
+    setInputValueIfChanged(elements.simpleStability, tuningLevels.stability);
     elements.simpleStabilityLabel.textContent = getSimpleTuningLabel(
       "stability",
-      SIMPLE_TUNING_OPTIONS.stability[stabilityLevel - 1].label
+      SIMPLE_TUNING_OPTIONS.stability[tuningLevels.stability - 1].label
+    );
+  }
+  setCheckedIfChanged(elements.rtStreamingDecode, realtime.streaming_decode !== false);
+  if (elements.rtPartialEmitMode) {
+    const emitMode = String(realtime.partial_emit_mode || "word_growth").toLowerCase();
+    setInputValueIfChanged(elements.rtPartialEmitMode, emitMode === "char_delta" ? "char_delta" : "word_growth");
+  }
+  if (elements.rtPartialMinNewWords) {
+    setInputValueIfChanged(
+      elements.rtPartialMinNewWords,
+      Math.max(1, Number(realtime.partial_min_new_words ?? 1) || 1)
     );
   }
   const fieldMap = {
@@ -208,29 +268,27 @@ export function renderAsrPanel(snapshot, elements) {
   };
   Object.entries(fieldMap).forEach(([key, value]) => {
     if (elements[key]) {
-      elements[key].value = String(value);
+      setInputValueIfChanged(elements[key], value);
     }
   });
-  if (elements.rtEnergyGateEnabled) {
-    elements.rtEnergyGateEnabled.checked = Boolean(realtime.energy_gate_enabled);
-  }
+  setCheckedIfChanged(elements.rtEnergyGateEnabled, Boolean(realtime.energy_gate_enabled));
   if (elements.subtitleCompletedSourceTtl) {
-    elements.subtitleCompletedSourceTtl.value = formatSecondsFromMs(lifecycle.completed_source_ttl_ms ?? 4500, 4500);
+    setInputValueIfChanged(
+      elements.subtitleCompletedSourceTtl,
+      formatSecondsFromMs(lifecycle.completed_source_ttl_ms ?? 4500, 4500)
+    );
   }
   if (elements.subtitleCompletedTranslationTtl) {
-    elements.subtitleCompletedTranslationTtl.value = formatSecondsFromMs(lifecycle.completed_translation_ttl_ms ?? 4500, 4500);
+    setInputValueIfChanged(
+      elements.subtitleCompletedTranslationTtl,
+      formatSecondsFromMs(lifecycle.completed_translation_ttl_ms ?? 4500, 4500)
+    );
   }
-  if (elements.subtitleSyncExpiry) {
-    elements.subtitleSyncExpiry.checked = lifecycle.sync_source_and_translation_expiry !== false;
-  }
-  if (elements.subtitleAllowEarlyReplace) {
-    elements.subtitleAllowEarlyReplace.checked = lifecycle.allow_early_replace_on_next_final !== false;
-  }
-  if (elements.rnnoiseEnabled) {
-    elements.rnnoiseEnabled.checked = Boolean(config.asr?.rnnoise_enabled);
-  }
+  setCheckedIfChanged(elements.subtitleSyncExpiry, lifecycle.sync_source_and_translation_expiry !== false);
+  setCheckedIfChanged(elements.subtitleAllowEarlyReplace, lifecycle.allow_early_replace_on_next_final !== false);
+  setCheckedIfChanged(elements.rnnoiseEnabled, Boolean(config.asr?.rnnoise_enabled));
   if (elements.rnnoiseStrength) {
-    elements.rnnoiseStrength.value = String(config.asr?.rnnoise_strength ?? 70);
+    setInputValueIfChanged(elements.rnnoiseStrength, config.asr?.rnnoise_strength ?? 70);
     elements.rnnoiseStrength.disabled = !Boolean(config.asr?.rnnoise_enabled);
   }
   if (elements.rnnoiseStrengthLabel) {

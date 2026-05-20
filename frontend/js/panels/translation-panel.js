@@ -1,5 +1,5 @@
 import { subscribe } from "../core/store.js";
-import { fillSelectOptions, setSelectMarkup } from "../core/dom.js";
+import { fillSelectOptions, setCheckedIfChanged, setInputValueIfChanged, setSelectMarkup } from "../core/dom.js";
 import {
   buildTranslationResultsKey,
   renderTranslationResults,
@@ -11,6 +11,7 @@ import {
   ensureLine,
   getLineBySlot,
   getLineCards,
+  getLineMap,
   getMissingProviderFields,
   getSelectedSlotId,
   getSlotNumber,
@@ -171,24 +172,16 @@ export function mountTranslationPanel(root, { store, actions, logger }) {
     const providerMeta = getProviderMeta(providerBeingEdited);
     const providerSettings = translation.provider_settings?.[providerBeingEdited] || {};
 
-    if (elements.enabled) {
-      elements.enabled.checked = Boolean(translation.enabled);
-    }
+    setCheckedIfChanged(elements.enabled, Boolean(translation.enabled));
     const cacheConfig = (translation.cache && typeof translation.cache === "object") ? translation.cache : {};
-    if (elements.cacheEnabled) {
-      elements.cacheEnabled.checked = cacheConfig.enabled !== false;
-    }
+    setCheckedIfChanged(elements.cacheEnabled, cacheConfig.enabled !== false);
     if (elements.cachePersist) {
       const cacheEnabled = cacheConfig.enabled !== false;
-      elements.cachePersist.checked = cacheConfig.persist !== false;
+      setCheckedIfChanged(elements.cachePersist, cacheConfig.persist !== false);
       elements.cachePersist.disabled = !cacheEnabled;
     }
-    if (elements.defaultProvider) {
-      elements.defaultProvider.value = defaultProvider;
-    }
-    if (elements.settingsProvider) {
-      elements.settingsProvider.value = providerBeingEdited;
-    }
+    setInputValueIfChanged(elements.defaultProvider, defaultProvider);
+    setInputValueIfChanged(elements.settingsProvider, providerBeingEdited);
     if (elements.settingsTitle) {
       elements.settingsTitle.textContent = t("translation.provider_settings.for", { provider: providerMeta.label });
     }
@@ -212,14 +205,17 @@ export function mountTranslationPanel(root, { store, actions, logger }) {
         label.textContent = overrideLabel?.[window.I18n?.getLocale?.() || "en"] || t(labelKey);
       }
       if (input) {
-        input.value = getTranslationProviderSettingValue(providerBeingEdited, providerSettings, field);
+        // setInputValueIfChanged guards against caret reset while the user
+        // is typing API keys / URLs while ws events (transcript_update,
+        // diagnostics ticks, runtime polls) re-render the panel.
+        setInputValueIfChanged(input, getTranslationProviderSettingValue(providerBeingEdited, providerSettings, field));
         input.placeholder = placeholder || t(labelKey);
         input.disabled = !visible;
       }
     });
     setElementVisibility(elements.promptRow, providerMeta.fields.includes("custom_prompt"));
     if (elements.prompt) {
-      elements.prompt.value = providerSettings.custom_prompt || "";
+      setInputValueIfChanged(elements.prompt, providerSettings.custom_prompt || "");
       elements.prompt.disabled = !providerMeta.fields.includes("custom_prompt");
       elements.prompt.placeholder = t("translation.custom_prompt");
     }

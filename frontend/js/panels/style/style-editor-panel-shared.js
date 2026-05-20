@@ -119,3 +119,60 @@ export function normalizeOverrideFieldValue(value) {
 export function isStyleNumberInput(element) {
   return Boolean(element && element.type === "number");
 }
+
+export function isStyleColorInput(element) {
+  return Boolean(element && element.type === "color");
+}
+
+export const STYLE_COLOR_PICKER_OPEN_ATTR = "data-sst-color-picker-open";
+
+export function markStyleColorPickerOpen(element) {
+  if (element) {
+    element.setAttribute(STYLE_COLOR_PICKER_OPEN_ATTR, "1");
+  }
+}
+
+export function clearStyleColorPickerOpen(element) {
+  if (element) {
+    element.removeAttribute(STYLE_COLOR_PICKER_OPEN_ATTR);
+  }
+}
+
+export function isStyleColorPickerOpen(element) {
+  return Boolean(element?.hasAttribute?.(STYLE_COLOR_PICKER_OPEN_ATTR));
+}
+
+/** Avoid overwriting controls during in-progress edits (number focus or open color picker). */
+export function shouldSkipStyleControlRenderSync(element) {
+  if (!element) {
+    return false;
+  }
+  if (isStyleNumberInput(element) && document.activeElement === element) {
+    return true;
+  }
+  if (isStyleColorInput(element) && (document.activeElement === element || isStyleColorPickerOpen(element))) {
+    return true;
+  }
+  return false;
+}
+
+export function bindStyleColorPickerEvents(element, add, onApply) {
+  if (!element || !isStyleColorInput(element) || typeof add !== "function" || typeof onApply !== "function") {
+    return;
+  }
+  const markOpen = () => markStyleColorPickerOpen(element);
+  const applyAndClose = () => {
+    onApply();
+    clearStyleColorPickerOpen(element);
+  };
+  add(element, "pointerdown", markOpen);
+  add(element, "focus", markOpen);
+  add(element, "change", applyAndClose);
+  add(element, "blur", () => {
+    window.setTimeout(() => {
+      if (document.activeElement !== element) {
+        clearStyleColorPickerOpen(element);
+      }
+    }, 200);
+  });
+}

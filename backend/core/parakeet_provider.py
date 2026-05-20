@@ -8,7 +8,6 @@ import os
 import shutil
 import subprocess
 import sys
-import tempfile
 import wave
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -27,6 +26,13 @@ from backend.asr.parakeet.model_installer import (
 )
 ASR_PROVIDER_OFFICIAL = "official_eu_parakeet"
 ASR_PROVIDER_REALTIME = "official_eu_parakeet_low_latency"
+
+
+class _Sentinel:
+    __slots__ = ()
+
+
+_NVIDIA_SMI_UNCACHED = _Sentinel()
 
 
 class AsrProviderError(Exception):
@@ -186,7 +192,9 @@ class BaseAsrProvider:
         sample_rate: int,
         is_final: bool,
         segment_id: str | None = None,
+        audio_is_delta: bool = False,
     ) -> AsrResult:
+        _ = audio_is_delta
         raise NotImplementedError
 
     def capabilities(self) -> AsrProviderCapabilities:
@@ -246,7 +254,9 @@ class MockParakeetProvider(BaseAsrProvider):
         sample_rate: int,
         is_final: bool,
         segment_id: str | None = None,
+        audio_is_delta: bool = False,
     ) -> AsrResult:
+        _ = audio_is_delta
         samples = np.frombuffer(audio_segment, dtype=np.int16)
         duration_seconds = len(samples) / float(sample_rate) if sample_rate else 0.0
         rms = float(np.sqrt(np.mean(np.square(samples.astype(np.float32))))) if samples.size else 0.0
@@ -298,6 +308,9 @@ class BaseOfficialEuParakeetNemoProvider(BaseAsrProvider):
         self._runtime_status_callback = runtime_status_callback
         self.inference_mode_enabled: bool = False
         self._cuda_cache_cleared_count: int = 0
+        # nvidia-smi query is a blocking subprocess (~timeout=5s). Cache the result so we don't
+        # stall the event loop in async diagnostics() callers. Sentinel object marks "not yet queried".
+        self._nvidia_smi_gpu_name: str | None | _Sentinel = _NVIDIA_SMI_UNCACHED
 
     def _report_runtime_status(self, message: str) -> None:
         if self._runtime_status_callback is None:
@@ -691,10 +704,16 @@ class BaseOfficialEuParakeetNemoProvider(BaseAsrProvider):
             pass
 
         if not info["first_gpu_name"]:
-            smi_gpu = self._query_first_gpu_name_from_nvidia_smi()
+            smi_gpu = self._cached_first_gpu_name_from_nvidia_smi()
             if smi_gpu:
                 info["first_gpu_name"] = smi_gpu
         return info
+
+    def _cached_first_gpu_name_from_nvidia_smi(self) -> str | None:
+        if not isinstance(self._nvidia_smi_gpu_name, _Sentinel):
+            return self._nvidia_smi_gpu_name  # type: ignore[return-value]
+        self._nvidia_smi_gpu_name = self._query_first_gpu_name_from_nvidia_smi()
+        return self._nvidia_smi_gpu_name  # type: ignore[return-value]
 
     def _query_first_gpu_name_from_nvidia_smi(self) -> str | None:
         nvidia_smi = shutil.which("nvidia-smi")
@@ -797,50 +816,6 @@ class BaseOfficialEuParakeetNemoProvider(BaseAsrProvider):
         return nullcontext()
 
 
-class OfficialEuParakeetProvider(BaseOfficialEuParakeetNemoProvider):
-    provider_name = ASR_PROVIDER_OFFICIAL
-    execution_provider_name = "nemo_file"
-
-    def transcribe(
-        self,
-        audio_segment: bytes,
-        *,
-        sample_rate: int,
-        is_final: bool,
-        segment_id: str | None = None,
-    ) -> AsrResult:
-        if not is_final or not audio_segment:
-            return AsrResult()
-
-        model = self._ensure_loaded()
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_file:
-            wav_path = Path(tmp_file.name)
-        try:
-            self._write_wav(wav_path, audio_segment, sample_rate)
-            with self._torch_inference_context():
-                hypotheses = model.transcribe([str(wav_path)], batch_size=1, verbose=False)
-            text = self._extract_text(hypotheses)
-            if not text:
-                return AsrResult()
-            return AsrResult(
-                segments=[
-                    AsrSegmentResult(
-                        text=text,
-                        is_final=True,
-                    )
-                ]
-            )
-        except AsrProviderError:
-            raise
-        except Exception as exc:
-            raise AsrProviderError(f"Official EU Parakeet transcription failed: {exc}") from exc
-        finally:
-            try:
-                wav_path.unlink(missing_ok=True)
-            except Exception:
-                pass
-
-
 class OfficialEuParakeetRealtimeProvider(BaseOfficialEuParakeetNemoProvider):
     provider_name = ASR_PROVIDER_REALTIME
     execution_provider_name = "nemo_direct"
@@ -879,7 +854,7 @@ class OfficialEuParakeetRealtimeProvider(BaseOfficialEuParakeetNemoProvider):
             provider_name=self.provider_name,
             supports_gpu=True,
             supports_partials=True,
-            supports_streaming=False,
+            supports_streaming=self._streaming_decode_enabled(),
         )
 
     def reset_runtime_state(self) -> None:
@@ -917,17 +892,47 @@ class OfficialEuParakeetRealtimeProvider(BaseOfficialEuParakeetNemoProvider):
         left_context_ms = max(1800, min(6000, chunk_window_ms * 3))
         return chunk_window_ms, chunk_overlap_ms, left_context_ms
 
-    def _resolved_partial_decode_window_ms(self) -> int:
+    def _streaming_decode_enabled(self) -> bool:
         realtime = self._realtime_config()
-        partial_emit_interval_ms = max(120, int(realtime.get("partial_emit_interval_ms", 450) or 450))
-        chunk_window_ms = int(realtime.get("chunk_window_ms", 0) or 0)
-        chunk_overlap_ms = int(realtime.get("chunk_overlap_ms", 0) or 0)
+        value = realtime.get("streaming_decode", True)
+        if isinstance(value, str):
+            return value.strip().lower() not in {"0", "false", "no", "off"}
+        return bool(value)
 
-        if chunk_window_ms <= 0:
-            chunk_window_ms = max(2200, min(3600, int(round(partial_emit_interval_ms * 5.5))))
-        if chunk_overlap_ms <= 0:
-            chunk_overlap_ms = max(500, min(1000, chunk_window_ms // 3))
-        return max(1600, chunk_window_ms + chunk_overlap_ms)
+    def _stream_key(self, segment_id: str | None) -> str:
+        normalized = str(segment_id or "").strip()
+        return normalized or "__default__"
+
+    def _get_or_create_stream_state(self, model: Any, *, sample_rate: int, stream_key: str) -> _StreamingSegmentState:
+        self._ensure_streaming_runtime(model, sample_rate=sample_rate)
+        existing = self._stream_states.get(stream_key)
+        if existing is not None:
+            return existing
+        state = self._build_stream_state(device=self._model_device(model))
+        self._stream_states[stream_key] = state
+        return state
+
+    def _append_cumulative_audio(self, state: _StreamingSegmentState, audio_array: np.ndarray) -> None:
+        total_samples = int(audio_array.shape[0])
+        processed = int(state.processed_samples)
+        if total_samples < processed:
+            state.processed_samples = 0
+            state.pending_audio = np.zeros((0,), dtype=np.float32)
+            processed = 0
+        if total_samples <= processed:
+            return
+        delta = np.asarray(audio_array[processed:total_samples], dtype=np.float32)
+        self._append_delta_audio(state, delta)
+        state.processed_samples = total_samples
+
+    def _append_delta_audio(self, state: _StreamingSegmentState, audio_array: np.ndarray) -> None:
+        if audio_array.size == 0:
+            return
+        delta = np.asarray(audio_array, dtype=np.float32)
+        if state.pending_audio.size == 0:
+            state.pending_audio = delta
+        else:
+            state.pending_audio = np.concatenate([state.pending_audio, delta])
 
     def _ensure_streaming_runtime(self, model: Any, *, sample_rate: int) -> None:
         if (
@@ -1109,27 +1114,55 @@ class OfficialEuParakeetRealtimeProvider(BaseOfficialEuParakeetNemoProvider):
         state.current_batched_hyps = None
         state.decoder_state = None
 
-    def transcribe(
+    def _transcribe_streaming(
         self,
-        audio_segment: bytes,
+        model: Any,
+        audio_array: np.ndarray,
         *,
         sample_rate: int,
         is_final: bool,
-        segment_id: str | None = None,
+        segment_id: str | None,
+        audio_is_delta: bool = False,
     ) -> AsrResult:
-        if not audio_segment:
-            return AsrResult()
+        stream_key = self._stream_key(segment_id)
+        try:
+            with self._torch_inference_context():
+                state = self._get_or_create_stream_state(model, sample_rate=sample_rate, stream_key=stream_key)
+                if audio_is_delta:
+                    self._append_delta_audio(state, audio_array)
+                else:
+                    self._append_cumulative_audio(state, audio_array)
+                self._decode_available_audio(model=model, state=state)
+                if is_final:
+                    self._flush_final_audio(model=model, state=state, sample_rate=sample_rate)
+                    text = state.current_text
+                    self._stream_states.pop(stream_key, None)
+                else:
+                    text = state.current_text
+        except AsrProviderError:
+            raise
+        except Exception as exc:
+            raise AsrProviderError(f"Official EU Parakeet streaming transcription failed: {exc}") from exc
 
-        model = self._ensure_loaded()
-        audio_array = self._audio_bytes_to_float32(audio_segment)
-        if audio_array.size == 0:
+        if not text:
             return AsrResult()
-        if not is_final:
-            partial_window_ms = self._resolved_partial_decode_window_ms()
-            partial_window_samples = max(1, int(sample_rate * (partial_window_ms / 1000.0)))
-            if audio_array.shape[0] > partial_window_samples:
-                audio_array = audio_array[-partial_window_samples:]
+        return AsrResult(
+            segments=[
+                AsrSegmentResult(
+                    text=text,
+                    is_partial=not is_final,
+                    is_final=is_final,
+                )
+            ]
+        )
 
+    def _transcribe_batch(
+        self,
+        model: Any,
+        audio_array: np.ndarray,
+        *,
+        is_final: bool,
+    ) -> AsrResult:
         try:
             with self._torch_inference_context():
                 hypotheses = model.transcribe(
@@ -1153,6 +1186,34 @@ class OfficialEuParakeetRealtimeProvider(BaseOfficialEuParakeetNemoProvider):
                 )
             ]
         )
+
+    def transcribe(
+        self,
+        audio_segment: bytes,
+        *,
+        sample_rate: int,
+        is_final: bool,
+        segment_id: str | None = None,
+        audio_is_delta: bool = False,
+    ) -> AsrResult:
+        model = self._ensure_loaded()
+        audio_array = self._audio_bytes_to_float32(audio_segment) if audio_segment else np.zeros((0,), dtype=np.float32)
+
+        if self._streaming_decode_enabled():
+            if audio_array.size == 0 and not is_final:
+                return AsrResult()
+            return self._transcribe_streaming(
+                model,
+                audio_array,
+                sample_rate=sample_rate,
+                is_final=is_final,
+                segment_id=segment_id,
+                audio_is_delta=audio_is_delta,
+            )
+
+        if audio_array.size == 0:
+            return AsrResult()
+        return self._transcribe_batch(model, audio_array, is_final=is_final)
 
 
 def allow_mock_asr() -> bool:

@@ -21,9 +21,14 @@ class OverlayBroadcaster:
         body["created_at_ms"] = int(time.time() * 1000)
         payload_signature = json.dumps(body, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
         now_monotonic = time.perf_counter()
+        lifecycle_state = str(body.get("lifecycle_state", "") or "").strip().lower()
+        skip_time_dedupe = lifecycle_state in {"partial_only", "completed_with_partial"}
+        # Shorter cooldown for stable completed states reduces visible overlay lag vs dashboard.
+        signature_dedupe_cooldown_s = 0.45 if lifecycle_state == "completed_only" else 1.0
         if (
-            self._last_payload_signature == payload_signature
-            and (now_monotonic - self._last_publish_monotonic) < 1.0
+            not skip_time_dedupe
+            and self._last_payload_signature == payload_signature
+            and (now_monotonic - self._last_publish_monotonic) < signature_dedupe_cooldown_s
         ):
             return
         self._last_payload_signature = payload_signature

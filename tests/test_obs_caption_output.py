@@ -171,6 +171,24 @@ class ObsCaptionOutputTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(output.requests, [("SendStreamCaption", {"captionText": "Hello"})])
 
+    async def test_source_live_partial_allows_new_word_within_throttle_window(self) -> None:
+        config = _base_config()
+        config["obs_closed_captions"]["output_mode"] = "source_live"
+        config["obs_closed_captions"]["timing"]["partial_throttle_ms"] = 1000
+        config["obs_closed_captions"]["timing"]["min_partial_delta_chars"] = 8
+        output = RecordingObsCaptionOutput(config)
+
+        await output._handle_source_partial("Hello")
+        await output._handle_source_partial("Hello cruel")
+
+        self.assertEqual(
+            output.requests,
+            [
+                ("SendStreamCaption", {"captionText": "Hello"}),
+                ("SendStreamCaption", {"captionText": "Hello cruel"}),
+            ],
+        )
+
     async def test_debug_mirror_dedups_set_input_settings_when_enabled(self) -> None:
         config = _base_config()
         config["obs_closed_captions"]["enabled"] = True

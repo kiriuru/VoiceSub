@@ -19,6 +19,18 @@ class VadSegment:
 
 
 class VadEngine:
+    """
+    WebRTC VAD + energy pre-gate + light noise adaptation (median + EMA floor).
+
+    Best-practice additions over raw frame VAD:
+    - **Speech attack**: require N consecutive "admitted speech" frames before starting
+      a segment (reduces impulsive false starts).
+    - **Pre-roll ring buffer**: retain a short tail of pre-speech frames so plosives
+      and word onsets are less likely to be clipped for the ASR path.
+    - **EMA noise tracking**: complements the median ambient buffer for faster response
+      to slowly rising room noise when computing the adaptive pre-partial RMS floor.
+    """
+
     def __init__(
         self,
         *,
@@ -34,6 +46,8 @@ class VadEngine:
         min_rms_for_recognition: float = 0.0018,
         min_voiced_ratio: float = 0.45,
         first_partial_min_speech_ms: int = 300,
+        speech_attack_frames: int = 2,
+        speech_preroll_frames: int = 5,
     ) -> None:
         self.sample_rate = sample_rate
         self.frame_duration_ms = frame_duration_ms
@@ -49,6 +63,9 @@ class VadEngine:
         self._segment_total_frames = 0
         self._segment_voiced_frames = 0
         self._segment_dropped_count = 0
+        self._ambient_rms_ema = 0.0
+        self._preroll: deque[tuple[bytes, float]] = deque()
+        self._pending_attack: list[tuple[bytes, float]] = []
         self.configure(
             mode=self.vad_mode,
             silence_hold_ms=silence_hold_ms,
@@ -60,6 +77,8 @@ class VadEngine:
             min_rms_for_recognition=min_rms_for_recognition,
             min_voiced_ratio=min_voiced_ratio,
             first_partial_min_speech_ms=first_partial_min_speech_ms,
+            speech_attack_frames=speech_attack_frames,
+            speech_preroll_frames=speech_preroll_frames,
         )
 
     def configure(
@@ -75,6 +94,8 @@ class VadEngine:
         min_rms_for_recognition: float,
         min_voiced_ratio: float,
         first_partial_min_speech_ms: int,
+        speech_attack_frames: int = 2,
+        speech_preroll_frames: int = 5,
     ) -> None:
         if mode is not None:
             self.vad_mode = max(0, min(3, int(mode)))
@@ -88,6 +109,14 @@ class VadEngine:
         self.min_rms_for_recognition = max(0.0, float(min_rms_for_recognition))
         self.min_voiced_ratio = max(0.0, min(1.0, float(min_voiced_ratio)))
         self.first_partial_min_speech_ms = max(self.min_speech_ms, int(first_partial_min_speech_ms))
+        self.speech_attack_frames = max(1, int(speech_attack_frames))
+        pr_n = max(0, int(speech_preroll_frames))
+        self.speech_preroll_frames = pr_n
+        if pr_n > 0:
+            kept = list(self._preroll)[-pr_n:]
+            self._preroll = deque(kept, maxlen=pr_n)
+        else:
+            self._preroll = deque()
         # Use ceil so effective timing never resolves *shorter* than requested.
         self.silence_hold_frames = max(1, int(math.ceil(self.silence_hold_ms / self.frame_duration_ms)))
         self.finalization_hold_frames = max(1, int(math.ceil(self.finalization_hold_ms / self.frame_duration_ms)))
@@ -104,7 +133,10 @@ class VadEngine:
         self._last_partial_frame_count = 0
         self._segment_total_frames = 0
         self._segment_voiced_frames = 0
+        self._pending_attack.clear()
+        self._preroll.clear()
         # Keep dropped counter cumulative across segments for diagnostics.
+        # Ambient deque + EMA carry over for smoother adaptation across segments.
 
     def _duration_ms(self, frame_count: int) -> int:
         return frame_count * self.frame_duration_ms
@@ -129,12 +161,24 @@ class VadEngine:
     def _remember_ambient_rms(self, frame_rms: float) -> None:
         if frame_rms <= 0.0:
             return
-        self._ambient_rms_values.append(float(frame_rms))
+        value = float(frame_rms)
+        self._ambient_rms_values.append(value)
+        if self._ambient_rms_ema <= 0.0:
+            self._ambient_rms_ema = value
+        else:
+            # Slightly faster than median-only tracking so slowly rising noise lifts the floor.
+            self._ambient_rms_ema = 0.88 * self._ambient_rms_ema + 0.12 * value
 
     def _ambient_rms_floor(self) -> float:
-        if not self._ambient_rms_values:
-            return 0.0
-        return float(np.median(np.asarray(self._ambient_rms_values, dtype=np.float32)))
+        median = 0.0
+        if self._ambient_rms_values:
+            median = float(np.median(np.asarray(list(self._ambient_rms_values), dtype=np.float32)))
+        ema = self._ambient_rms_ema
+        if median > 0.0 and ema > 0.0:
+            return max(median, ema * 0.98)
+        if median > 0.0:
+            return median
+        return ema if ema > 0.0 else 0.0
 
     def _adaptive_pre_partial_rms_threshold(self) -> float:
         ambient_floor = self._ambient_rms_floor()
@@ -173,6 +217,53 @@ class VadEngine:
             average_rms=self._segment_average_rms(),
         )
 
+    def _flush_speech_onset_from_preroll_and_attack(self) -> None:
+        """Promote preroll + confirmed attack frames into an active speech segment."""
+        for frame_bytes, rms in self._preroll:
+            self._speech_frames.append(frame_bytes)
+            self._speech_rms_values.append(rms)
+            self._segment_total_frames += 1
+        for frame_bytes, rms in self._pending_attack:
+            self._speech_frames.append(frame_bytes)
+            self._speech_rms_values.append(rms)
+            self._segment_total_frames += 1
+            self._segment_voiced_frames += 1
+        self._preroll.clear()
+        self._pending_attack.clear()
+        self._silence_frames = 0
+
+    def _try_grow_partial_or_finalize_max_segment(self, segments: list[VadSegment]) -> None:
+        frames_since_last_partial = len(self._speech_frames) - self._last_partial_frame_count
+        target_partial_frames = (
+            self.first_partial_min_speech_frames
+            if self._last_partial_frame_count == 0
+            else self.partial_interval_frames
+        )
+        if (
+            len(self._speech_frames) >= self.min_speech_frames
+            and frames_since_last_partial >= target_partial_frames
+        ):
+            partial_segment = self._build_segment("partial")
+            if partial_segment is not None:
+                segments.append(partial_segment)
+                self._last_partial_frame_count = len(self._speech_frames)
+
+        if len(self._speech_frames) >= self.max_segment_frames:
+            final_segment = self._build_segment("final")
+            if final_segment is not None:
+                segments.append(final_segment)
+            else:
+                self._segment_dropped_count += 1
+            self.reset()
+
+    def _append_voiced_frame(self, frame: bytes, frame_rms: float, segments: list[VadSegment]) -> None:
+        self._speech_frames.append(frame)
+        self._speech_rms_values.append(frame_rms)
+        self._silence_frames = 0
+        self._segment_total_frames += 1
+        self._segment_voiced_frames += 1
+        self._try_grow_partial_or_finalize_max_segment(segments)
+
     def process_chunk(self, audio_chunk: bytes) -> list[VadSegment]:
         if not audio_chunk:
             return []
@@ -196,35 +287,17 @@ class VadEngine:
                 adaptive_threshold = self._adaptive_pre_partial_rms_threshold()
                 if adaptive_threshold > 0.0 and frame_rms < adaptive_threshold:
                     admitted_speech = False
+
             if admitted_speech:
-                self._speech_frames.append(frame)
-                self._speech_rms_values.append(frame_rms)
-                self._silence_frames = 0
-                self._segment_total_frames += 1
-                self._segment_voiced_frames += 1
+                if not self._speech_frames:
+                    self._pending_attack.append((frame, frame_rms))
+                    if len(self._pending_attack) < self.speech_attack_frames:
+                        continue
+                    self._flush_speech_onset_from_preroll_and_attack()
+                    self._try_grow_partial_or_finalize_max_segment(segments)
+                else:
+                    self._append_voiced_frame(frame, frame_rms, segments)
 
-                frames_since_last_partial = len(self._speech_frames) - self._last_partial_frame_count
-                target_partial_frames = (
-                    self.first_partial_min_speech_frames
-                    if self._last_partial_frame_count == 0
-                    else self.partial_interval_frames
-                )
-                if (
-                    len(self._speech_frames) >= self.min_speech_frames
-                    and frames_since_last_partial >= target_partial_frames
-                ):
-                    partial_segment = self._build_segment("partial")
-                    if partial_segment is not None:
-                        segments.append(partial_segment)
-                        self._last_partial_frame_count = len(self._speech_frames)
-
-                if len(self._speech_frames) >= self.max_segment_frames:
-                    final_segment = self._build_segment("final")
-                    if final_segment is not None:
-                        segments.append(final_segment)
-                    else:
-                        self._segment_dropped_count += 1
-                    self.reset()
             elif self._speech_frames:
                 self._remember_ambient_rms(frame_rms)
                 self._segment_total_frames += 1
@@ -247,7 +320,10 @@ class VadEngine:
                         self._segment_dropped_count += 1
                     self.reset()
             else:
+                self._pending_attack.clear()
                 self._remember_ambient_rms(frame_rms)
+                if self.speech_preroll_frames > 0:
+                    self._preroll.append((frame, frame_rms))
 
         if usable:
             del self._pending_audio[:usable]

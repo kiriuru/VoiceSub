@@ -51,6 +51,7 @@ class FrontendArchitectureTests(unittest.TestCase):
             JS_ROOT / "panels" / "remote-panel.js",
             JS_ROOT / "dashboard" / "desktop-profile-lock.js",
             JS_ROOT / "normalizers" / "config-normalizer.js",
+            JS_ROOT / "normalizers" / "parakeet-latency-presets.js",
             JS_ROOT / "normalizers" / "runtime-normalizer.js",
             JS_ROOT / "normalizers" / "translation-normalizer.js",
             JS_ROOT / "normalizers" / "overlay-normalizer.js",
@@ -72,6 +73,11 @@ class FrontendArchitectureTests(unittest.TestCase):
         index_html = (FRONTEND_ROOT / "index.html").read_text(encoding="utf-8")
         self.assertIn('/static/js/core/redaction.js', index_html)
         self.assertIn('id="diagnostics-export-btn"', index_html)
+        self.assertIn('id="local-parakeet-saved-config-summary"', index_html)
+        self.assertIn('id="rt-tools-latency-preset"', index_html)
+        self.assertIn('id="rt-streaming-decode"', index_html)
+        self.assertIn('id="parakeet-latency-preset"', index_html)
+        self.assertIn('id="parakeet-latency-preset-row"', index_html)
 
     def test_design_system_tokens_and_bridge_status_contracts_exist(self) -> None:
         app_css = (FRONTEND_ROOT / "css" / "app.css").read_text(encoding="utf-8")
@@ -136,6 +142,16 @@ class FrontendArchitectureTests(unittest.TestCase):
         self.assertIn("lastPresetCatalogSignature", render_js)
         self.assertIn("shouldRebuildPresets", render_js)
         self.assertIn("createPanelMount", panel_js)
+
+    def test_style_editor_keeps_native_color_picker_open_during_edits(self) -> None:
+        shared_js = (JS_ROOT / "panels" / "style" / "style-editor-panel-shared.js").read_text(encoding="utf-8")
+        render_js = (JS_ROOT / "panels" / "style" / "style-editor-panel-render.js").read_text(encoding="utf-8")
+        panel_js = (JS_ROOT / "panels" / "style-editor-panel.js").read_text(encoding="utf-8")
+        self.assertIn("export function bindStyleColorPickerEvents", shared_js)
+        self.assertIn("export function shouldSkipStyleControlRenderSync", shared_js)
+        self.assertIn("shouldSkipStyleControlRenderSync(element)", render_js)
+        self.assertIn("bindStyleColorPickerEvents(element, add", panel_js)
+        self.assertIn('isStyleColorInput(element)', panel_js)
 
     def test_subtitle_style_renderer_maps_effect_ids_to_css_classes(self) -> None:
         renderer_js = (JS_ROOT / "subtitle-style.js").read_text(encoding="utf-8")

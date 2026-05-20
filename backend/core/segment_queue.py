@@ -20,6 +20,7 @@ class AsrWorkItem:
     audio_segment_started_at_ms: int | None = None
     vad_partial_ready_at_ms: int | None = None
     asr_job_enqueued_at_ms: int | None = None
+    audio_is_delta: bool = False
 
 
 class SegmentQueue:

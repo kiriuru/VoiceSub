@@ -131,8 +131,9 @@ class ParakeetLifecycleTests(unittest.IsolatedAsyncioTestCase):
         self.broadcasted_events.append(event)
 
     async def test_stale_result_is_ignored_after_generation_change(self) -> None:
-        def _slow_run(_audio: bytes, *, is_final: bool, segment_id: str | None = None) -> AsrResult:
+        def _slow_run(_audio: bytes, *, is_final: bool, segment_id: str | None = None, audio_is_delta: bool = False) -> AsrResult:
             _ = segment_id
+            _ = audio_is_delta
             time.sleep(0.05)
             return AsrResult(
                 segments=[AsrSegmentResult(text="stale", is_partial=not is_final, is_final=is_final)]
@@ -158,7 +159,8 @@ class ParakeetLifecycleTests(unittest.IsolatedAsyncioTestCase):
     async def test_final_equal_to_previous_partial_is_still_emitted(self) -> None:
         calls: list[tuple[bool, str | None]] = []
 
-        def _run(_audio: bytes, *, is_final: bool, segment_id: str | None = None) -> AsrResult:
+        def _run(_audio: bytes, *, is_final: bool, segment_id: str | None = None, audio_is_delta: bool = False) -> AsrResult:
+            _ = audio_is_delta
             calls.append((is_final, segment_id))
             return AsrResult(
                 segments=[AsrSegmentResult(text="same", is_partial=not is_final, is_final=is_final)]

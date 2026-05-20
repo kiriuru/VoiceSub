@@ -1,0 +1,50 @@
+from __future__ import annotations
+
+LEGACY_VAD_SETTINGS: dict[str, int | float | bool] = {
+    "vad_mode": 2,
+    "energy_gate_enabled": False,
+    "min_rms_for_recognition": 0.0018,
+    "min_voiced_ratio": 0.0,
+    "first_partial_min_speech_ms": 180,
+    "partial_emit_interval_ms": 450,
+    "min_speech_ms": 180,
+    "max_segment_ms": 5500,
+    "silence_hold_ms": 180,
+    "finalization_hold_ms": 350,
+    "chunk_window_ms": 0,
+    "chunk_overlap_ms": 0,
+    "partial_min_delta_chars": 12,
+    "partial_coalescing_ms": 160,
+    "partial_emit_mode": "word_growth",
+    "partial_min_new_words": 1,
+    "streaming_decode": True,
+    "vad_speech_attack_frames": 2,
+    "vad_speech_preroll_frames": 5,
+}
+
+SHORT_HALLUCINATION_TOKENS = frozenset(
+    {
+        "yeah",
+        "yeah.",
+        "mm-hmm",
+        "mm-hmm.",
+        "mhm",
+        "mhm.",
+        "uh-huh",
+        "uh-huh.",
+        "okay",
+        "okay.",
+        "ok",
+        "ok.",
+        "hmm",
+        "hmm.",
+        "uh",
+        "uh.",
+        "ah",
+        "ah.",
+        "yep",
+        "yep.",
+        "nope",
+        "nope.",
+    }
+)

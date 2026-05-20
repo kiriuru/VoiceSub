@@ -158,7 +158,6 @@
         "provider_preference": {
           "default": "official_eu_parakeet_low_latency",
           "enum": [
-            "official_eu_parakeet",
             "official_eu_parakeet_low_latency"
           ],
           "title": "Provider Preference",
@@ -285,6 +284,35 @@
         "partial_coalescing_ms": {
           "default": 160,
           "title": "Partial Coalescing Ms",
+          "type": "integer"
+        },
+        "streaming_decode": {
+          "default": true,
+          "title": "Streaming Decode",
+          "type": "boolean"
+        },
+        "partial_emit_mode": {
+          "default": "word_growth",
+          "enum": [
+            "word_growth",
+            "char_delta"
+          ],
+          "title": "Partial Emit Mode",
+          "type": "string"
+        },
+        "partial_min_new_words": {
+          "default": 1,
+          "title": "Partial Min New Words",
+          "type": "integer"
+        },
+        "vad_speech_attack_frames": {
+          "default": 2,
+          "title": "Vad Speech Attack Frames",
+          "type": "integer"
+        },
+        "vad_speech_preroll_frames": {
+          "default": 5,
+          "title": "Vad Speech Preroll Frames",
           "type": "integer"
         }
       },

@@ -15,6 +15,11 @@ class BrowserAsrService:
     def __init__(self, app: FastAPI) -> None:
         self._app = app
         self._lock = asyncio.Lock()
+        # Sole purpose: serialize concurrent send_json calls against the same active
+        # worker socket. Multiple coroutines (endpoint hello-message, future
+        # send_control invocations, etc.) must never interleave a half-written JSON
+        # frame on the underlying WebSocket transport.
+        self._send_lock: asyncio.Lock = asyncio.Lock()
         self._active_transport_id = 0
         self._active_websocket: WebSocket | None = None
         self._active_client_session_id: str | None = None
@@ -108,6 +113,13 @@ class BrowserAsrService:
     async def disconnect(self, transport_id: int) -> None:
         async with self._lock:
             if transport_id != self._active_transport_id:
+                return
+            if self._active_websocket is None:
+                # Already disconnected for this transport (e.g. failure inside
+                # ``send_hello`` followed by endpoint ``finally`` cleanup). Keep
+                # this path idempotent so the runtime orchestrator's
+                # ``browser_asr_worker_disconnected`` hook fires at most once
+                # per transport instance.
                 return
             self._active_websocket = None
             self._snapshot.update(
@@ -311,20 +323,67 @@ class BrowserAsrService:
             transport_id = self._active_transport_id
         if websocket is None:
             return False
+        payload = {
+            "type": "browser_asr_control",
+            "action": str(action or "").strip().lower() or "noop",
+            "reason": str(reason or "").strip() or None,
+            "issued_at_ms": self._now_ms(),
+            "transport_id": transport_id,
+        }
+        return await self._send_json_to_active(websocket, transport_id, payload)
+
+    async def send_hello(self, websocket: WebSocket) -> bool:
+        """Send the initial worker-handshake message under the per-socket send lock.
+
+        The endpoint owns ``accept`` + ``register_connection``; this helper guards
+        the outbound JSON frame so it cannot interleave with a concurrent
+        ``send_control`` invocation against the same socket.
+        """
+
+        async with self._lock:
+            transport_id = self._active_transport_id
+            active_socket = self._active_websocket
+        if active_socket is not websocket:
+            # The endpoint should always send the hello on the socket it just
+            # registered. If we observe a mismatch we treat it as failure so the
+            # caller can short-circuit.
+            return False
+        payload = {
+            "type": "hello",
+            "message": "browser_asr_worker_connected",
+            "transport_id": transport_id,
+        }
+        return await self._send_json_to_active(websocket, transport_id, payload)
+
+    async def _send_json_to_active(
+        self,
+        websocket: WebSocket,
+        transport_id: int,
+        payload: dict[str, Any],
+    ) -> bool:
+        # Run send_json under the per-socket send lock so concurrent senders
+        # (e.g. endpoint hello, future send_control ticks) cannot interleave
+        # a half-written frame on the same WebSocket. We release the send
+        # lock BEFORE invoking ``disconnect`` on failure because the
+        # disconnect path may invoke ``browser_asr_worker_disconnected`` on
+        # the runtime orchestrator, which must not run while we hold the
+        # outbound serialization lock.
+        send_error: BaseException | None = None
         try:
-            await websocket.send_json(
-                {
-                    "type": "browser_asr_control",
-                    "action": str(action or "").strip().lower() or "noop",
-                    "reason": str(reason or "").strip() or None,
-                    "issued_at_ms": self._now_ms(),
-                    "transport_id": transport_id,
-                }
-            )
-            return True
-        except Exception:
+            async with self._send_lock:
+                # Re-verify the socket is still the active transport once we
+                # hold the send lock; another connection may have replaced it
+                # while we were queued. Do not send to a stale socket.
+                async with self._lock:
+                    if self._active_websocket is not websocket:
+                        return False
+                await websocket.send_json(payload)
+        except Exception as exc:
+            send_error = exc
+        if send_error is not None:
             await self.disconnect(transport_id)
             return False
+        return True
 
     def diagnostics(self) -> dict[str, Any]:
         snapshot = dict(self._snapshot)
@@ -364,7 +423,20 @@ class BrowserAsrService:
                 return False, "wrong_transport"
             session_id = str(payload.get("session_id", "") or "").strip() or None
             generation_id = int(payload.get("generation_id", 0) or 0)
+            # Session rotation: a single browser worker page assigns one
+            # ``session_id`` for its full lifetime and only resets it when
+            # the page reloads (which produces a new transport_id). Within
+            # one transport, a session swap with a generation_id <= the
+            # active counter is treated as a delayed/queued event from the
+            # previous session and is therefore stale. This prevents an
+            # in-flight or replayed message from rolling the active session
+            # back below the current generation watermark.
             if session_id and self._active_client_session_id and session_id != self._active_client_session_id:
+                if generation_id and generation_id <= self._active_generation_id:
+                    self._snapshot["browser_stale_events_ignored"] = (
+                        int(self._snapshot["browser_stale_events_ignored"]) + 1
+                    )
+                    return False, "stale_session"
                 self._active_client_session_id = session_id
                 self._active_generation_id = generation_id
                 return True, None

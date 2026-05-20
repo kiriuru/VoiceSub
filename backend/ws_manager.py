@@ -22,6 +22,10 @@ class WebSocketManager:
         self._outbound_queue_max = max(1, int(outbound_queue_max))
         self._out_queues: dict[WebSocket, asyncio.Queue] = {}
         self._sender_tasks: dict[WebSocket, asyncio.Task[None]] = {}
+        # Per-connection send mutex: Starlette WebSocket frames cannot be safely interleaved
+        # across coroutines. Bootstrap direct sends (hello, replay_last) and the sender task
+        # must serialize through this lock so the underlying transport never sees concurrent writes.
+        self._send_locks: dict[WebSocket, asyncio.Lock] = {}
         self._diagnostics: dict[str, Any] = {
             "ws_events_connections_active": 0,
             "ws_events_broadcast_count": 0,
@@ -40,12 +44,28 @@ class WebSocketManager:
                 return
         await websocket.accept()
         q: asyncio.Queue = asyncio.Queue(maxsize=self._outbound_queue_max)
+        send_lock = asyncio.Lock()
         async with self._lock:
             self._accepted_connections.add(websocket)
             self._connections.add(websocket)
             self._out_queues[websocket] = q
+            self._send_locks[websocket] = send_lock
             self._sender_tasks[websocket] = asyncio.create_task(self._connection_sender(websocket, q))
             self._diagnostics["ws_events_connections_active"] = len(self._connections)
+
+    async def _send_json_locked(self, websocket: WebSocket, message: dict[str, Any]) -> None:
+        """Send one JSON message to a single socket, serialized via the per-connection mutex.
+
+        Falls back to a raw ``send_json`` if the socket has no registered lock yet
+        (e.g. a transient send during teardown). Callers are responsible for handling
+        transport exceptions; this helper does not swallow them.
+        """
+        lock = self._send_locks.get(websocket)
+        if lock is None:
+            await websocket.send_json(message)
+            return
+        async with lock:
+            await websocket.send_json(message)
 
     async def _connection_sender(self, websocket: WebSocket, queue: asyncio.Queue) -> None:
         while True:
@@ -53,7 +73,7 @@ class WebSocketManager:
             if message is None:
                 return
             try:
-                await websocket.send_json(message)
+                await self._send_json_locked(websocket, message)
             except (WebSocketDisconnect, RuntimeError, OSError, ConnectionResetError, BrokenPipeError) as exc:
                 self._diagnostics["ws_events_send_failures"] = int(self._diagnostics["ws_events_send_failures"]) + 1
                 self._diagnostics["ws_events_last_error_kind"] = type(exc).__name__
@@ -63,6 +83,7 @@ class WebSocketManager:
     async def disconnect(self, websocket: WebSocket) -> None:
         task = self._sender_tasks.pop(websocket, None)
         q = self._out_queues.pop(websocket, None)
+        self._send_locks.pop(websocket, None)
         if q is not None:
             try:
                 q.put_nowait(None)
@@ -120,7 +141,7 @@ class WebSocketManager:
                 self._enqueue_to_connection(connection, message)
                 continue
             try:
-                await connection.send_json(message)
+                await self._send_json_locked(connection, message)
             except (WebSocketDisconnect, RuntimeError, OSError, ConnectionResetError, BrokenPipeError) as exc:
                 self._diagnostics["ws_events_send_failures"] = int(self._diagnostics["ws_events_send_failures"]) + 1
                 self._diagnostics["ws_events_last_error_kind"] = type(exc).__name__
@@ -137,23 +158,41 @@ class WebSocketManager:
 
     async def replay_last(self, websocket: WebSocket, *, message_types: list[str]) -> None:
         """
-        Send last cached message per type **directly** to the socket (bypasses per-connection queue)
-        so the client receives snapshot state before streamed broadcast traffic.
+        Send last cached message per type to the socket so the client receives snapshot state
+        before streamed broadcast traffic.
 
-        **Semantics:** best-effort bootstrap only; may race with concurrent ``broadcast``.
-        Not a FIFO guarantee with live stream delivery — document for any consumer that
-        orders replay + live messages.
+        **Semantics:** best-effort bootstrap. Each send is serialized via the per-connection
+        send mutex, so it cannot interleave frames with the live sender task. Ordering against
+        concurrent ``broadcast`` work is still best-effort (the broadcast may be queued and
+        delivered before, between, or after these replay messages depending on scheduling).
         """
         for message_type in message_types:
             cached = self._last_message_by_type.get(str(message_type or "").strip())
             if cached:
                 try:
-                    await websocket.send_json(cached)
+                    await self._send_json_locked(websocket, cached)
                 except (WebSocketDisconnect, RuntimeError, OSError, ConnectionResetError, BrokenPipeError) as exc:
                     self._diagnostics["ws_events_send_failures"] = int(self._diagnostics["ws_events_send_failures"]) + 1
                     self._diagnostics["ws_events_last_error_kind"] = type(exc).__name__
                     await self.disconnect(websocket)
                     return
+
+    async def send_direct(self, websocket: WebSocket, message: dict[str, Any]) -> bool:
+        """
+        Send a single JSON message to one socket, serialized via the per-connection mutex.
+
+        Used for endpoint-level bootstrap messages (e.g. the initial "hello") that should not
+        be cached as ``last_message_by_type`` and must not interleave with the sender task.
+        Returns False (and disconnects) if the socket is no longer writable.
+        """
+        try:
+            await self._send_json_locked(websocket, message)
+            return True
+        except (WebSocketDisconnect, RuntimeError, OSError, ConnectionResetError, BrokenPipeError) as exc:
+            self._diagnostics["ws_events_send_failures"] = int(self._diagnostics["ws_events_send_failures"]) + 1
+            self._diagnostics["ws_events_last_error_kind"] = type(exc).__name__
+            await self.disconnect(websocket)
+            return False
 
     def diagnostics(self) -> dict[str, Any]:
         snapshot = dict(self._diagnostics)

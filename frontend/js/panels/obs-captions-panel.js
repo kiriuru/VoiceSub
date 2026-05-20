@@ -1,4 +1,4 @@
-import { collectElements } from "../core/dom.js";
+import { collectElements, setCheckedIfChanged, setInputValueIfChanged } from "../core/dom.js";
 import { createPanelMount } from "../core/panel-mount.js";
 import { getCurrentLocale, t } from "../dashboard/helpers.js";
 
@@ -8,20 +8,20 @@ function renderObsCaptionsPanel(snapshot, elements) {
   if (!config) {
     return;
   }
-  elements.enabled.checked = Boolean(config.enabled);
-  elements.host.value = config.connection?.host || "127.0.0.1";
-  elements.port.value = String(config.connection?.port ?? 4455);
-  elements.password.value = config.connection?.password || "";
-  elements.outputMode.value = config.output_mode || "disabled";
-  elements.debugEnabled.checked = Boolean(config.debug_mirror?.enabled);
-  elements.debugInputName.value = config.debug_mirror?.input_name || "CC_DEBUG";
-  elements.debugSendPartials.checked = config.debug_mirror?.send_partials !== false;
-  elements.sendPartials.checked = config.timing?.send_partials !== false;
-  elements.partialThrottle.value = String(config.timing?.partial_throttle_ms ?? 250);
-  elements.minPartialDelta.value = String(config.timing?.min_partial_delta_chars ?? 3);
-  elements.finalReplaceDelay.value = String(config.timing?.final_replace_delay_ms ?? 0);
-  elements.clearAfter.value = String(config.timing?.clear_after_ms ?? 2500);
-  elements.avoidDuplicates.checked = config.timing?.avoid_duplicate_text !== false;
+  setCheckedIfChanged(elements.enabled, Boolean(config.enabled));
+  setInputValueIfChanged(elements.host, config.connection?.host || "127.0.0.1");
+  setInputValueIfChanged(elements.port, config.connection?.port ?? 4455);
+  setInputValueIfChanged(elements.password, config.connection?.password || "");
+  setInputValueIfChanged(elements.outputMode, config.output_mode || "disabled");
+  setCheckedIfChanged(elements.debugEnabled, Boolean(config.debug_mirror?.enabled));
+  setInputValueIfChanged(elements.debugInputName, config.debug_mirror?.input_name || "CC_DEBUG");
+  setCheckedIfChanged(elements.debugSendPartials, config.debug_mirror?.send_partials !== false);
+  setCheckedIfChanged(elements.sendPartials, config.timing?.send_partials !== false);
+  setInputValueIfChanged(elements.partialThrottle, config.timing?.partial_throttle_ms ?? 250);
+  setInputValueIfChanged(elements.minPartialDelta, config.timing?.min_partial_delta_chars ?? 3);
+  setInputValueIfChanged(elements.finalReplaceDelay, config.timing?.final_replace_delay_ms ?? 0);
+  setInputValueIfChanged(elements.clearAfter, config.timing?.clear_after_ms ?? 2500);
+  setCheckedIfChanged(elements.avoidDuplicates, config.timing?.avoid_duplicate_text !== false);
   if (!elements.statusText) {
     return;
   }
@@ -122,8 +122,19 @@ function bindObsCaptionsEvents(elements, { actions, logger }) {
   ]
     .filter(Boolean)
     .forEach((element) => {
-      const eventName = element.type === "checkbox" || element.tagName === "SELECT" ? "change" : "input";
-      add(element, eventName, syncConfig);
+      const isCheckboxOrSelect = element.type === "checkbox" || element.tagName === "SELECT";
+      // Checkbox/select fire "change" only — binding both an `eventName` and
+      // a separate "change" listener would mutate the store twice on every
+      // toggle. Text/number inputs still need the live "input" sync plus a
+      // committed "change" tick that also logs.
+      if (isCheckboxOrSelect) {
+        add(element, "change", () => {
+          syncConfig();
+          logger("[obs-cc] updated locally");
+        });
+        return;
+      }
+      add(element, "input", syncConfig);
       add(element, "change", () => {
         syncConfig();
         logger("[obs-cc] updated locally");

@@ -107,14 +107,17 @@ class AsrRealtimeConfig(SchemaModel):
     chunk_overlap_ms: int = 0
     partial_min_delta_chars: int = 4
     partial_coalescing_ms: int = 160
+    streaming_decode: bool = True
+    partial_emit_mode: Literal["word_growth", "char_delta"] = "word_growth"
+    partial_min_new_words: int = 1
+    vad_speech_attack_frames: int = 2
+    vad_speech_preroll_frames: int = 5
 
 
 class AsrConfig(SchemaModel):
     mode: Literal["local", "browser_google", "browser_google_experimental"] = "local"
     desktop_profile_lock: Literal["", "browser_speech"] = ""
-    provider_preference: Literal["official_eu_parakeet", "official_eu_parakeet_low_latency"] = (
-        "official_eu_parakeet_low_latency"
-    )
+    provider_preference: Literal["official_eu_parakeet_low_latency"] = "official_eu_parakeet_low_latency"
     prefer_gpu: bool = True
     model_load_mode: Literal["auto", "local_nemo", "from_pretrained"] = "auto"
     model_revision: str = ""
@@ -138,8 +141,8 @@ class ObsClosedCaptionsDebugMirrorConfig(SchemaModel):
 
 class ObsClosedCaptionsTimingConfig(SchemaModel):
     send_partials: bool = True
-    partial_throttle_ms: int = 250
-    min_partial_delta_chars: int = 3
+    partial_throttle_ms: int = 140
+    min_partial_delta_chars: int = 1
     final_replace_delay_ms: int = 0
     clear_after_ms: int = 2500
     avoid_duplicate_text: bool = True

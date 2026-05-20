@@ -15,6 +15,15 @@ export function normalizeDiagnostics(payload) {
     requested_device_policy: String(current.requested_device_policy || ""),
     torch_built_with_cuda: current.torch_built_with_cuda === true,
     degraded_mode: current.degraded_mode === true,
+    active_latency_preset: String(current.active_latency_preset || ""),
+    streaming_decode:
+      current.streaming_decode === false ? false : current.streaming_decode === true ? true : null,
+    partial_emit_mode: String(current.partial_emit_mode || ""),
+    partial_min_new_words:
+      typeof current.partial_min_new_words === "number" && Number.isFinite(current.partial_min_new_words)
+        ? current.partial_min_new_words
+        : null,
+    true_streaming: current.true_streaming === true,
     raw: current,
   };
 }

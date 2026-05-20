@@ -9,7 +9,11 @@ from typing import Any, Awaitable, Callable
 
 from backend.core.structured_runtime_logger import StructuredRuntimeLogger
 from backend.core.runtime.translation_preview_lineage import TranslationPreviewLineage
-from backend.core.translation_engine import PreparedTranslationRequest, TranslationEngine
+from backend.core.translation_engine import (
+    PreparedTranslationLine,
+    PreparedTranslationRequest,
+    TranslationEngine,
+)
 from backend.models import TranslationEvent, TranslationItem
 
 logger = logging.getLogger(__name__)

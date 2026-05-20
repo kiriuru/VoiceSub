@@ -1,4 +1,4 @@
-import { collectElements, fillSelectOptions } from "../core/dom.js";
+import { collectElements, fillSelectOptions, setInputValueIfChanged } from "../core/dom.js";
 import { createPanelMount } from "../core/panel-mount.js";
 import { selectConfig, selectProfiles } from "../core/selectors.js";
 
@@ -22,8 +22,11 @@ function renderProfiles(snapshot, elements) {
     profiles.map((name) => ({ value: name, label: name })),
     { selectedValue: config?.profile || elements.select.value }
   );
-  if (elements.nameInput && config?.profile) {
-    elements.nameInput.value = config.profile;
+  if (config?.profile) {
+    // setInputValueIfChanged skips the write while the user is typing a new
+    // profile name (focused field) or when the active config already shows
+    // the same name, so background renders never reset their caret.
+    setInputValueIfChanged(elements.nameInput, config.profile);
   }
 }
 

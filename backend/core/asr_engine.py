@@ -12,7 +12,6 @@ from backend.core.parakeet_provider import (
     ASR_PROVIDER_REALTIME,
     BaseAsrProvider,
     MockParakeetProvider,
-    OfficialEuParakeetProvider,
     OfficialEuParakeetRealtimeProvider,
     allow_mock_asr,
     get_asr_provider_override,
@@ -66,6 +65,14 @@ class AsrEngine:
         except Exception:
             return False
 
+    def _make_low_latency_provider(self, prefer_gpu: bool) -> OfficialEuParakeetRealtimeProvider:
+        return OfficialEuParakeetRealtimeProvider(
+            models_dir=self._models_dir,
+            prefer_gpu=prefer_gpu,
+            config_getter=self._config_getter,
+            runtime_status_callback=self._runtime_status_callback,
+        )
+
     def _build_default_provider_with_status(
         self,
         *,
@@ -79,98 +86,29 @@ class AsrEngine:
         self._degraded_mode = False
         self._fallback_reason = None
 
-        candidates: list[BaseAsrProvider] = []
-        if provider_preference == ASR_PROVIDER_REALTIME:
-            candidates.extend(
-                [
-                    OfficialEuParakeetRealtimeProvider(
-                        models_dir=self._models_dir,
-                        prefer_gpu=prefer_gpu,
-                        config_getter=self._config_getter,
-                        runtime_status_callback=self._runtime_status_callback,
-                    ),
-                    OfficialEuParakeetProvider(
-                        models_dir=self._models_dir,
-                        prefer_gpu=prefer_gpu,
-                        config_getter=self._config_getter,
-                        runtime_status_callback=self._runtime_status_callback,
-                    ),
-                ]
-            )
-        elif provider_preference == ASR_PROVIDER_OFFICIAL:
-            candidates.append(
-                OfficialEuParakeetProvider(
-                    models_dir=self._models_dir,
-                    prefer_gpu=prefer_gpu,
-                    config_getter=self._config_getter,
-                    runtime_status_callback=self._runtime_status_callback,
-                )
-            )
-        else:
-            candidates.extend(
-                [
-                    OfficialEuParakeetRealtimeProvider(
-                        models_dir=self._models_dir,
-                        prefer_gpu=prefer_gpu,
-                        config_getter=self._config_getter,
-                        runtime_status_callback=self._runtime_status_callback,
-                    ),
-                    OfficialEuParakeetProvider(
-                        models_dir=self._models_dir,
-                        prefer_gpu=prefer_gpu,
-                        config_getter=self._config_getter,
-                        runtime_status_callback=self._runtime_status_callback,
-                    ),
-                ]
-            )
+        # Non-streaming file-based provider was removed: local ASR is always low-latency NeMo.
+        candidates: list[BaseAsrProvider] = [self._make_low_latency_provider(prefer_gpu)]
 
         last_provider: BaseAsrProvider | None = None
         last_status: AsrProviderStatus | None = None
-        realtime_failure_reason: str | None = None
         for provider in candidates:
             last_provider = provider
             status = provider.status(include_runtime_state=initialize_runtime)
             last_status = status
             if status.ready:
-                if provider_preference == ASR_PROVIDER_REALTIME and status.provider != ASR_PROVIDER_REALTIME:
-                    self._degraded_mode = True
-                    self._fallback_reason = (
-                        f"Requested realtime provider '{ASR_PROVIDER_REALTIME}' was not ready. "
-                        f"Baseline fallback '{status.provider}' is active."
-                    )
-                    if realtime_failure_reason:
-                        self._fallback_reason = f"{self._fallback_reason} Realtime failure: {realtime_failure_reason}"
-                if provider_preference == "auto" and status.provider != ASR_PROVIDER_REALTIME:
-                    self._degraded_mode = True
-                    self._fallback_reason = (
-                        f"Automatic provider selection could not activate realtime mode. "
-                        f"Fallback provider '{status.provider}' is active."
-                    )
-                    if realtime_failure_reason:
-                        self._fallback_reason = f"{self._fallback_reason} Realtime failure: {realtime_failure_reason}"
                 return provider, status
             if (
                 initialize_runtime
                 and status.message
                 and "Failed to download the official EU multilingual model automatically." in status.message
             ):
-                # Realtime and baseline providers share the same local model file. If the
-                # download itself failed, trying the fallback provider immediately only
-                # repeats the same large download again.
                 return provider, status
-            if status.provider == ASR_PROVIDER_REALTIME and status.message:
-                realtime_failure_reason = status.message
         if allow_mock:
             self._degraded_mode = True
             self._fallback_reason = "No real ASR provider was ready. Explicit mock ASR fallback is active."
             mock_provider = MockParakeetProvider()
             return mock_provider, mock_provider.status(include_runtime_state=initialize_runtime)
-        fallback_provider = last_provider or OfficialEuParakeetProvider(
-            models_dir=self._models_dir,
-            prefer_gpu=prefer_gpu,
-            config_getter=self._config_getter,
-            runtime_status_callback=self._runtime_status_callback,
-        )
+        fallback_provider = last_provider or self._make_low_latency_provider(prefer_gpu)
         return fallback_provider, last_status
 
     def _build_default_provider(self, *, initialize_runtime: bool = False) -> BaseAsrProvider:
@@ -226,12 +164,20 @@ class AsrEngine:
         diagnostics.fallback_reason = " ".join(fallback_reasons) if fallback_reasons else None
         return diagnostics
 
-    def run(self, audio_segment: bytes, *, is_final: bool, segment_id: str | None = None) -> AsrResult:
+    def run(
+        self,
+        audio_segment: bytes,
+        *,
+        is_final: bool,
+        segment_id: str | None = None,
+        audio_is_delta: bool = False,
+    ) -> AsrResult:
         return self._ensure_provider().transcribe(
             audio_segment,
             sample_rate=self.sample_rate,
             is_final=is_final,
             segment_id=segment_id,
+            audio_is_delta=audio_is_delta,
         )
 
     def reset_runtime_state(self) -> None:

@@ -17,8 +17,8 @@ class ObsCaptionDiagnostics(SchemaModel):
     password_configured: bool = False
     connection_state: Literal["disabled", "disconnected", "connecting", "connected", "auth_failed", "error"] = "disabled"
     send_partials: bool = True
-    partial_throttle_ms: int = 250
-    min_partial_delta_chars: int = 3
+    partial_throttle_ms: int = 140
+    min_partial_delta_chars: int = 1
     final_replace_delay_ms: int = 0
     clear_after_ms: int = 2500
     avoid_duplicate_text: bool = True

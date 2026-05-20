@@ -1,8 +1,8 @@
-# SST Desktop 0.4.0
+# SST Desktop 0.4.1
 
 SST Desktop is a local Windows application for real-time speech recognition, optional translation, subtitle routing, and OBS-ready output.
 
-This README describes the current desktop product surface for the `0.4.0` code line.
+This README describes the current desktop product surface for the `0.4.1` code line.
 
 ## Language
 
@@ -10,24 +10,25 @@ This README describes the current desktop product surface for the `0.4.0` code l
 
 ## Technical Documentation
 
-- Full technical architecture document: [docs/TECHNICAL_ARCHITECTURE.md](./docs/TECHNICAL_ARCHITECTURE.md) (includes browser ASR observability §11.4, WebSocket/replay contracts §9, translation preview supersession §12.2)
+- Full technical architecture document: [docs/TECHNICAL_ARCHITECTURE.md](./docs/TECHNICAL_ARCHITECTURE.md) (RuntimeOrchestrator facade §6, WebSocket send mutex §9, browser worker transport §9.1, dashboard UI stability §16.6, local Parakeet pipeline §17, desktop packaging §14, tests §20)
 - Unified changelog: [docs/CHANGELOG.md](./docs/CHANGELOG.md)
-- `0.4.0` delta notes: [docs/DESKTOP_RELEASE_CHANGELOG_0.4.0.md](./docs/DESKTOP_RELEASE_CHANGELOG_0.4.0.md)
-- Previous delta (`0.3.2`): [docs/DESKTOP_RELEASE_CHANGELOG_0.3.2.md](./docs/DESKTOP_RELEASE_CHANGELOG_0.3.2.md)
-- Full history: [docs/CHANGELOG.md](./docs/CHANGELOG.md)
+- **`0.4.1` installer delta:** [docs/DESKTOP_RELEASE_CHANGELOG_0.4.1.md](./docs/DESKTOP_RELEASE_CHANGELOG_0.4.1.md)
+- Full history (including `0.4.0` and earlier): [docs/CHANGELOG.md](./docs/CHANGELOG.md)
 
 ## Release Highlights
 
-`0.4.0` — see [docs/DESKTOP_RELEASE_CHANGELOG_0.4.0.md](./docs/DESKTOP_RELEASE_CHANGELOG_0.4.0.md) (same bullet style as [v0.2.9.2](https://github.com/kiriuru/stream_sub_translator/releases/tag/v0.2.9.2)): compact dashboard + window resize, Browser ASR observability, Web Speech quick-start Parakeet lock, non-blocking dashboard boot (panels first; launcher uses in-page navigation so the shell does not stall ~20 s on pywebviewready), second installer **Only Web.exe**. `PROJECT_VERSION = "0.4.0"`; `config_version` stays **7**; public `/api` and subtitle contracts unchanged.
+**`0.4.1`** — see [docs/DESKTOP_RELEASE_CHANGELOG_0.4.1.md](./docs/DESKTOP_RELEASE_CHANGELOG_0.4.1.md): Parakeet incremental streaming + word-growth partials, `LocalAsrPipeline`, Tuning latency presets with slider alignment, runtime summary strip, Tools fields for `streaming_decode` / emit mode / min words, single low-latency Parakeet provider in UI, `AsrDiagnostics` echo fields. `PROJECT_VERSION = "0.4.1"`; `config_version` stays **7**; public `/api` and subtitle contracts unchanged.
 
-Prior release: [docs/DESKTOP_RELEASE_CHANGELOG_0.3.2.md](./docs/DESKTOP_RELEASE_CHANGELOG_0.3.2.md). Full history: [docs/CHANGELOG.md](./docs/CHANGELOG.md).
+**Unreleased (engineering, same version line)** — see [docs/CHANGELOG.md](./docs/CHANGELOG.md#unreleased): thin `RuntimeOrchestrator` facade + mixins, WebSocket/browser ASR send serialization, dashboard store/panel UX hardening (no caret resets), desktop log rotation, expanded regression tests (**462** collected).
+
+**`0.4.0` and earlier** — see [docs/CHANGELOG.md](./docs/CHANGELOG.md) (compact dashboard, Browser ASR observability, **Only Web.exe**, desktop profile lock, and prior lines).
 
 ## Release Package
 
 GitHub releases attach bootstrap **exe** (built locally; sources under `desktop/` are not in the public repo):
 
-- `Stream Subtitle Translator.exe` — standard 0.4.0 bootstrap
-- `Stream Subtitle Translator Only Web.exe` — **new in 0.4.0**, Web Speech only
+- `Stream Subtitle Translator.exe` — standard bootstrap (payload tracks `PROJECT_VERSION`, currently **0.4.1** when built from this tree)
+- `Stream Subtitle Translator Only Web.exe` — Web Speech only (introduced in 0.4.0; still supported)
 
 On first launch the bootstrap launcher extracts the managed runtime next to itself and then starts the desktop runtime from disk.
 
@@ -77,7 +78,7 @@ Current extracted layout:
 - managed runtime folder: `app-runtime/`
 - hidden internal runtime executable: `.sst-runtime.exe`
 - user data: `user-data/`
-- app logs: `logs/`
+- app logs: `logs/` (previous desktop launcher run → `desktop-launcher.old.log` on next start)
 - local models: `user-data/models/`
 
 Build desktop installers (local dev tree only — not in the public GitHub repo):
@@ -90,7 +91,7 @@ Develop the app from a GitHub clone with **`start.bat`** (backend + frontend; no
 
 ## Startup Profiles
 
-Splash profiles are unchanged from earlier releases. **New in 0.4.0:** `Quick Start (Web Speech)` and **Only Web** set `asr.desktop_profile_lock` (details in [0.4.0 delta](./docs/DESKTOP_RELEASE_CHANGELOG_0.4.0.md)).
+Splash profiles are unchanged from earlier releases. **Since 0.4.0:** `Quick Start (Web Speech)` and **Only Web** set `asr.desktop_profile_lock` (see [CHANGELOG](./docs/CHANGELOG.md) section **0.4.0**).
 
 - `Quick Start (Web Speech)`:
   - fastest startup path;
@@ -131,6 +132,8 @@ On first launch the bootstrap launcher extracts and/or creates:
 
 If an older install still has `user-data/logs/`, the launcher/runtime migrates those files into `logs/`.
 
+On each desktop shell start, the previous `logs/desktop-launcher.log` is rotated to `desktop-launcher.old.log` so crash history from the last run is preserved.
+
 These folders are normal for the desktop flow and should be kept next to the executable.
 
 ## Core Features
@@ -159,7 +162,7 @@ Backend:
 - `backend/services/` for route-facing orchestration;
 - `backend/config/` for defaults, secrets, and normalization helpers;
 - `backend/core/` for bootstrap, shared lifecycle, WS, subtitle routing, and runtime coordination;
-- `backend/core/runtime/` for extracted runtime controllers and status builders;
+- `backend/core/runtime/` for extracted runtime controllers, **thin `RuntimeOrchestrator` facade + mixins**, `LocalAsrPipeline`, and status builders;
 - `backend/asr/parakeet/` for local AI runtime installation, diagnostics, and provider adapters;
 - `backend/translation/` for provider registry, readiness checks, engine wiring, and provider-specific clients;
 - `backend/schemas/` for typed config/runtime/diagnostics payloads.
@@ -168,7 +171,7 @@ Frontend:
 
 - plain HTML/CSS/JS only;
 - `frontend/js/main.js` as the dashboard entrypoint;
-- `frontend/js/core/` for store, API, WS client, event bus;
+- `frontend/js/core/` for store (isolated panel listeners), API, WS client, `dom.js` idempotent input helpers, event bus;
 - `frontend/js/dashboard/` for actions/helpers/logging;
 - `frontend/js/panels/` for dashboard panel wiring;
 - `frontend/js/normalizers/` for pure normalization logic.
@@ -201,6 +204,8 @@ The main window includes:
 `Start` sends the current in-memory config snapshot to `/api/runtime/start`, so unsaved dashboard changes can take effect immediately in the runtime without forcing a disk save first. The snapshot is tracked through `active_config_source = runtime_start_snapshot`, `active_config_persisted = false`, and `active_config_hash`, so it does not silently overwrite `user-data/config.json`.
 
 Visual layout was not redesigned in the `0.3.x` line; major work remains internal modular architecture and runtime robustness.
+
+**Dashboard settings UX (`0.4.1+`):** panels re-render from the central store on runtime/config updates, but text fields and checkboxes use idempotent DOM updates so focused inputs and carets are not reset while you edit. One broken panel listener no longer blocks updates to other panels.
 
 ## Main Tabs
 
@@ -307,7 +312,8 @@ Visual layout was not redesigned in the `0.3.x` line; major work remains interna
 - Supports GPU-first policy on compatible NVIDIA systems.
 - CPU fallback is available when needed.
 - Remains the default local AI path in current builds.
-- `Recognition -> Backend ASR provider` now only offers `Official EU Parakeet Low Latency` and `Official EU Parakeet`.
+- `Recognition -> Backend ASR provider` offers **Official EU Parakeet Low Latency** only (legacy `official_eu_parakeet` migrates to low latency).
+- Tuning tab: latency presets (`ultra_low_latency` / `balanced` / `quality` / `custom`) aligned with backend `local_asr_realtime_settings.py`.
 
 ### Web Speech
 
@@ -450,7 +456,7 @@ Overlay remains a separate lightweight page for OBS Browser Source and auto-reco
 - legacy language-based `subtitle_output.display_order` values are migrated to slot ids like `translation_1`;
 - `/api/runtime/start` can apply an optional normalized `config_payload` snapshot for runtime-only changes without persisting `user-data/config.json` (tracked via `active_config_source = runtime_start_snapshot`, `active_config_persisted = false`, `active_config_hash`);
 - config writes are atomic on Windows (temporary file in the same folder + `os.replace()`); a corrupt `user-data/config.json` is rotated into `*.corrupt-<timestamp>.json` and defaults are restored;
-- `backend/versioning.py` (`PROJECT_VERSION = "0.4.0"`) remains the single source of truth for the app version.
+- `backend/versioning.py` (`PROJECT_VERSION = "0.4.1"`) remains the single source of truth for the app version.
 
 ## Remote Notes
 
@@ -544,7 +550,7 @@ Build output:
 - bootstrap launchers:
   - `dist\bootstrap-launcher\Stream Subtitle Translator.exe`
   - `dist\bootstrap-launcher-web-only\Stream Subtitle Translator Only Web.exe`
-- versioned release bundle (local): `dist\desktop-releases\v0.4.0\` (`01-bootstrap-onefile\`, `01-bootstrap-web-only-onefile\`, `02-managed-app-onefolder\`, `03-installers-both\`, `README.txt`)
+- versioned release bundle (local): `dist\desktop-releases\v0.4.1\` (`01-bootstrap-onefile\`, `01-bootstrap-web-only-onefile\`, `02-managed-app-onefolder\`, `03-installers-both\`, `README.txt`) when publishing this line; older trees may still show `v0.4.0\`.
 - publish script defaults (both exes end up in each folder):
   - `F:\AI\stream-sub-translator-desktop-release`
   - `F:\AI\stream-sub-translator-desktop-release-clean`
@@ -585,7 +591,7 @@ GitHub-tracked suite:
 .\.venv\Scripts\python.exe -m unittest discover -s tests -p "test_*.py"
 ```
 
-For `0.4.0`: **336** tests `OK` in a full local tree (includes desktop-only modules); the public repo runs the tracked subset (includes `tests/test_browser_asr_observability.py`). Bootstrap build verification is local-only — see [docs/TECHNICAL_ARCHITECTURE.md](./docs/TECHNICAL_ARCHITECTURE.md) §20.
+For `0.4.1`: run `python -m unittest discover -s tests` after changes; the public repo runs the tracked subset (includes `tests/test_browser_asr_observability.py`). Bootstrap build verification is local-only — see [docs/TECHNICAL_ARCHITECTURE.md](./docs/TECHNICAL_ARCHITECTURE.md) §20.
 
 ## Privacy and Runtime Scope
 
@@ -595,5 +601,6 @@ For `0.4.0`: **336** tests `OK` in a full local tree (includes desktop-only modu
 
 ## Release Version
 
+- `0.4.1` (current code line)
 - `0.4.0`
 - Single runtime source of truth: `backend/versioning.py` (`PROJECT_VERSION`).

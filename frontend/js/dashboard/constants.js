@@ -137,25 +137,25 @@ export const BROWSER_RECOGNITION_LANGUAGES = [
 
 export const SIMPLE_TUNING_OPTIONS = {
   appearance: [
-    { label: "Steadier", partial_emit_interval_ms: 560, min_speech_ms: 260 },
+    { label: "Steadier", partial_emit_interval_ms: 650, min_speech_ms: 260 },
     { label: "Calm", partial_emit_interval_ms: 500, min_speech_ms: 220 },
-    { label: "Balanced", partial_emit_interval_ms: 450, min_speech_ms: 180 },
-    { label: "Quick", partial_emit_interval_ms: 360, min_speech_ms: 140 },
-    { label: "Fast", partial_emit_interval_ms: 280, min_speech_ms: 100 },
+    { label: "Balanced", partial_emit_interval_ms: 280, min_speech_ms: 180 },
+    { label: "Quick", partial_emit_interval_ms: 240, min_speech_ms: 140 },
+    { label: "Fast", partial_emit_interval_ms: 240, min_speech_ms: 120 },
   ],
   finish: [
-    { label: "Wait Longer", silence_hold_ms: 260, pause_to_finalize_ms: 650 },
-    { label: "Relaxed", silence_hold_ms: 220, pause_to_finalize_ms: 500 },
+    { label: "Wait Longer", silence_hold_ms: 260, pause_to_finalize_ms: 520 },
+    { label: "Relaxed", silence_hold_ms: 220, pause_to_finalize_ms: 450 },
     { label: "Balanced", silence_hold_ms: 180, pause_to_finalize_ms: 350 },
-    { label: "Quick", silence_hold_ms: 150, pause_to_finalize_ms: 300 },
-    { label: "Fast", silence_hold_ms: 120, pause_to_finalize_ms: 260 },
+    { label: "Quick", silence_hold_ms: 150, pause_to_finalize_ms: 280 },
+    { label: "Fast", silence_hold_ms: 120, pause_to_finalize_ms: 220 },
   ],
   stability: [
-    { label: "Live", partial_min_delta_chars: 4, partial_coalescing_ms: 80 },
-    { label: "Responsive", partial_min_delta_chars: 8, partial_coalescing_ms: 120 },
-    { label: "Balanced", partial_min_delta_chars: 12, partial_coalescing_ms: 160 },
-    { label: "Steady", partial_min_delta_chars: 15, partial_coalescing_ms: 240 },
-    { label: "Very Steady", partial_min_delta_chars: 18, partial_coalescing_ms: 320 },
+    { label: "Live", partial_min_delta_chars: 1, partial_coalescing_ms: 80 },
+    { label: "Responsive", partial_min_delta_chars: 0, partial_coalescing_ms: 0 },
+    { label: "Balanced", partial_min_delta_chars: 0, partial_coalescing_ms: 0 },
+    { label: "Steady", partial_min_delta_chars: 4, partial_coalescing_ms: 80 },
+    { label: "Very Steady", partial_min_delta_chars: 12, partial_coalescing_ms: 160 },
   ],
 };
 

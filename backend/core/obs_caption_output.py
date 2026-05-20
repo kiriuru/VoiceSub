@@ -142,8 +142,8 @@ class ObsCaptionOutput:
             },
             "timing": {
                 "send_partials": bool(timing.get("send_partials", True)),
-                "partial_throttle_ms": max(0, int(timing.get("partial_throttle_ms", 250) or 0)),
-                "min_partial_delta_chars": max(0, int(timing.get("min_partial_delta_chars", 3) or 0)),
+                "partial_throttle_ms": max(0, int(timing.get("partial_throttle_ms", 140) or 0)),
+                "min_partial_delta_chars": max(0, int(timing.get("min_partial_delta_chars", 1) or 0)),
                 "final_replace_delay_ms": max(0, int(timing.get("final_replace_delay_ms", 0) or 0)),
                 "clear_after_ms": max(0, int(timing.get("clear_after_ms", 2500) or 0)),
                 "avoid_duplicate_text": bool(timing.get("avoid_duplicate_text", True)),
@@ -363,6 +363,9 @@ class ObsCaptionOutput:
         previous = self._last_partial_text
         elapsed_ms = (time.perf_counter() - self._last_partial_sent_monotonic) * 1000.0 if self._last_partial_sent_monotonic else None
         growth_chars = len(normalized) - len(previous)
+        prev_word_count = len(str(previous or "").split())
+        new_word_count = len(normalized.split())
+        word_tail_growth = new_word_count > prev_word_count
         if normalized == previous:
             return
         if (
@@ -371,6 +374,7 @@ class ObsCaptionOutput:
             and elapsed_ms < int(settings["timing"]["partial_throttle_ms"])
             and growth_chars >= 0
             and growth_chars < int(settings["timing"]["min_partial_delta_chars"])
+            and not word_tail_growth
         ):
             return
 

@@ -1,4 +1,4 @@
-import { collectElements } from "../core/dom.js";
+import { collectElements, setCheckedIfChanged, setInputValueIfChanged } from "../core/dom.js";
 import { createPanelMount } from "../core/panel-mount.js";
 import { escapeHtml, getCurrentLocale, setElementVisibility, t } from "../dashboard/helpers.js";
 import { renderSubtitleDisplayOrder } from "./overlay/overlay-display-order-view.js";
@@ -42,21 +42,11 @@ function renderOverlayPanel(snapshot, elements, { actions }) {
   if (!config) {
     return;
   }
-  if (elements.presetSelect) {
-    elements.presetSelect.value = config.overlay?.preset || "single";
-  }
-  if (elements.compactToggle) {
-    elements.compactToggle.checked = Boolean(config.overlay?.compact);
-  }
-  if (elements.showSource) {
-    elements.showSource.checked = config.subtitle_output?.show_source !== false;
-  }
-  if (elements.showTranslations) {
-    elements.showTranslations.checked = config.subtitle_output?.show_translations !== false;
-  }
-  if (elements.maxTranslations) {
-    elements.maxTranslations.value = String(config.subtitle_output?.max_translation_languages ?? 0);
-  }
+  setInputValueIfChanged(elements.presetSelect, config.overlay?.preset || "single");
+  setCheckedIfChanged(elements.compactToggle, Boolean(config.overlay?.compact));
+  setCheckedIfChanged(elements.showSource, config.subtitle_output?.show_source !== false);
+  setCheckedIfChanged(elements.showTranslations, config.subtitle_output?.show_translations !== false);
+  setInputValueIfChanged(elements.maxTranslations, config.subtitle_output?.max_translation_languages ?? 0);
   if (elements.presetHint) {
     const preset = config.overlay?.preset || "single";
     elements.presetHint.textContent =

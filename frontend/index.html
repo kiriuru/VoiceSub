@@ -166,14 +166,6 @@
               </select>
             </label>
             <p id="recognition-worker-browser-web-note" class="muted dashboard-hint-text" hidden data-i18n="overview.recognition.worker_browser.web_hint"></p>
-            <label id="local-asr-provider-row">
-              <span class="label" data-i18n="overview.recognition.provider">Backend ASR provider</span>
-              <select id="local-asr-provider-select">
-                <option value="official_eu_parakeet_low_latency" data-i18n="overview.recognition.provider.parakeet_low_latency">Official EU Parakeet Low Latency</option>
-                <option value="official_eu_parakeet" data-i18n="overview.recognition.provider.parakeet">Official EU Parakeet</option>
-              </select>
-            </label>
-            <p id="local-asr-provider-hint" class="muted dashboard-hint-text" data-i18n="overview.recognition.provider.hint">Backend providers are configured here for local microphone capture. Web Speech modes use the separate browser worker window.</p>
           </div>
         </article>
         <article class="mini-card overview-microphone-card">
@@ -448,6 +440,18 @@
           </div>
         </div>
         <p id="subtitle-style-custom-status" class="muted" data-i18n="style.custom_status.default">Built-in presets are editable, and custom presets are saved locally in config/profiles.</p>
+        <div id="style-fonts-section" class="settings-surface settings-fonts-section">
+          <div class="surface-header">
+            <div>
+              <h3 data-i18n="style.fonts.title">Fonts</h3>
+              <p class="muted" data-i18n="style.fonts.note">Project-local fonts are the reliable custom-font path. System font listing is best-effort.</p>
+            </div>
+            <button id="font-refresh-btn" class="secondary" type="button" data-i18n="style.fonts.refresh">Refresh System Fonts</button>
+          </div>
+          <p class="muted"><span data-i18n="style.fonts.dir">Project-local fonts folder:</span> <span id="project-fonts-dir" class="mono">loading...</span></p>
+          <p id="font-source-status" class="muted" data-i18n="style.fonts.status.default">Fallback fonts are always available. Local system font access depends on the browser/runtime.</p>
+        </div>
+
         <div class="settings-surface">
           <div class="surface-header">
             <div>
@@ -456,6 +460,18 @@
             </div>
           </div>
           <div class="style-grid">
+            <label class="stack-field">
+              <span data-i18n="style.field.font_family">Font family</span>
+              <select id="style-font-family"></select>
+            </label>
+            <label class="stack-field">
+              <span data-i18n="style.field.font_size">Font size</span>
+              <input id="style-font-size" type="number" min="12" max="96" step="1" />
+            </label>
+            <label class="stack-field">
+              <span data-i18n="style.field.font_weight">Font weight</span>
+              <input id="style-font-weight" type="number" min="300" max="900" step="100" />
+            </label>
             <label class="stack-field">
               <span data-i18n="style.field.text_color">Text color</span>
               <input id="style-fill-color" type="color" />
@@ -537,6 +553,18 @@
           <div id="style-line-slot-tabs" class="slot-tab-list"></div>
           <p id="style-line-slot-description" class="muted" data-i18n="style.slots.description">Select a line slot to override the base style.</p>
           <div id="style-line-slot-fields" class="style-grid">
+            <label class="stack-field">
+              <span data-i18n="style.field.font_family">Font family</span>
+              <select id="style-line-slot-font-family"></select>
+            </label>
+            <label class="stack-field">
+              <span data-i18n="style.field.font_size">Font size</span>
+              <input id="style-line-slot-font-size" type="number" min="12" max="96" step="1" placeholder="" />
+            </label>
+            <label class="stack-field">
+              <span data-i18n="style.field.font_weight">Font weight</span>
+              <input id="style-line-slot-font-weight" type="number" min="300" max="900" step="100" placeholder="" />
+            </label>
             <label class="stack-field">
               <span data-i18n="style.field.text_color">Text color</span>
               <input id="style-line-slot-fill-color" type="color" />
@@ -771,6 +799,21 @@
               <p class="muted" data-i18n="tuning.rnnoise.note.3">Save config or profile after tuning.</p>
             </div>
           </div>
+          <div id="parakeet-latency-preset-row" class="stack-field is-hidden">
+            <label class="stack-field" for="parakeet-latency-preset">
+              <span data-i18n="tuning.preset.label">Parakeet latency preset</span>
+              <select id="parakeet-latency-preset">
+                <option value="ultra_low_latency" data-i18n="tuning.preset.ultra_low_latency">Ultra low latency</option>
+                <option value="balanced" data-i18n="tuning.preset.balanced">Balanced</option>
+                <option value="quality" data-i18n="tuning.preset.quality">Quality</option>
+                <option value="custom" data-i18n="tuning.preset.custom">Custom (sliders)</option>
+              </select>
+            </label>
+            <p class="muted" data-i18n="tuning.preset.note">Presets set backend realtime fields (streaming, word growth). Sliders switch to Custom when you fine-tune manually.</p>
+            <p class="muted" data-i18n="tuning.apply.full_note">
+              After changing presets or sliders: save config or profile, then restart the runtime (Stop, then Start) so local Parakeet reloads realtime settings.
+            </p>
+          </div>
           <div class="slider-group">
             <label class="stack-field">
               <div class="slider-heading">
@@ -930,6 +973,41 @@
                 <option value="3" data-i18n="tools.advanced.vad_mode.3">3 - Strictest, least likely to trigger on noise</option>
               </select>
             </label>
+            <div id="rt-tools-local-parakeet-extras" class="actions is-hidden">
+              <label class="inline-field annotated-field">
+                <div class="inline-field-head">
+                  <span data-i18n="tools.advanced.latency_preset">Latency preset</span>
+                  <strong class="inline-field-note" data-i18n="tools.advanced.latency_preset.note">same as Tuning tab</strong>
+                </div>
+                <select id="rt-tools-latency-preset">
+                  <option value="ultra_low_latency" data-i18n="tuning.preset.ultra_low_latency">Ultra low latency</option>
+                  <option value="balanced" data-i18n="tuning.preset.balanced">Balanced</option>
+                  <option value="quality" data-i18n="tuning.preset.quality">Quality</option>
+                  <option value="custom" data-i18n="tuning.preset.custom">Custom</option>
+                </select>
+              </label>
+              <label class="checkbox-row">
+                <input id="rt-streaming-decode" type="checkbox" />
+                <span data-i18n="tools.advanced.streaming_decode">Incremental streaming decode (NeMo)</span>
+              </label>
+              <label class="inline-field annotated-field">
+                <div class="inline-field-head">
+                  <span data-i18n="tools.advanced.partial_emit_mode">Partial emit mode</span>
+                  <strong class="inline-field-note" data-i18n="tools.advanced.partial_emit_mode.note">word_growth recommended</strong>
+                </div>
+                <select id="rt-partial-emit-mode">
+                  <option value="word_growth">word_growth</option>
+                  <option value="char_delta">char_delta</option>
+                </select>
+              </label>
+              <label class="inline-field annotated-field">
+                <div class="inline-field-head">
+                  <span data-i18n="tools.advanced.partial_min_new_words">Min new words per partial</span>
+                  <strong class="inline-field-note" data-i18n="tools.advanced.partial_min_new_words.note">def:1</strong>
+                </div>
+                <input id="rt-partial-min-new-words" type="number" min="1" max="8" step="1" />
+              </label>
+            </div>
             <label class="inline-field annotated-field">
               <div class="inline-field-head">
                 <span data-i18n="tools.advanced.partial_emit">Partial emit</span>
@@ -1053,6 +1131,7 @@
             <h2 data-i18n="tools.runtime.title">Runtime Diagnostics</h2>
           </div>
         </div>
+        <p id="local-parakeet-saved-config-summary" class="muted" hidden></p>
         <p id="latency-metrics-text" class="muted" data-i18n="tools.runtime.loading.latency">Latency metrics loading...</p>
         <p id="asr-diagnostics-text" class="muted" data-i18n="tools.runtime.loading.asr">ASR diagnostics loading...</p>
         <p id="translation-diagnostics-text" class="muted" data-i18n="tools.runtime.loading.translation">Translation diagnostics loading...</p>
@@ -1183,31 +1262,7 @@
         </label>
         </div>
 
-        <div id="settings-fonts-section" class="settings-surface settings-fonts-section">
-          <div class="surface-header">
-            <div>
-              <h3 data-i18n="style.fonts.title">Fonts</h3>
-              <p class="muted" data-i18n="style.fonts.note">Project-local fonts are the reliable custom-font path. System font listing is best-effort.</p>
-            </div>
-            <button id="font-refresh-btn" class="secondary" type="button" data-i18n="style.fonts.refresh">Refresh System Fonts</button>
-          </div>
-          <div class="style-grid settings-font-grid">
-            <label class="stack-field">
-              <span data-i18n="style.field.font_family">Font family</span>
-              <select id="style-font-family"></select>
-            </label>
-            <label class="stack-field">
-              <span data-i18n="style.field.font_size">Font size</span>
-              <input id="style-font-size" type="number" min="12" max="96" step="1" />
-            </label>
-            <label class="stack-field">
-              <span data-i18n="style.field.font_weight">Font weight</span>
-              <input id="style-font-weight" type="number" min="300" max="900" step="100" />
-            </label>
-          </div>
-          <p class="muted"><span data-i18n="style.fonts.dir">Project-local fonts folder:</span> <span id="project-fonts-dir" class="mono">loading...</span></p>
-          <p id="font-source-status" class="muted" data-i18n="style.fonts.status.default">Fallback fonts are always available. Local system font access depends on the browser/runtime.</p>
-        </div>
+        <p class="muted settings-fonts-hint" data-i18n="settings.fonts.hint">Subtitle font family, size, weight, and per-line overrides are on the Style tab.</p>
 
         <div id="settings-translation-provider-anchor" class="settings-translation-provider-anchor"></div>
         <div id="settings-profiles-anchor" class="settings-profiles-anchor"></div>
@@ -1252,12 +1307,12 @@
     <footer class="app-footer">
       <span>Powered by Kiriuru</span>
     </footer>
-    <div class="project-version-tag" title="Project version">v0.4.0</div>
+    <div class="project-version-tag" title="Project version">v0.4.1</div>
 
     <script src="/static/js/core/redaction.js?v=20260505a"></script>
     <script src="/static/js/subtitle-style.js?v=20260512c"></script>
     <script src="/static/js/desktop.js?v=20260516h"></script>
     <script src="/static/js/i18n.js?v=20260508a"></script>
-    <script type="module" src="/static/js/main.js?v=20260516p"></script>
+    <script type="module" src="/static/js/main.js?v=20260521p"></script>
   </body>
 </html>

@@ -45,6 +45,9 @@ class BrowserWorkerContractTests(unittest.TestCase):
             + "\n"
             + SOURCE_TEXT_REPLACEMENT_RENDER_JS.read_text(encoding="utf-8")
         )
+        cls.config_normalizer_js = (
+            PROJECT_ROOT / "frontend" / "js" / "normalizers" / "config-normalizer.js"
+        ).read_text(encoding="utf-8")
 
     def test_asr_panel_locks_local_parakeet_for_desktop_browser_quick_start(self) -> None:
         lock_js = (PROJECT_ROOT / "frontend" / "js" / "dashboard" / "desktop-profile-lock.js").read_text(
@@ -264,22 +267,13 @@ class BrowserWorkerContractTests(unittest.TestCase):
         self.assertIn("controlsWorkerBrowserLaunch", self.asr_panel_js)
         self.assertIn("controlsWorkerBrowserLaunch", self.desktop_js)
 
-    def test_local_provider_selector_only_lists_parakeet_variants(self) -> None:
-        self.assertIn('id="local-asr-provider-hint"', self.index_html)
-        self.assertIn("Backend providers are configured here for local microphone capture. Web Speech modes use the separate browser worker window.", self.index_html)
-        local_select_pos = self.index_html.find('id="local-asr-provider-select"')
-        self.assertGreater(local_select_pos, 0)
-        local_select_end = self.index_html.find("</select>", local_select_pos)
-        self.assertGreater(local_select_end, local_select_pos)
-        local_provider_block = self.index_html[local_select_pos:local_select_end]
-        self.assertNotIn('value="auto"', local_provider_block)
+    def test_local_parakeet_provider_is_not_user_selectable(self) -> None:
+        self.assertNotIn('id="local-asr-provider-select"', self.index_html)
+        self.assertNotIn('value="official_eu_parakeet"', self.index_html)
+        self.assertNotIn("localAsrProviderSelect", self.asr_panel_js)
+        self.assertNotIn("localAsrProviderRow", self.asr_panel_js)
+        self.assertIn('provider_preference = "official_eu_parakeet_low_latency"', self.config_normalizer_js)
         self.assertNotIn("_".join(["google", "legacy", "http"]), self.index_html)
-        self.assertIn(
-            "setElementVisibility(elements.localAsrProviderRow, !browserMode && !quickStartLocked)",
-            self.asr_panel_js,
-        )
-        self.assertIn('draft.asr.mode = "local";', self.asr_panel_js)
-        self.assertNotIn("_".join(["google", "legacy", "http"]), self.asr_panel_js)
         self.assertIn("if (result?.runtime && mode !== \"local\")", self.runtime_panel_js)
         self.assertNotIn("_".join(["google", "legacy", "http", "experimental"]), self.runtime_panel_js)
 

@@ -8,11 +8,27 @@ from backend.services.browser_asr_service import BrowserAsrService
 
 
 class _FakeWebSocket:
-    def __init__(self) -> None:
+    def __init__(self, *, send_delay_s: float = 0.0, fail_after: int | None = None) -> None:
         self.messages: list[dict] = []
+        self._in_flight = 0
+        self.max_in_flight_observed = 0
+        self._send_delay_s = float(send_delay_s)
+        self._fail_after = fail_after
+        self._send_calls = 0
 
     async def send_json(self, payload: dict) -> None:
-        self.messages.append(dict(payload))
+        self._send_calls += 1
+        if self._fail_after is not None and self._send_calls > self._fail_after:
+            raise RuntimeError("simulated WebSocket send failure")
+        self._in_flight += 1
+        try:
+            if self._in_flight > self.max_in_flight_observed:
+                self.max_in_flight_observed = self._in_flight
+            if self._send_delay_s > 0:
+                await asyncio.sleep(self._send_delay_s)
+            self.messages.append(dict(payload))
+        finally:
+            self._in_flight -= 1
 
 
 class _FakeRuntimeOrchestrator:
@@ -160,6 +176,142 @@ class BrowserAsrServiceTests(unittest.TestCase):
             await service.register_connection(_FakeWebSocket())
             await service.worker_connected()
             self.assertEqual(orchestrator.connected, 1)
+
+        asyncio.run(scenario())
+
+    def test_send_hello_emits_handshake_under_send_lock(self) -> None:
+        async def scenario() -> None:
+            app = SimpleNamespace(state=SimpleNamespace(runtime_orchestrator=_FakeRuntimeOrchestrator()))
+            service = BrowserAsrService(app)
+            websocket = _FakeWebSocket()
+            transport_id = await service.register_connection(websocket)
+            ok = await service.send_hello(websocket)
+            self.assertTrue(ok)
+            self.assertEqual(len(websocket.messages), 1)
+            message = websocket.messages[0]
+            self.assertEqual(message["type"], "hello")
+            self.assertEqual(message["message"], "browser_asr_worker_connected")
+            self.assertEqual(message["transport_id"], transport_id)
+            self.assertEqual(websocket.max_in_flight_observed, 1)
+
+        asyncio.run(scenario())
+
+    def test_send_hello_returns_false_when_socket_no_longer_active(self) -> None:
+        async def scenario() -> None:
+            app = SimpleNamespace(state=SimpleNamespace(runtime_orchestrator=_FakeRuntimeOrchestrator()))
+            service = BrowserAsrService(app)
+            first_socket = _FakeWebSocket()
+            await service.register_connection(first_socket)
+            replacement_socket = _FakeWebSocket()
+            await service.register_connection(replacement_socket)
+            ok = await service.send_hello(first_socket)
+            self.assertFalse(ok)
+            self.assertEqual(len(first_socket.messages), 0)
+            self.assertEqual(len(replacement_socket.messages), 0)
+
+        asyncio.run(scenario())
+
+    def test_concurrent_send_control_and_hello_are_serialized(self) -> None:
+        async def scenario() -> None:
+            app = SimpleNamespace(state=SimpleNamespace(runtime_orchestrator=_FakeRuntimeOrchestrator()))
+            service = BrowserAsrService(app)
+            websocket = _FakeWebSocket(send_delay_s=0.01)
+            await service.register_connection(websocket)
+            # Fire hello + several send_control payloads concurrently. The
+            # per-socket send lock must keep ``send_json`` invocations strictly
+            # serialized (max_in_flight_observed == 1) so JSON frames never
+            # interleave on the underlying socket.
+            results = await asyncio.gather(
+                service.send_hello(websocket),
+                service.send_control("reload_settings", reason="test-1"),
+                service.send_control("stop", reason="test-2"),
+                service.send_control("reload_settings", reason="test-3"),
+            )
+            self.assertTrue(all(results))
+            self.assertEqual(len(websocket.messages), 4)
+            self.assertEqual(websocket.max_in_flight_observed, 1)
+            kinds = [msg.get("type") for msg in websocket.messages]
+            self.assertEqual(kinds.count("hello"), 1)
+            self.assertEqual(kinds.count("browser_asr_control"), 3)
+
+        asyncio.run(scenario())
+
+    def test_send_failure_drops_connection_and_notifies_orchestrator(self) -> None:
+        async def scenario() -> None:
+            orchestrator = _FakeRuntimeOrchestrator()
+            app = SimpleNamespace(state=SimpleNamespace(runtime_orchestrator=orchestrator))
+            service = BrowserAsrService(app)
+            websocket = _FakeWebSocket(fail_after=0)
+            transport_id = await service.register_connection(websocket)
+            ok = await service.send_hello(websocket)
+            self.assertFalse(ok)
+            self.assertFalse(service.has_active_transport())
+            self.assertEqual(orchestrator.disconnected, 1)
+            # Subsequent disconnect for the same transport_id is a no-op so
+            # endpoint cleanup remains idempotent.
+            await service.disconnect(transport_id)
+            self.assertEqual(orchestrator.disconnected, 1)
+
+        asyncio.run(scenario())
+
+    def test_session_swap_with_non_advancing_generation_is_rejected(self) -> None:
+        async def scenario() -> None:
+            app = SimpleNamespace(state=SimpleNamespace(runtime_orchestrator=_FakeRuntimeOrchestrator()))
+            service = BrowserAsrService(app)
+            websocket = _FakeWebSocket()
+            transport_id = await service.register_connection(websocket)
+            advanced = await service.handle_status(
+                transport_id,
+                {
+                    "type": "browser_asr_status",
+                    "session_id": "session-current",
+                    "generation_id": 7,
+                    "recognition_state": "running",
+                },
+            )
+            self.assertTrue(advanced)
+            replayed = await service.handle_external_update(
+                transport_id,
+                {
+                    "type": "external_asr_update",
+                    "session_id": "session-old",
+                    "generation_id": 6,
+                    "partial": "ignored",
+                    "is_final": False,
+                },
+            )
+            self.assertFalse(replayed)
+            self.assertEqual(service.diagnostics()["browser_stale_events_ignored"], 1)
+
+        asyncio.run(scenario())
+
+    def test_session_swap_with_advancing_generation_is_accepted(self) -> None:
+        async def scenario() -> None:
+            orchestrator = _FakeRuntimeOrchestrator()
+            app = SimpleNamespace(state=SimpleNamespace(runtime_orchestrator=orchestrator))
+            service = BrowserAsrService(app)
+            websocket = _FakeWebSocket()
+            transport_id = await service.register_connection(websocket)
+            await service.handle_status(
+                transport_id,
+                {
+                    "type": "browser_asr_status",
+                    "session_id": "session-current",
+                    "generation_id": 3,
+                    "recognition_state": "running",
+                },
+            )
+            advanced = await service.handle_status(
+                transport_id,
+                {
+                    "type": "browser_asr_status",
+                    "session_id": "session-new",
+                    "generation_id": 9,
+                    "recognition_state": "running",
+                },
+            )
+            self.assertTrue(advanced)
+            self.assertEqual(service.diagnostics()["browser_stale_events_ignored"], 0)
 
         asyncio.run(scenario())
 

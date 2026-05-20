@@ -95,6 +95,41 @@ export function fillSelectOptions(
   }
 }
 
+/**
+ * Set an input/textarea/select value only when the next value differs from the
+ * current DOM value. Skips updates while the element is focused so the user's
+ * caret/selection is never reset by an unrelated render pass (transcript_update,
+ * runtime_status poll, ws diagnostics tick, etc.).
+ *
+ * Use this for all editable text-like form controls during render(); checkbox
+ * state should go through setCheckedIfChanged instead.
+ */
+export function setInputValueIfChanged(element, nextValue) {
+  if (!element) {
+    return;
+  }
+  if (typeof document !== "undefined" && document.activeElement === element) {
+    return;
+  }
+  const normalized = nextValue == null ? "" : String(nextValue);
+  if (element.value !== normalized) {
+    element.value = normalized;
+  }
+}
+
+/**
+ * Idempotent checkbox/radio sync to avoid spurious DOM writes on every render.
+ */
+export function setCheckedIfChanged(element, nextChecked) {
+  if (!element) {
+    return;
+  }
+  const desired = Boolean(nextChecked);
+  if (element.checked !== desired) {
+    element.checked = desired;
+  }
+}
+
 export function collectElements(root, selectorsByKey) {
   const elements = {};
   Object.entries(selectorsByKey).forEach(([key, selector]) => {

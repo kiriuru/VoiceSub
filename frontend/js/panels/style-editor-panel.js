@@ -2,8 +2,10 @@ import { createPanelMount } from "../core/panel-mount.js";
 import { clone } from "../dashboard/helpers.js";
 import { applyUiThemeFromConfigPayload } from "../ui-theme.js";
 import {
+  bindStyleColorPickerEvents,
   buildStyleFromPreset,
   getUiThemePresets,
+  isStyleColorInput,
   isStyleNumberInput,
   normalizeStyle,
 } from "./style/style-editor-panel-shared.js";
@@ -74,14 +76,12 @@ function bindStyleEditorEvents(elements, { store, actions, logger }, catalogStat
     logger(`[subtitle-style] preset -> ${elements.preset.value}`);
   });
 
-  Object.entries(elements.fields).forEach(([key, element]) => {
+  const bindBaseOrSlotField = (element, key, applyValue) => {
     if (!element) {
       return;
     }
     const applyFromControl = () => {
-      updateStyle((style) => {
-        style.base[key] = element.value;
-      });
+      applyValue(key, element.value);
     };
     if (isStyleNumberInput(element)) {
       add(element, "change", () => {
@@ -91,10 +91,25 @@ function bindStyleEditorEvents(elements, { store, actions, logger }, catalogStat
       add(element, "blur", applyFromControl);
       return;
     }
+    if (isStyleColorInput(element)) {
+      bindStyleColorPickerEvents(element, add, () => {
+        applyFromControl();
+        logger("[subtitle-style] updated locally");
+      });
+      return;
+    }
     add(element, "input", applyFromControl);
     add(element, "change", () => {
       applyFromControl();
       logger("[subtitle-style] updated locally");
+    });
+  };
+
+  Object.entries(elements.fields).forEach(([key, element]) => {
+    bindBaseOrSlotField(element, key, (fieldKey, value) => {
+      updateStyle((style) => {
+        style.base[fieldKey] = value;
+      });
     });
   });
 
@@ -129,10 +144,7 @@ function bindStyleEditorEvents(elements, { store, actions, logger }, catalogStat
   });
 
   Object.entries(elements.lineSlots.fields).forEach(([key, element]) => {
-    if (!element) {
-      return;
-    }
-    const apply = () => {
+    bindBaseOrSlotField(element, key, (fieldKey, value) => {
       updateStyle((style) => {
         const activeSlot = store.getState().ui?.selectedStyleLineSlot || "source";
         if (!style.line_slots || typeof style.line_slots !== "object") {
@@ -142,24 +154,12 @@ function bindStyleEditorEvents(elements, { store, actions, logger }, catalogStat
           style.line_slots[activeSlot] && typeof style.line_slots[activeSlot] === "object"
             ? style.line_slots[activeSlot]
             : {};
-        const raw = String(element.value ?? "");
+        const raw = String(value ?? "");
         style.line_slots[activeSlot] = {
           ...current,
-          [key]: raw.trim() === "" ? null : raw,
+          [fieldKey]: raw.trim() === "" ? null : raw,
         };
       });
-    };
-    if (isStyleNumberInput(element)) {
-      add(element, "change", () => {
-        apply();
-        logger("[subtitle-style] slot updated locally");
-      });
-      add(element, "blur", apply);
-      return;
-    }
-    add(element, "input", apply);
-    add(element, "change", () => {
-      apply();
       logger("[subtitle-style] slot updated locally");
     });
   });
@@ -215,9 +215,9 @@ function bindStyleEditorEvents(elements, { store, actions, logger }, catalogStat
     applyUiThemeDraft();
     logger("[ui-theme] mode updated locally");
   });
-  add(elements.uiTheme.accent, "input", applyUiThemeDraft);
-  add(elements.uiTheme.accentSecondary, "input", applyUiThemeDraft);
-  add(elements.uiTheme.accentTertiary, "input", applyUiThemeDraft);
+  [elements.uiTheme.accent, elements.uiTheme.accentSecondary, elements.uiTheme.accentTertiary].forEach((element) => {
+    bindStyleColorPickerEvents(element, add, applyUiThemeDraft);
+  });
 
   const onLocaleChanged = () => {
     catalogState.lastFontCatalogSignature = "";
