@@ -10,33 +10,7 @@ This README describes the current desktop product surface for the `0.4.2` code l
 
 ## Technical Documentation
 
-- Full technical architecture document: [docs/TECHNICAL_ARCHITECTURE.md](./docs/TECHNICAL_ARCHITECTURE.md) (RuntimeOrchestrator facade §6, WebSocket send mutex §9, browser worker transport §9.1, dashboard UI stability §16.6, local Parakeet pipeline §17, desktop packaging §14, tests §20)
-- Unified changelog: [docs/CHANGELOG.md](./docs/CHANGELOG.md)
-- **`0.4.1` installer delta:** [docs/DESKTOP_RELEASE_CHANGELOG_0.4.1.md](./docs/DESKTOP_RELEASE_CHANGELOG_0.4.1.md)
-- Full history (including `0.4.0` and earlier): [docs/CHANGELOG.md](./docs/CHANGELOG.md)
-
-## Release Highlights
-
-**`0.4.2`** — see [docs/CHANGELOG.md](./docs/CHANGELOG.md#042) for full delta:
-
-- Parakeet integrity SHA-256 cache (one hash per process instead of per `/api/runtime/status` / `/api/health`, fixes 3–10 s idle latency on fresh installs with sha256-bearing model manifests).
-- Drop-in exe upgrade now wipes stale `app-runtime/` contents before extracting the new payload, so a managed runtime tree is always clean after replacing the bootstrap exe.
-- Vendored `antlr4-python3-runtime==4.9.3` wheel (`vendor/python-wheels/`) + `backend/bootstrap_pip_pins.py` — removes the flaky NeMo sdist build on Windows installs.
-- Subtitle renderer: incremental effects only animate freshly typed characters (existing partial text stays static); shape-signature fast path keeps the wrapper/stage/row/surface DOM alive between partial frames; transient→completed transitions consolidate in place; slow path reuses completed source surface when a translation arrives.
-- Subtitle style presets fully reworked (10 distinct themes: anime stream, fallout terminal, retro terminal, cyberpunk neon, noir caption, comic burst, cinema plate, max contrast, …) with Cyrillic-safe font fallback chains.
-- 28 bundled Google Fonts shipped directly in `fonts/` (no first-launch font download required); `system` font catalog entries are now preserved across save/import.
-- Style editor UI fixes: font dropdown displays the actual primary family of the active preset, and a per-slot "Apply preset" selector copies a preset's base style to a single line slot override.
-- Browser Speech worker window reloads `/api/settings/load` before save, so clicking "Save" no longer overwrites dashboard edits made between window-open and save.
-- Compact-layout audit: technical panels (Recognition / Tuning / ASR Advanced) keep their hints, eyebrow labels, and inline notes visible in compact mode; only decorative copy is trimmed.
-- Parakeet tuning controls (`latency preset`, `streaming_decode`, `partial_emit_mode`, `partial_min_new_words`) stay visible regardless of current `asr.mode` — only `desktop_profile_lock="browser_speech"` (Web-Speech-only install) hides them now.
-- Opt-in deep diagnostics: JSONL traces (`api-trace.jsonl`, `pipeline-trace.jsonl`, `ui-trace.jsonl`, `startup-journey.jsonl`) and `runtime_lifecycle.*` events are now off by default and gated on `SST_DEEP_DIAGNOSTICS=1` (or per-channel `SST_TRACE_*=1`). See [docs/ETALON_RUNTIME_VERIFICATION.md](./docs/ETALON_RUNTIME_VERIFICATION.md#31-enabling-deep-traces).
-- Thin `RuntimeOrchestrator` facade + mixins, WebSocket/browser ASR send serialization, dashboard store/panel UX hardening (no caret resets), desktop log rotation, expanded regression tests.
-
-`PROJECT_VERSION = "0.4.2"`; `config_version` stays **7**; public `/api` and subtitle contracts unchanged.
-
-**`0.4.1`** — see [docs/DESKTOP_RELEASE_CHANGELOG_0.4.1.md](./docs/DESKTOP_RELEASE_CHANGELOG_0.4.1.md): Parakeet incremental streaming + word-growth partials, `LocalAsrPipeline`, Tuning latency presets with slider alignment, runtime summary strip, Tools fields for `streaming_decode` / emit mode / min words, single low-latency Parakeet provider in UI, `AsrDiagnostics` echo fields. `PROJECT_VERSION = "0.4.1"`; `config_version` stays **7**; public `/api` and subtitle contracts unchanged.
-
-**`0.4.0` and earlier** — see [docs/CHANGELOG.md](./docs/CHANGELOG.md) (compact dashboard, Browser ASR observability, **Only Web.exe**, desktop profile lock, and prior lines).
+- Full technical architecture document: [docs/TECHNICAL_ARCHITECTURE.md](./docs/TECHNICAL_ARCHITECTURE.md).
 
 ## Release Package
 
@@ -96,13 +70,13 @@ Current extracted layout:
 - app logs: `logs/` (previous desktop launcher run → `desktop-launcher.old.log` on next start)
 - local models: `user-data/models/`
 
-Build desktop installers (local dev tree only — not in the public GitHub repo):
+Build desktop installer:
 
 - `build-bootstrap-launcher.bat` → `Stream Subtitle Translator.exe`
 - `build-bootstrap-launcher-web-only.bat` → `Stream Subtitle Translator Only Web.exe`
 - `publish-desktop-releases.ps1` / `publish-desktop-releases-web-only.ps1`
 
-Develop the app from a GitHub clone with **`start.bat`** (backend + frontend; no `desktop/` folder).
+Develop the app from a GitHub clone with **`start.bat`** (backend + frontend).
 
 ## Startup Profiles
 
