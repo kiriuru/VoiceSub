@@ -14,7 +14,7 @@ This README describes the current desktop product surface for the `0.4.2` code l
 
 ## Release Package
 
-GitHub releases attach bootstrap **exe** (built locally; sources under `desktop/` are not in the public repo):
+GitHub releases attach bootstrap **exe**:
 
 - `Stream Subtitle Translator.exe` — standard bootstrap (payload tracks `PROJECT_VERSION`, currently **0.4.2** when built from this tree)
 - `Stream Subtitle Translator Only Web.exe` — Web Speech only (introduced in 0.4.0; still supported)
