@@ -305,7 +305,7 @@ class SubtitleStyleRendererJsTests(unittest.TestCase):
         # an external script rewrote `container.innerHTML`).
         self.assertRegex(
             self.source,
-            r"renderState\.wrapper\.parentNode\s*===\s*container",
+            r"cachedWrapper\.parentNode\s*===\s*container",
             msg="Fast path must verify the cached wrapper is still inside the container.",
         )
         # Render summary must surface the chosen branch so debug traces show
@@ -821,6 +821,7 @@ class SubtitleStyleRendererJsTests(unittest.TestCase):
             ),
         )
         self.assertIn(".remove()", panel_source)
+        self.assertIn("disposeRenderContainer", panel_source)
 
     def test_fast_path_engages_for_pure_extension_in_browser(self) -> None:
         """Execute the renderer in a jsdom-style mini browser-emulation to
@@ -858,7 +859,7 @@ class SubtitleStyleRendererJsTests(unittest.TestCase):
         # but every odd frame after that falls back to slow rebuild.
         self.assertRegex(
             self.source,
-            r"entrySurfaces:\s*nextEntrySurfaces",
+            r"entrySurfaces:\s*_surfaceRefsFromElements\(nextEntrySurfaces\)",
             msg=(
                 "Fast path must repopulate `entrySurfaces` in the persisted "
                 "render state, otherwise reuse is only one frame deep."
@@ -927,6 +928,50 @@ class SubtitleStyleRendererJsTests(unittest.TestCase):
         self.assertIn('postOverlayUiTrace("subtitle_render_anomaly"', overlay_js)
         # Ring buffer must be exposed for DevTools inspection.
         self.assertIn("__sstOverlaySubtitleTrace", overlay_js)
+
+    def test_renderer_persists_dom_refs_as_weakref_when_supported(self) -> None:
+        """Long streams reuse DOM nodes across frames; persisted render state
+        must not keep detached subtrees alive via strong references."""
+        self.assertIn("function _surfaceRefFor", self.source)
+        self.assertIn("function _derefSurfaceRef", self.source)
+        self.assertIn("typeof WeakRef === \"function\"", self.source)
+        self.assertIn("_surfaceRefsFromElements(nextEntrySurfaces)", self.source)
+        self.assertIn("_persistPartialSurfaceBySlot(nextPartialSurfaceBySlot)", self.source)
+        self.assertIn("wrapper: _surfaceRefFor(wrapper)", self.source)
+
+    def test_slow_path_releases_orphaned_surfaces_before_innerhtml_wipe(self) -> None:
+        """When the slow path rebuilds the wrapper (e.g. translation row
+        added), completed source surfaces may be reused but every other prior
+        surface must be scrubbed before `container.innerHTML = \"\"` so stale
+        metadata and strong refs do not accumulate over a long stream."""
+        self.assertIn("function _releaseOrphanedSurfaces", self.source)
+        self.assertIn("const keepSurfaces = new Set(nextEntrySurfaces)", self.source)
+        self.assertRegex(
+            self.source,
+            r"_releaseOrphanedSurfaces\(previousEntrySurfaces,\s*keepSurfaces\)",
+        )
+        self.assertIn("delete surface.__sstAppliedStyleMap", self.source)
+
+    def test_renderer_exports_dispose_for_panel_unmount(self) -> None:
+        self.assertIn("function disposeRenderContainer", self.source)
+        self.assertIn("disposeRenderContainer,", self.source)
+        self.assertIn("delete container.__subtitleStyleRenderState", self.source)
+
+    def test_overlay_panel_disposes_preview_on_unmount(self) -> None:
+        from pathlib import Path
+
+        panel_js = (
+            Path(__file__).resolve().parents[1]
+            / "frontend"
+            / "js"
+            / "panels"
+            / "overlay-panel.js"
+        ).read_text(encoding="utf-8")
+        self.assertIn("disposeRenderContainer", panel_js)
+        self.assertRegex(
+            panel_js,
+            r"SubtitleStyleRenderer\?\.disposeRenderContainer\?\.\(preview\)",
+        )
 
     def test_dashboard_subtitle_debug_hook_is_opt_in(self) -> None:
         """The dashboard preview must follow the same opt-in rule via the

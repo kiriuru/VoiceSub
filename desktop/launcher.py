@@ -1968,8 +1968,7 @@ class DesktopLauncher:
             # started via start.bat or the desktop launcher.
             if is_startup_journey_enabled():
                 configure_startup_journey_log(self._paths.project_root / "logs")
-            # deps-install-trace and subprocess-trace are always-on per
-            # docs/ETALON_RUNTIME_VERIFICATION.md (small, required for triage).
+            # deps-install-trace and subprocess-trace stay always-on (small, bootstrap triage).
             configure_deps_install_trace(self._paths.logs_dir)
             configure_subprocess_trace(self._paths.logs_dir, text_log=self._write_log)
             if is_ui_trace_enabled():

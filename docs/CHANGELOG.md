@@ -8,13 +8,24 @@
 
 ## Unreleased
 
+## 0.4.3
+
+Patch release. `PROJECT_VERSION` в `backend/versioning.py` — **0.4.3**; `config_version` **7**. Публичные HTTP/WebSocket route contracts и subtitle/translation lifecycle **не менялись**.
+
+### Subtitle renderer (DOM lifecycle, long-session stability)
+
+- **`frontend/js/subtitle-style.js`**: persisted render state (`entrySurfaces`, `partialSurfaceBySlot`, `wrapper`) хранит **WeakRef** на DOM-узлы (fallback на strong ref без `WeakRef`), чтобы отцеплённые surface не удерживались между кадрами при slow path (переиспользование completed source при появлении перевода).
+- Перед единственным slow-path `container.innerHTML = ""` — `_releaseOrphanedSurfaces`: сброс `__sstAppliedStyleMap` у surface, не попавших в следующий кадр.
+- **`disposeRenderContainer(container)`** — явный cleanup state и DOM; вызывается из **`frontend/js/panels/overlay-panel.js`** при unmount превью и при пустом payload.
+- Регрессии: `tests/test_subtitle_style_effects.py` — контракты WeakRef, orphan release, `disposeRenderContainer`.
+
 ## 0.4.2
 
 Stabilization release. `PROJECT_VERSION` в `backend/versioning.py` — **0.4.2**; `config_version` **7**. Публичные HTTP/WebSocket route contracts и subtitle/translation lifecycle **не менялись**.
 
 ### Parakeet integrity (idle latency fix)
 
-- **`backend/asr/parakeet/model_installer.py`**: добавлен потокобезопасный кеш результата `official_eu_parakeet_integrity_state()` по ключу `(file_path, mtime_ns, size, expected_sha)`. SHA-256 многогигабайтного `.nemo` теперь считается один раз за жизнь процесса вместо каждого вызова `/api/runtime/status` и `/api/health`. На свежей установке с `sha256` в `manifest.json` idle-latency status падает с 3–10 с до миллисекунд (см. [docs/ETALON_RUNTIME_VERIFICATION.md](./ETALON_RUNTIME_VERIFICATION.md) gate C).
+- **`backend/asr/parakeet/model_installer.py`**: добавлен потокобезопасный кеш результата `official_eu_parakeet_integrity_state()` по ключу `(file_path, mtime_ns, size, expected_sha)`. SHA-256 многогигабайтного `.nemo` теперь считается один раз за жизнь процесса вместо каждого вызова `/api/runtime/status` и `/api/health`. На свежей установке с `sha256` в `manifest.json` idle-latency status падает с 3–10 с до миллисекунд.
 - Публичная `invalidate_official_eu_parakeet_integrity_cache()` для явной инвалидации; вызывается из `ensure_official_eu_parakeet_model()` после записи манифеста, чтобы закрыть гонку «`shutil.move` → manifest write».
 - Регрессии: `tests/test_parakeet_model_installer_manifest.py` — 8 тестов, включая прямой regression `test_integrity_state_caches_sha256_result`.
 
@@ -62,8 +73,8 @@ Stabilization release. `PROJECT_VERSION` в `backend/versioning.py` — **0.4.2*
 - **`backend/core/app_bootstrap.py`** — `configure_api_trace_log`, `configure_ui_trace_log`, `configure_pipeline_trace_log`, `configure_startup_journey_log` вызываются только при включённом флаге. JSONL trace-файлы (`logs/api-trace.jsonl`, `logs/pipeline-trace.jsonl`, `logs/ui-trace.jsonl`, `logs/startup-journey.jsonl`) не создаются и helper-функции становятся no-op без флага.
 - **`backend/core/runtime_lifecycle_trace.py`** — `runtime_trace()` короткозамкнут на `is_runtime_lifecycle_trace_enabled()` (события `runtime_lifecycle.*` в `runtime-events.log` не пишутся, если выключено).
 - **`backend/core/structured_runtime_logger.py`** — добавлен per-event severity-фильтр. По умолчанию пишутся только `INF/WRN/ERR/CRT` события (`translation_publish_accepted`, `browser_external_final`, `browser_degraded`, …). `DBG/VRB` поток (`basr.fsm_transition`, `basr.policy_action_result`, `browser_worker_status`, `translation_queue_depth_changed`, `browser_rearm_scheduled`, …) подключается через `SST_TRACE_RUNTIME_EVENTS_VERBOSE=1` (или мастер-свитч). Это сокращает `logs/runtime-events.log` на штатной сессии примерно в 20–50 раз (с ~250 КБ до ~5–15 КБ) и совпадает с 0.4.1-дисковым следом для install-папок.
-- **`desktop/launcher.py`** — `configure_startup_journey_log`, `configure_ui_trace_log`, `configure_api_trace_log` теперь обёрнуты `is_startup_journey_enabled()` / `is_ui_trace_enabled()` / `is_api_trace_enabled()` гейтом, так что desktop процесс не создаёт пустые `startup-journey.jsonl` / `ui-trace.jsonl` / `api-trace.jsonl` рядом с public exe без явного opt-in (раньше эти файлы создавались launcher-процессом независимо от backend-гейта). `deps-install-trace.jsonl` и `subprocess-trace.jsonl` остаются always-on в соответствии с `docs/ETALON_RUNTIME_VERIFICATION.md` (необходимы для Gate A/B триажа, маленькие).
-- **`docs/ETALON_RUNTIME_VERIFICATION.md`** — секция «3.1 Включение глубоких трейсов» с инструкцией, как поднять флаги; добавлено описание `SST_TRACE_RUNTIME_EVENTS_VERBOSE` и desktop launcher-гейта.
+- **`desktop/launcher.py`** — `configure_startup_journey_log`, `configure_ui_trace_log`, `configure_api_trace_log` теперь обёрнуты `is_startup_journey_enabled()` / `is_ui_trace_enabled()` / `is_api_trace_enabled()` гейтом, так что desktop процесс не создаёт пустые `startup-journey.jsonl` / `ui-trace.jsonl` / `api-trace.jsonl` рядом с public exe без явного opt-in (раньше эти файлы создавались launcher-процессом независимо от backend-гейта). `deps-install-trace.jsonl` и `subprocess-trace.jsonl` остаются always-on для bootstrap triage (маленькие).
+- Opt-in deep traces: `SST_TRACE_RUNTIME_EVENTS_VERBOSE` и desktop launcher-гейты для JSONL-трейсов.
 - Регрессии: `tests/test_diagnostic_flags.py` (флаги off-by-default, мастер-свитч, индивидуальные флаги, truthy-токены, no-op helpers); `tests/test_structured_runtime_logger.py::test_default_skips_dbg_and_vrb_events` (DBG/VRB фильтр); `tests/test_api_and_websockets.py::test_runtime_start_emits_structured_lifecycle_trace` обёрнут `mock.patch.dict("os.environ", {"SST_TRACE_RUNTIME_LIFECYCLE": "1"})`.
 
 ### Документация

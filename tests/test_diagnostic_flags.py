@@ -3,8 +3,8 @@
 These flags control whether ``logs/api-trace.jsonl``, ``logs/pipeline-trace.jsonl``,
 ``logs/ui-trace.jsonl``, ``logs/startup-journey.jsonl`` are created and whether
 extra ``runtime_lifecycle.*`` rows are appended to ``logs/runtime-events.log``.
-The 0.4.2 baseline keeps these *off* by default to match the 0.4.1 release
-surface (see ``docs/ETALON_RUNTIME_VERIFICATION.md`` §3.1).
+The 0.4.2+ baseline keeps these *off* by default to match the 0.4.1 release
+surface unless ``SST_DEEP_DIAGNOSTICS`` or per-trace flags are set.
 """
 
 from __future__ import annotations

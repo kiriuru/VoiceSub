@@ -2,8 +2,7 @@
 
 Background:
     Pipeline/API/UI/runtime-lifecycle/startup-journey JSONL traces were introduced
-    to triage broken desktop installs (see ``docs/ETALON_RUNTIME_VERIFICATION.md``).
-    They are useful for forensic comparisons against the etalon reference but
+    to triage broken desktop installs. They are useful for forensic comparisons but
     they are noisy in steady-state operation and were not part of the 0.4.1
     GitHub release surface.
 

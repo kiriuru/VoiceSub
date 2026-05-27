@@ -1,8 +1,8 @@
-# SST Desktop 0.4.2
+# SST Desktop 0.4.3
 
 SST Desktop is a local Windows application for real-time speech recognition, optional translation, subtitle routing, and OBS-ready output.
 
-This README describes the current desktop product surface for the `0.4.2` code line.
+This README describes the current desktop product surface for the `0.4.3` code line.
 
 ## Language
 
@@ -16,7 +16,7 @@ This README describes the current desktop product surface for the `0.4.2` code l
 
 GitHub releases attach bootstrap **exe**:
 
-- `Stream Subtitle Translator.exe` — standard bootstrap (payload tracks `PROJECT_VERSION`, currently **0.4.2** when built from this tree)
+- `Stream Subtitle Translator.exe` — standard bootstrap (payload tracks `PROJECT_VERSION`, currently **0.4.3** when built from this tree)
 - `Stream Subtitle Translator Only Web.exe` — Web Speech only (introduced in 0.4.0; still supported)
 
 On first launch the bootstrap launcher extracts the managed runtime next to itself and then starts the desktop runtime from disk.
@@ -445,7 +445,7 @@ Overlay remains a separate lightweight page for OBS Browser Source and auto-reco
 - legacy language-based `subtitle_output.display_order` values are migrated to slot ids like `translation_1`;
 - `/api/runtime/start` can apply an optional normalized `config_payload` snapshot for runtime-only changes without persisting `user-data/config.json` (tracked via `active_config_source = runtime_start_snapshot`, `active_config_persisted = false`, `active_config_hash`);
 - config writes are atomic on Windows (temporary file in the same folder + `os.replace()`); a corrupt `user-data/config.json` is rotated into `*.corrupt-<timestamp>.json` and defaults are restored;
-- `backend/versioning.py` (`PROJECT_VERSION = "0.4.2"`) remains the single source of truth for the app version.
+- `backend/versioning.py` (`PROJECT_VERSION = "0.4.3"`) remains the single source of truth for the app version.
 
 ## Remote Notes
 
@@ -539,7 +539,7 @@ Build output:
 - bootstrap launchers:
   - `dist\bootstrap-launcher\Stream Subtitle Translator.exe`
   - `dist\bootstrap-launcher-web-only\Stream Subtitle Translator Only Web.exe`
-- versioned release bundle (local): `dist\desktop-releases\v0.4.2\` (`01-bootstrap-onefile\`, `01-bootstrap-web-only-onefile\`, `02-managed-app-onefolder\`, `03-installers-both\`, `README.txt`) when publishing this line; older trees may still show `v0.4.1\` or `v0.4.0\`.
+- versioned release bundle (local): `dist\desktop-releases\v0.4.3\` (`01-bootstrap-onefile\`, `01-bootstrap-web-only-onefile\`, `02-managed-app-onefolder\`, `03-installers-both\`, `README.txt`) when publishing this line; older trees may still show `v0.4.1\` or `v0.4.0\`.
 - publish script defaults (both exes end up in each folder):
   - `F:\AI\stream-sub-translator-desktop-release`
   - `F:\AI\stream-sub-translator-desktop-release-clean`
@@ -580,7 +580,7 @@ GitHub-tracked suite:
 .\.venv\Scripts\python.exe -m unittest discover -s tests -p "test_*.py"
 ```
 
-For `0.4.2`: run `python -m unittest discover -s tests` after changes; the public repo runs the tracked subset (includes `tests/test_browser_asr_observability.py`). Bootstrap build verification is local-only — see [docs/TECHNICAL_ARCHITECTURE.md](./docs/TECHNICAL_ARCHITECTURE.md) §20.
+For `0.4.3`: run `python -m unittest discover -s tests` after changes; the public repo runs the tracked subset (includes `tests/test_browser_asr_observability.py`). Bootstrap build verification is local-only — see [docs/TECHNICAL_ARCHITECTURE.md](./docs/TECHNICAL_ARCHITECTURE.md) §20.
 
 ## Privacy and Runtime Scope
 
@@ -590,7 +590,7 @@ For `0.4.2`: run `python -m unittest discover -s tests` after changes; the publi
 
 ## Release Version
 
-- `0.4.2` (current code line)
+- `0.4.3` (current code line)
 - `0.4.1`
 - `0.4.0`
 - Single runtime source of truth: `backend/versioning.py` (`PROJECT_VERSION`).

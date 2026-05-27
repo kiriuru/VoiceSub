@@ -74,6 +74,7 @@ function renderPreview(container, payload, state) {
     return;
   }
   if (!payload) {
+    window.SubtitleStyleRenderer?.disposeRenderContainer?.(container);
     container.innerHTML = `<p class="muted">${escapeHtml(getCurrentLocale() === "ru" ? "Предпросмотр стиля субтитров появится после загрузки config." : "Subtitle style preview is unavailable until config loads.")}</p>`;
     return;
   }
@@ -88,6 +89,7 @@ function renderPreview(container, payload, state) {
     onRenderTrace: subtitleDebug ? handleSubtitleRenderTraceForDashboard : null,
   });
   if (result.empty) {
+    window.SubtitleStyleRenderer?.disposeRenderContainer?.(container);
     container.innerHTML = `<p class="muted">${escapeHtml(getCurrentLocale() === "ru" ? "По текущим настройкам сейчас нет видимых строк субтитров." : "No visible subtitle lines for the current settings yet.")}</p>`;
     return;
   }
@@ -236,5 +238,10 @@ const mountOverlayPanelImpl = createPanelMount({
 });
 
 export function mountOverlayPanel(root, context) {
-  return mountOverlayPanelImpl(root, context);
+  const destroyPanel = mountOverlayPanelImpl(root, context);
+  const preview = root.querySelector("#subtitle-output-preview");
+  return () => {
+    window.SubtitleStyleRenderer?.disposeRenderContainer?.(preview);
+    destroyPanel();
+  };
 }

@@ -662,6 +662,134 @@
     }
   }
 
+  const WEAKREF_SUPPORTED = typeof WeakRef === "function";
+
+  function _surfaceRefFor(element) {
+    if (!element || element.nodeType !== 1) {
+      return null;
+    }
+    return WEAKREF_SUPPORTED ? new WeakRef(element) : element;
+  }
+
+  function _derefSurfaceRef(ref) {
+    if (!ref) {
+      return null;
+    }
+    if (WEAKREF_SUPPORTED && ref instanceof WeakRef) {
+      return ref.deref() || null;
+    }
+    return ref && ref.nodeType === 1 ? ref : null;
+  }
+
+  function _derefSurfaceList(refs) {
+    if (!Array.isArray(refs)) {
+      return null;
+    }
+    const surfaces = [];
+    refs.forEach((ref) => {
+      const surface = _derefSurfaceRef(ref);
+      if (surface) {
+        surfaces.push(surface);
+      }
+    });
+    return surfaces;
+  }
+
+  function _surfaceRefsFromElements(elements) {
+    if (!Array.isArray(elements)) {
+      return [];
+    }
+    return elements.map((element) => _surfaceRefFor(element)).filter(Boolean);
+  }
+
+  function _readPartialSurfaceBySlot(rawPartial) {
+    const map = new Map();
+    if (rawPartial instanceof Map) {
+      rawPartial.forEach((ref, slot) => {
+        const surface = _derefSurfaceRef(ref);
+        if (surface) {
+          map.set(slot, surface);
+        }
+      });
+      return map;
+    }
+    if (rawPartial && typeof rawPartial === "object") {
+      Object.entries(rawPartial).forEach(([slot, ref]) => {
+        const surface = _derefSurfaceRef(ref);
+        if (surface) {
+          map.set(slot, surface);
+        }
+      });
+    }
+    return map;
+  }
+
+  function _persistPartialSurfaceBySlot(partialSurfaceBySlot) {
+    const persisted = {};
+    partialSurfaceBySlot.forEach((surface, slot) => {
+      const ref = _surfaceRefFor(surface);
+      if (ref) {
+        persisted[slot] = ref;
+      }
+    });
+    return persisted;
+  }
+
+  function _scrubSurfaceMetadata(surface) {
+    if (!surface || surface.nodeType !== 1) {
+      return;
+    }
+    delete surface.__sstAppliedStyleMap;
+  }
+
+  // Drop renderer-owned metadata from surfaces that will not be carried into
+  // the next frame. DOM nodes detached by `innerHTML = ""` are GC-eligible once
+  // we stop holding them in `__subtitleStyleRenderState` (WeakRef when supported).
+  function _releaseOrphanedSurfaces(surfaceList, keepSet) {
+    if (!Array.isArray(surfaceList)) {
+      return;
+    }
+    const keep = keepSet || new Set();
+    surfaceList.forEach((surface) => {
+      if (!surface || keep.has(surface)) {
+        return;
+      }
+      _scrubSurfaceMetadata(surface);
+    });
+  }
+
+  function _releaseAllSurfacesFromRenderState(state) {
+    if (!state || typeof state !== "object") {
+      return;
+    }
+    const keep = new Set();
+    _releaseOrphanedSurfaces(_derefSurfaceList(state.entrySurfaces), keep);
+    _readPartialSurfaceBySlot(state.partialSurfaceBySlot).forEach((surface) => {
+      if (!keep.has(surface)) {
+        _scrubSurfaceMetadata(surface);
+      }
+    });
+    const wrapper = _derefSurfaceRef(state.wrapper);
+    if (wrapper) {
+      _scrubSurfaceMetadata(wrapper);
+    }
+  }
+
+  function disposeRenderContainer(container) {
+    if (!container) {
+      return;
+    }
+    _releaseAllSurfacesFromRenderState(container.__subtitleStyleRenderState);
+    delete container.__subtitleStyleRenderState;
+    if (typeof container.replaceChildren === "function") {
+      container.replaceChildren();
+      return;
+    }
+    while (container.firstChild) {
+      container.removeChild(container.firstChild);
+    }
+  }
+
   // Decide whether the new render is *just a finalization* of the previous
   // render: every entry is in the same position with the same slot/kind/lang
   // as last frame, and the only change is that one or more transient entries
@@ -782,12 +910,11 @@
         ? renderState.partialBySlot
         : Object.entries(renderState.partialBySlot || {})
     );
-    const previousPartialSurfaceBySlot = renderState.partialSurfaceBySlot instanceof Map
-      ? new Map(renderState.partialSurfaceBySlot)
-      : new Map();
+    const previousPartialSurfaceBySlot = _readPartialSurfaceBySlot(renderState.partialSurfaceBySlot);
     const lastRenderedAt = Number.isFinite(renderState.lastRenderedAt) ? renderState.lastRenderedAt : null;
     const previousShape = typeof renderState.shapeSignature === "string" ? renderState.shapeSignature : null;
-    const previousEntrySurfaces = Array.isArray(renderState.entrySurfaces) ? renderState.entrySurfaces : null;
+    const previousEntrySurfaces = _derefSurfaceList(renderState.entrySurfaces);
+    const cachedWrapper = _derefSurfaceRef(renderState.wrapper);
     const previousEntryDescriptors = Array.isArray(renderState.entryDescriptors) ? renderState.entryDescriptors : null;
     const layoutPreset = payload?.preset || "stacked";
     const overlay = Boolean(options?.overlay);
@@ -822,8 +949,8 @@
     if (
       (exactShapeMatch || finalizationCompatible)
       && previousEntrySurfaces
-      && renderState.wrapper
-      && renderState.wrapper.parentNode === container
+      && cachedWrapper
+      && cachedWrapper.parentNode === container
       && rows.length > 0
     ) {
       const totalEntries = rows.reduce((sum, rowConfig) => sum + (rowConfig.entries || []).length, 0);
@@ -945,11 +1072,11 @@
       container.__subtitleStyleRenderState = {
         entrySignatures: nextEntrySignatures,
         partialBySlot: Object.fromEntries(nextPartialBySlot.entries()),
-        partialSurfaceBySlot: nextPartialSurfaceBySlot,
-        entrySurfaces: nextEntrySurfaces,
+        partialSurfaceBySlot: _persistPartialSurfaceBySlot(nextPartialSurfaceBySlot),
+        entrySurfaces: _surfaceRefsFromElements(nextEntrySurfaces),
         entryDescriptors: nextEntryDescriptors,
         shapeSignature,
-        wrapper: renderState.wrapper,
+        wrapper: _surfaceRefFor(cachedWrapper),
         lastRenderedAt: renderFinishedAt,
       };
       if (traceCallback) {
@@ -1216,6 +1343,16 @@
     });
 
     wrapper.appendChild(stage);
+    const keepSurfaces = new Set(nextEntrySurfaces);
+    _releaseOrphanedSurfaces(previousEntrySurfaces, keepSurfaces);
+    previousPartialSurfaceBySlot.forEach((surface) => {
+      if (surface && !keepSurfaces.has(surface)) {
+        _scrubSurfaceMetadata(surface);
+      }
+    });
+    if (cachedWrapper && !keepSurfaces.has(cachedWrapper) && cachedWrapper !== wrapper) {
+      _scrubSurfaceMetadata(cachedWrapper);
+    }
     container.innerHTML = "";
     container.appendChild(wrapper);
     const renderFinishedAt = (typeof performance !== "undefined" && performance && typeof performance.now === "function")
@@ -1224,11 +1361,11 @@
     container.__subtitleStyleRenderState = {
       entrySignatures: nextEntrySignatures,
       partialBySlot: Object.fromEntries(nextPartialBySlot.entries()),
-      partialSurfaceBySlot: nextPartialSurfaceBySlot,
-      entrySurfaces: nextEntrySurfaces,
+      partialSurfaceBySlot: _persistPartialSurfaceBySlot(nextPartialSurfaceBySlot),
+      entrySurfaces: _surfaceRefsFromElements(nextEntrySurfaces),
       entryDescriptors: nextEntryDescriptors,
       shapeSignature,
-      wrapper,
+      wrapper: _surfaceRefFor(wrapper),
       lastRenderedAt: renderFinishedAt,
     };
     if (traceCallback) {
@@ -1299,6 +1436,7 @@
     _shapeSignatureForEntry,
     _canFastPathFinalize,
     _finalizeTransientSurfaceInPlace,
+    disposeRenderContainer,
     render,
   };
 })();
