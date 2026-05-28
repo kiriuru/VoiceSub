@@ -3,14 +3,6 @@
 **Преобразуйте голос в живые переводимые субтитры для стримов. Полностью локально, privacy-first, готово для OBS.**
 
 <p align="center">
-  <img src="https://img.shields.io/github/v/release/kiriuru/stream_sub_translator?style=flat-square&label=release" alt="Release">
-  <img src="https://img.shields.io/github/downloads/kiriuru/stream_sub_translator/total?style=flat-square" alt="Downloads">
-  <img src="https://img.shields.io/badge/Windows-10%2F11-blue?style=flat-square&logo=windows" alt="Windows">
-  <img src="https://img.shields.io/badge/Python-3.10%2B-yellow?style=flat-square&logo=python" alt="Python">
-  <img src="https://img.shields.io/github/license/kiriuru/stream_sub_translator?style=flat-square" alt="License">
-</p>
-
-<p align="center">
   <a href="./README.md">English</a> • <a href="./README.ru.md">Русский</a> •
   <a href="./docs/WIKI.en.md">Wiki (EN)</a> • <a href="./docs/WIKI.ru.md">Wiki (RU)</a> •
   <a href="./docs/TECHNICAL_ARCHITECTURE.en.md">Technical Docs (EN)</a> •
