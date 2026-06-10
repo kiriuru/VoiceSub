@@ -1,0 +1,69 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/voicesub-types",
+    "crates/voicesub-config",
+    "crates/voicesub-subtitle",
+    "crates/voicesub-translation",
+    "crates/voicesub-browser",
+    "crates/voicesub-ws",
+    "crates/voicesub-http",
+    "crates/voicesub-logging",
+    "crates/voicesub-export",
+    "crates/voicesub-obs",
+    "crates/voicesub-audio",
+    "crates/voicesub-tts",
+    "crates/voicesub-twitch",
+    "crates/voicesub-runtime",
+    "src-tauri",
+    "xtask",
+]
+
+[workspace.package]
+version = "0.5.0"
+edition = "2021"
+license = "MIT"
+rust-version = "1.75"
+
+[workspace.dependencies]
+voicesub-types = { path = "crates/voicesub-types" }
+voicesub-config = { path = "crates/voicesub-config" }
+voicesub-subtitle = { path = "crates/voicesub-subtitle" }
+voicesub-translation = { path = "crates/voicesub-translation" }
+voicesub-browser = { path = "crates/voicesub-browser" }
+voicesub-ws = { path = "crates/voicesub-ws" }
+voicesub-http = { path = "crates/voicesub-http" }
+voicesub-logging = { path = "crates/voicesub-logging" }
+voicesub-export = { path = "crates/voicesub-export" }
+voicesub-obs = { path = "crates/voicesub-obs" }
+voicesub-audio = { path = "crates/voicesub-audio" }
+voicesub-tts = { path = "crates/voicesub-tts" }
+voicesub-twitch = { path = "crates/voicesub-twitch" }
+voicesub-runtime = { path = "crates/voicesub-runtime" }
+
+axum = { version = "0.8", features = ["ws", "json"] }
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["fs", "trace", "set-header"] }
+futures-util = "0.3"
+http = "1"
+mime_guess = "2"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+async-trait = "0.1"
+urlencoding = "2"
+zip = "2"
+
+# Dev incremental compilation + Tauri multi crate-type (lib/cdylib) leaves orphaned
+# hash directories under target/*/incremental/ (~0.7 GiB each). Disable globally.
+[profile.dev]
+incremental = false
+split-debuginfo = "unpacked"
+
+[profile.release]
+incremental = false
+strip = true

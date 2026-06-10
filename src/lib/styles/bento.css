@@ -1,0 +1,123 @@
+/* Bento grid — CSS-only tile layout for dashboard panels */
+
+.bento-root {
+  display: grid;
+  gap: var(--bento-gap);
+  align-content: start;
+}
+
+.bento-root.stack,
+.overview-bento-main.stack {
+  gap: var(--bento-gap);
+}
+
+.bento-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--bento-cols, 2), minmax(0, 1fr));
+  gap: var(--bento-gap);
+  align-items: start;
+}
+
+.bento-grid--3 {
+  --bento-cols: 3;
+}
+
+.bento-tile {
+  min-height: var(--bento-tile-min-height);
+  height: 100%;
+}
+
+.bento-tile > .glass-panel,
+.glass-panel.bento-tile {
+  height: 100%;
+}
+
+.bento-span-2 {
+  grid-column: span 2;
+}
+
+.bento-span-full {
+  grid-column: 1 / -1;
+}
+
+/* Panel-specific bento layouts (standard / wide) */
+
+.panel-bento-root[data-tab-panel="translation"] .translation-layout {
+  gap: var(--bento-gap);
+}
+
+.panel-bento-root[data-tab-panel="translation"] .translation-top.bento-grid {
+  grid-template-columns: minmax(0, 1.15fr) minmax(300px, 0.85fr);
+  align-items: start;
+}
+
+.panel-bento-root[data-tab-panel="translation"] .translation-provider-panel {
+  height: auto;
+  align-self: start;
+}
+
+.panel-bento-root[data-tab-panel="subtitles"] .subtitles-top.bento-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.panel-bento-root[data-tab-panel="obs"] .obs-layout {
+  gap: var(--bento-gap);
+}
+
+.panel-bento-root[data-tab-panel="obs"] .obs-bento-main.bento-grid {
+  grid-template-columns: minmax(0, 1.4fr) minmax(260px, 0.8fr);
+}
+
+.panel-bento-root[data-tab-panel="tools"] .tools-bento.bento-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 960px) {
+  .panel-bento-root[data-tab-panel="tools"] .tools-bento.bento-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.panel-bento-root[data-tab-panel="tools"] .tools-bento .bento-span-full {
+  grid-column: 1 / -1;
+}
+
+/* Overview hero bento */
+
+.overview-bento-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--bento-gap);
+}
+
+@media (min-width: 900px) {
+  .overview-bento-main {
+    grid-template-columns: minmax(200px, 0.62fr) minmax(0, 1.38fr);
+    grid-template-areas:
+      "transcript preview"
+      "results results";
+  }
+
+  .overview-bento-main > article:nth-child(1) {
+    grid-area: transcript;
+  }
+
+  .overview-bento-main > article:nth-child(2) {
+    grid-area: preview;
+  }
+
+  .overview-bento-main > .translation-results {
+    grid-area: results;
+  }
+}
+
+@media (max-width: 899px) {
+  .bento-grid,
+  .bento-grid--3 {
+    grid-template-columns: 1fr;
+  }
+
+  .bento-span-2 {
+    grid-column: auto;
+  }
+}

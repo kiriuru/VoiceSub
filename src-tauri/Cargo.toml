@@ -1,0 +1,40 @@
+[package]
+name = "voicesub-app"
+version.workspace = true
+edition.workspace = true
+description = "VoiceSub desktop shell (Tauri)"
+
+[lib]
+name = "voicesub_app_lib"
+# staticlib only needed for iOS/Android; omit on Windows desktop to avoid a third
+# full compile + incremental cache per edit (major target/ bloat).
+crate-type = ["lib", "cdylib"]
+
+[[bin]]
+name = "voicesub-app"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+voicesub-runtime = { workspace = true }
+voicesub-config = { workspace = true }
+voicesub-logging = { workspace = true }
+voicesub-types = { workspace = true }
+voicesub-browser = { workspace = true }
+voicesub-audio = { workspace = true }
+voicesub-tts = { workspace = true }
+voicesub-twitch = { workspace = true }
+serde_json = { workspace = true }
+tauri = { version = "2", features = [] }
+url = "2"
+tokio = { workspace = true }
+tracing = { workspace = true }
+reqwest = { workspace = true }
+open = "5"
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.61", features = [
+    "Win32_UI_WindowsAndMessaging",
+] }

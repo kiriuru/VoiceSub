@@ -1,0 +1,17 @@
+[package]
+name = "voicesub-subtitle"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+voicesub-types = { workspace = true }
+voicesub-config = { workspace = true }
+voicesub-logging = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tokio = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
+serde = { workspace = true, features = ["derive"] }

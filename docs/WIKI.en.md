@@ -1,138 +1,137 @@
-# SST Desktop — WIKI
+# VoiceSub — WIKI
 
-This WIKI is written as an operational guide for each UI element:
-**what it is**, **why it exists**, **how it works**, **what it affects**, and **when to use it**.
+Operational guide for the VoiceSub `0.5.0` UI. Each element is described as: **what it is**, **why it exists**, **how it works**, **what it affects**, and **common mistakes**.
 
----
-
-## 0. Version and Updates
-
-### Element: replacing `Stream Subtitle Translator.exe`
-- **What it does:** updates the app binary to a newer release.
-- **Why it matters:** brings bug fixes, stability improvements, and new UI/runtime behavior.
-- **How it works:** at launch, the bootstrap/runtime layer validates local runtime components and restores missing pieces when needed.
-- **What it affects:** feature availability, startup behavior, and compatibility of saved settings with new fields.
-- **Example:** a new translation option appears only after binary update; old profile still loads, new option gets default value.
-
-### Element: `Repair Runtime` / `Reset Runtime`
-- **What it does:** fixes or recreates local runtime environment.
-- **When to use:** update succeeded but app fails to start, crashes at boot, or runtime dependencies are broken.
-- **Operational rule:** use repair first, reset only if repair does not resolve the issue.
-- **Impact:** first start after reset can be longer because runtime files are rebuilt.
+Technical architecture: `docs/TECHNICAL_ARCHITECTURE.en.md`. SST `0.4.4` is a frozen predecessor; core behavior in this document is VoiceSub-specific.
 
 ---
 
-## 0.1 Notes for 0.4.4
+## 0. About the product
 
-### Element: OpenAI provider `base_url` (Translation panel)
-- **What it does:** when the app is bound beyond localhost (LAN remote / `SST_ALLOW_LAN=1`), OpenAI helper routes block private/loopback/metadata URLs in `base_url` to reduce SSRF risk.
-- **Default local use:** on `127.0.0.1` bind, local OpenAI-compatible servers (`http://127.0.0.1:...`) remain allowed.
-- **Impact:** only `/api/openai/models` and `/api/openai/usable-models`; translation providers are unchanged.
+### Element: VoiceSub vs SST
+- **VoiceSub** — active `0.5.0` line (Rust + Tauri + Svelte).
+- **SST** `0.4.4` — frozen reference; settings import works, but Parakeet/Remote/Experimental modes are not started in core.
+- **New overlay URL:** `http://127.0.0.1:8765/overlay` — update OBS Browser Source manually.
 
-### Element: overlay during WebSocket disconnect
-- **What it does:** OBS overlay keeps the last rendered subtitle frame while reconnecting.
-- **How:** shared stale guard + exponential reconnect (1–10 s) aligned with dashboard `WsClient`.
-- **When to use:** normal OBS operation; no manual refresh required after brief backend restarts.
+### Element: install and update (NSIS)
+- **What it does:** `VoiceSub_0.5.0_x64-setup.exe` installs `VoiceSub.exe` and bundled static assets (dashboard, overlay, worker, tts).
+- **Why:** single installer without Python/Node in runtime; WebView2 bootstrapper when needed.
+- **Update:** close app → run new `setup.exe` over existing → `user-data/` and `logs/` persist next to install/project root.
+- **Developers:** `build-release-msi.bat` → `build-release.ps1` → `F:\AI\VoiceSub - release\v{version}\`.
+- **GitHub auto-update:** not implemented yet (stub `/api/updates/check`).
 
-### Element: desktop context in dashboard store
-- **What it does:** desktop launch metadata (paths, mode, profile lock hints) lives in `store.desktop` instead of scattered `AppState` writes.
-- **Impact:** panels read the same snapshot after `sst:desktop-context`; fewer race conditions on pywebview startup.
-
-### Element: interface language (EN / RU / JA / KO / ZH)
-- **What it does:** switches dashboard, Browser Speech worker, and OBS overlay strings via `window.I18n` (`frontend/js/i18n.js`).
-- **Architecture (0.4.4):** split `frontend/js/i18n/locales/*.js` plus synchronous `locales-bundle.js` (single script for WebView2) and `dynamic-locales.js` for late en/ru keys; ja/ko/zh are full catalogs in `ja.js` / `ko.js` / `zh.js`. Language changes are instant (no network fetch).
-- **Impact:** tab labels, buttons, hints (including overlay preset hints), translation/ASR empty states; persisted in `ui.language` and `localStorage` (`sst.ui.language`); selector change saves config immediately (no extra Save).
-- **Details:** `docs/TECHNICAL_ARCHITECTURE.en.md` §16.8.
-
-### Element: subtitle preview before Start
-- **What it does:** in the “Current slice” block, placeholder text (“Source subtitle preview” / translation labels) stays visible while tuning styles and after **Save** until runtime is started.
-- **Why:** style calibration without running ASR; empty post-save `overlay_update` from WS no longer clears the dashboard preview.
-- **Details:** `docs/TECHNICAL_ARCHITECTURE.en.md` §16.7.6.
+### Element: local URLs
+| URL | Purpose |
+| --- | --- |
+| `/` | Svelte dashboard |
+| `/overlay` | OBS Browser Source |
+| `/google-asr` | Browser Speech worker |
+| `/tts` | TTS module UI |
 
 ---
 
-## 1. Quick Start
+## 1. Quick start
 
-### Element: startup profile
-- **What it does:** applies a pre-defined startup path (Web Speech, NVIDIA, CPU, etc.).
-- **Why it exists:** avoids manual setup across multiple panels before first run.
-- **Impact:** pre-selects runtime assumptions and may lock/unlock some recognition paths depending on profile.
+### Element: first run
+1. Launch **VoiceSub.exe**.
+2. Dashboard opens in the Tauri main window (`http://127.0.0.1:8765/`).
+3. Add OBS Browser Source: `http://127.0.0.1:8765/overlay`.
+4. Configure UI language (Settings) and translation (Translation) if needed.
+5. Click **Start** — Chrome opens `/google-asr?autostart=1`.
+6. Grant microphone permission in Chrome and speak.
 
-### Element: `Recognition method`
-- **What it does:** selects the ASR path (`local`, browser worker, experimental browser worker).
-- **How to choose:**
-  - laptop / no CUDA -> browser path;
-  - desktop with CUDA -> local Parakeet path.
+### Element: runtime bar (Start / Stop)
+- **Start:** `POST /api/runtime/start` — worker, translation, OBS CC, ASR ingest.
+- **Stop:** stops worker (kills Chrome tree), resets subtitle state.
+- **Note:** Start sends the current config snapshot, including unsaved edits since last Save.
 
-### Element: `Recognition language` + microphone input
-- **What it does:** defines ASR language model context and audio source device.
-- **Why critical:** wrong language or wrong mic typically hurts quality more than advanced tuning values.
+### Element: subtitle preview (overview)
+- **What it does:** top **Subtitle Output Preview** shows placeholders before Start and live payload after.
+- **Why:** style calibration without running ASR; empty post-save `overlay_update` does not clear preview.
+- **Details:** `TECHNICAL_ARCHITECTURE.en.md` §20 (Idle subtitle preview).
 
----
-
-## 2. What to Check If Something Is Not Working
-
-### Scenario: no text appears at all
-- Confirm runtime is actually started.
-- Confirm correct microphone device is selected.
-- Confirm microphone permissions (especially for browser worker window).
-- Check diagnostics panel to verify audio frames are arriving.
-
-### Scenario: source text appears, translation does not
-- Confirm `Translate recognized speech` is enabled.
-- Confirm at least one translation line is enabled.
-- Check `Translated Results` for provider errors (key, endpoint, quota, timeout, network).
-
-### Scenario: OBS shows no subtitles
-- Confirm Browser Source points to `/overlay`.
-- Confirm relevant visibility toggles are enabled.
-- Verify subtitle TTL values are not too short (text may appear then vanish quickly).
+### Element: compact layout
+- **What it does:** switches Tauri window (~390×844) and navigation with **Live** pane + settings tabs.
+- **Where:** layout button in chrome or command palette.
+- **IPC:** Tauri `set_dashboard_layout`.
 
 ---
 
-## 3. Startup Profiles
+## 2. Troubleshooting
 
-### Element: `Quick Start (Web Speech)`
-- **Goal:** fastest first run without local AI model path.
-- **How it works:** opens dedicated browser worker window and uses browser speech recognition APIs.
-- **Important:** local AI mode can remain temporarily profile-locked until next start with NVIDIA/CPU profile.
+### Scenario: no text at all
+- Is runtime **Start**ed?
+- Is Chrome `/google-asr` window open and **visible**?
+- Microphone allowed in **Chrome** (not only Windows)?
+- **Tools & Data** → runtime diagnostics: `browser_worker_connected`?
 
-### Element: `NVIDIA GPU (CUDA)`
-- **Goal:** best local recognition speed and stability when CUDA is available.
-- **Impact:** lower latency to final text, higher GPU usage.
+### Scenario: source text but no translation
+- **Translation** tab → translation enabled.
+- At least one `translation_N` line with `enabled`.
+- Check translation results / diagnostics for provider errors.
 
-### Element: `CPU-only`
-- **Goal:** fallback for systems without usable CUDA.
-- **Impact:** slower ASR, higher latency, and potentially chattier partial updates.
+### Scenario: OBS shows nothing
+- Browser Source URL is `/overlay` (not dashboard `/`).
+- **Subtitles** → source/translation visibility enabled.
+- TTL not too aggressive (text may flash and vanish).
+- On WS disconnect overlay keeps last frame (stale-guard + 1–10 s backoff) — expected.
+- Text **stuck after TTL/Stop** — update the app and reload Browser Source (fix: `disposeRenderContainer` in overlay, `overlay.js?v=20260610a`).
 
-### Element: `Remote Controller` / `Remote Worker`
-- **Goal:** split controller/worker runtime over LAN.
-- **Order requirement:** start worker first, then controller.
-- **Constraint:** worker path is local AI runtime, not browser speech mode.
+### Scenario: worker keeps dying
+- Check network (Web Speech uses Google endpoints).
+- `logs/browser-trace.jsonl` with `VOICESUB_TRACE_BROWSER=1`.
+- Recovery: **Stop** → **Start** or relaunch worker from Tools.
 
 ---
 
-## 4. Recognition
+## 3. Dashboard tabs
 
-### Element: `Recognition method`
-- **Purpose:** selects architecture for audio-to-text.
-- **Modes:**
-  - local runtime ASR;
-  - browser worker ASR;
-  - experimental browser worker ASR.
-- **Impact:** changes latency profile, dependency surface, and troubleshooting path.
+| Tab | Purpose |
+| --- | --- |
+| **Translation** | Providers, translation lines, cache, dispatcher limits |
+| **Subtitles** | Overlay preset, visibility, order, TTL lifecycle |
+| **Style** | Fonts, colors, effects, slot styles, custom presets |
+| **UI Theme** | Dark/light mode, accent palette |
+| **OBS** | Overlay URL, Closed Captions, debug mirror |
+| **Word Replace** | Text replacement before translation |
+| **Tools & Data** | Profiles, diagnostics, ZIP export |
+| **Settings** | UI language, layout, SST config import, Web Speech advanced |
+| **Help** | Built-in help topics |
 
-### Element: `Recognition language`
-- **Purpose:** defines language context for decoding.
-- **Practical rule:** pick dominant spoken language, then handle multilingual audience via translation lines.
+**Command palette** (header search / `Ctrl+K`): quick navigation, Start/Stop, Save, export diagnostics.
 
-### Element: `Worker browser (desktop)`
-- **Purpose:** chooses browser engine for worker window.
-- **Use case:** if one browser path is unstable on a machine, switch browser and retest worker diagnostics.
+---
 
-### Element: `Backend ASR provider` (local path)
-- **Purpose:** selects Parakeet local provider variant.
-- **Impact:** low-latency profile responds faster, standard profile may behave calmer in some speech patterns.
+## 4. Recognition (Browser Speech)
+
+### Element: sole production mode in core 0.5.0
+- **`browser_google`** — Web Speech in a separate Chrome window.
+- Microphone is selected **in Chrome** (`getUserMedia`), not in the dashboard.
+- `/api/devices/audio-inputs` returns empty — by design.
+
+### Element: browser worker window
+- **Separate window** with **visible address bar** (no app mode, no hidden tab).
+- URL: `http://127.0.0.1:8765/google-asr?autostart=1[&locale=…]`.
+- Isolated Chrome profile: `user-data/browser-worker-profile-classic-*`.
+- Anti-throttle flags + EcoQoS opt-out on Windows.
+
+### Element: recognition language
+- **Settings** → Web Speech / `asr.browser.recognition_language`.
+- Worker UI shows live/final text and WS diagnostics.
+- If worker has text but dashboard is empty — issue is ingest/WS, not Chrome recognition.
+
+### Element: advanced Web Speech settings
+- **Settings** → “Advanced Web Speech settings” (`asr.browser.*`).
+- Groups: forced final, restart, network reconnect, session rotation, partial filtering.
+- After changes: Save config → **Stop/Start** and reopen worker if needed.
+
+### Element: worker stability (ported from SST)
+- Screen Wake Lock while recognition runs.
+- Session rotation `max_browser_session_age_ms` (default 180000 ms).
+- Network preflight → terminal `recognition_network_unreachable` after repeated network errors.
+- Force-finalization for stuck partials.
+
+**Not in core:** local Parakeet, experimental `/google-asr-experimental`, remote ingest.
 
 ---
 
@@ -140,264 +139,200 @@ This WIKI is written as an operational guide for each UI element:
 
 ### 5.1 Main toggles
 
-#### Element: `Translate recognized speech`
-- **What it does:** enables/disables translation pipeline.
-- **Important:** disabling translation does not disable recognition; source-only flow remains valid.
+#### Element: enable translation
+- Turns translation pipeline on/off.
+- ASR works without translation (source-only flow).
 
-#### Element: `Reuse translation cache (skip duplicate API calls)`
-- **What it does:** deduplicates repeated translation requests.
-- **Why useful:** reduces provider cost and repeated latency.
-- **Example:** repeated catchphrase gets near-instant cached output instead of new API call.
+#### Element: translation cache
+- **In memory:** skip duplicate provider calls.
+- **On disk:** `user-data/translation-cache/` across sessions.
+- **Trade-off:** old cache may conflict with changed LLM prompts.
 
-#### Element: `Save translation cache to disk between sessions`
-- **What it does:** persists cache across restarts.
-- **Trade-off:** old cached phrasing may conflict with newly changed model prompt/style goals.
+### 5.2 Translation lines (`translation_1`…`translation_5`)
 
-### 5.2 Translation Lines
+- Up to **5** independent lines: `enabled`, `target_lang`, `provider`, `label`.
+- Each enabled line adds dispatcher load.
+- Display order — **Subtitles** tab (slot ids).
 
-#### Element: adding/removing lines
-- **What it does:** manages target language slots (up to 5).
-- **Impact:** each enabled line adds translation workload and output surface.
+### 5.3 Providers (13)
 
-#### Element: line-level `Enabled`
-- **What it does:** toggles a slot without deleting it.
-- **Why useful:** quick A/B testing of language sets during stream.
+`google_translate_v2` (default), `google_cloud_translation_v3`, `google_gas_url`, `google_web`, `azure_translator`, `deepl`, `libretranslate`, `openai`, `openrouter`, `lm_studio`, `ollama`, `public_libretranslate_mirror`, `free_web_translate`.
 
-#### Element: per-line provider
-- **What it does:** lets each line use different provider/model strategy.
-- **Example:** Translation 1 for speed with default provider; Translation 2 for style via LLM provider.
+- OpenAI-compatible helpers: `/api/openai/recommended-models`, `/api/openai/models` (static list).
+- Credentials in `translation.provider_settings` — stored locally in `config.toml`.
 
-### 5.3 Provider Settings
+### 5.4 Translation dispatcher
+- Timeout, queue size, max concurrent jobs.
+- Per-provider limits (`provider_limits`).
+- **Lifecycle:** completed block stays until new phrase finalizes; late translations allowed; stale drop for superseded in-flight jobs only.
 
-#### Element: `Default provider for new lines`
-- **What it does:** pre-fills provider when creating new lines.
-- **Why useful:** keeps workflow consistent for repeated setup changes.
-
-#### Element: auth/endpoint/model fields
-- **What it does:** controls request routing and provider authentication.
-- **Failure mode:** invalid values surface as explicit errors in `Translated Results`.
-
-#### Element: `Custom prompt override` (LLM paths)
-- **What it does:** overrides translation style instructions.
-- **Impact:** directly changes tone, verbosity, and output format.
-- **Example prompt intent:** "Subtitle style only, concise, no commentary."
-
-### 5.4 `Translated Results`
-- **What it shows:** successful translations and runtime provider errors.
-- **Why operationally important:** first place to identify whether issue is in provider layer vs ASR layer.
-- **Note:** delayed translation is not always a failure; stale/superseded protection can skip outdated outputs by design.
+### 5.5 Translation results block
+- Shows latest translations and provider errors.
+- Delayed translation is not always failure (supersession / stale protection).
 
 ---
 
-## 6. Subtitle Output
+## 6. Subtitle output (Subtitles)
 
-### 6.1 Element: `Overlay layout preset`
-- **`Single line`:** most compact, least readable for multi-language output.
-- **`Dual line`:** practical default for source + one translation.
-- **`Stacked`:** best readability for multiple lines, uses more vertical space.
+### Element: overlay preset
+- `single`, `dual-line`, `stacked`, `compact`.
+- Query override: `?preset=…&compact=1`.
 
-### 6.2 Element: `Use tighter overlay spacing`
-- **What it does:** reduces spacing between rows.
-- **When to use:** tight OBS composition or small subtitle area.
+### Element: visibility
+- Source / translation toggles.
+- Max visible translation lines.
 
-### 6.3 Visibility elements
-- **`Show the original spoken text`:** toggles source text visibility.
-- **`Show translated lines`:** toggles translation visibility.
-- **`Maximum translated lines on screen`:** caps rendered translation rows.
-- **Behavior detail:** enabled lines can exceed visible cap; rendering follows current line order.
+### Element: TTL and lifecycle
+- `completed_block_ttl_ms`, source/translation TTL.
+- Sync flags: keep source while translation visible.
+- **Intent:** completed translation stays visible while next phrase is still partial; replacement after new phrase finalizes.
 
-### 6.4 Timing and replacement elements
-- **Completed source TTL:** how long finalized source remains.
-- **Completed translation TTL:** how long finalized translation remains.
-- **Sync source with visible translation:** keeps source visible while translation is still active.
-- **Immediate replacement on next final:** aggressively replaces current block after next finalized phrase.
-
-**Lifecycle intent:** completed translation should stay visible while next phrase is still partial; replacement happens when the new phrase is finalized and enters translation flow.
-
-### 6.5 Element: ordering (`Move Up` / `Move Down`)
-- **What it does:** reorders source/translation display lines.
-- **Shared effect surface:** dashboard preview, OBS overlay rendering, and OBS CC `First visible line` mode.
+### Element: line order
+- Affects dashboard preview, OBS overlay, and OBS CC `first_visible_line` mode.
 
 ---
 
-## 7. Subtitle Style
+## 7. Subtitle style (Style)
 
-### Element: preset selection
-- **What it does:** applies a style baseline quickly.
-- **Why useful:** fast switching between stream scenes/backgrounds.
-
-### Element: style controls (font, size, color, stroke, shadow, background)
-- **How it works:** single styling system drives both preview and overlay output.
-- **Best practice:** optimize readability first (contrast/outline), aesthetics second.
-
-### Element: per-slot styling (`source`, `translation_1..translation_5`)
-- **What it does:** gives separate visual identity to source and each translation line.
-- **Example:** source in white, translation_1 in yellow, translation_2 in cyan.
-
-### Element: saving preset + saving config/profile
-- **Important:** unsaved config/profile can lose style changes on restart.
+- Built-in and custom presets.
+- Base controls: font, size, weight, color, outline, shadow, background, alignment, spacing.
+- Effects: `none`, `fade`, `subtle_pop`, `slide_up`, `zoom_in`, `blur_in`, `glow`.
+- Per-slot overrides: `source`, `translation_1`…`translation_5`.
+- **Shared payload** for dashboard preview and OBS overlay.
+- Save config/profile after edits.
 
 ---
 
-## 8. OBS Closed Captions
+## 8. UI theme (Theme)
 
-### 8.1 Element: `Send captions to OBS Closed Captions`
-- **What it does:** enables caption stream publishing to OBS websocket path.
-- **Why use it:** delivers native CC stream instead of only visual overlay text.
-
-### 8.2 Connection fields (`host`, `port`, `password`)
-- **What they do:** establish OBS websocket session.
-- **Typical failure:** correct host/port but wrong password -> no caption delivery.
-
-### 8.3 Element: `Output mode`
-- **Options:** disabled, source live, source final, translation 1..5, first visible line.
-- **Selection guidance:**
-  - lowest delay -> source live;
-  - cleaner captions -> source final;
-  - multilingual audience -> translation slot or first visible line.
-
-### 8.4 Timing, smoothing, and dedupe controls
-- **Minimum gap:** reduces update spam.
-- **Minimum text delta:** ignores tiny text changes.
-- **Final replacement delay:** smooths rapid transitions.
-- **Auto clear timeout:** controls stale tail text behavior in OBS.
-- **Avoid duplicate text:** prevents redundant identical sends.
-
-### 8.5 Element: debug mirror to OBS text source
-- **Why it exists:** troubleshooting visibility when CC path behavior is unclear.
-- **When useful:** verify data is being emitted even if final player path is inconsistent.
-
-### 8.6 Twitch compatibility note
-- Twitch uses CEA-708/EIA-608 compatible caption ingestion path.
-- Plain text is usually most compatible.
-- Some complex Unicode rendering can vary by player/platform.
+- Dark / light mode.
+- Accent palette gradients.
+- Affects dashboard chrome only; OBS overlay uses subtitle-style config.
 
 ---
 
-## 9. Recognition Feel (Tuning)
+## 9. OBS
 
-### Element: `How quickly text appears`
-- **Effect:** earlier display vs higher chance of partial revisions.
+### Element: overlay URL
+- Copied from **OBS** tab (`GET /api/obs/url`).
+- Default: `http://127.0.0.1:8765/overlay`.
+- Update OBS if bind changes (LAN mode).
 
-### Element: `How quickly speech is considered finished`
-- **Effect:** faster finalization can over-segment; slower finalization can feel laggy.
-
-### Element: update stability control
-- **Effect:** controls how chatty partial updates are during speech.
-
-### Element: `RNNoise noise reduction (experimental)` + strength
-- **Use only when needed:** noisy rooms can improve; clean signal can degrade if over-applied.
-
-### Element: `Parakeet latency preset`
-- **Purpose:** safe preset-level tuning before advanced manual changes.
-
-After tuning, save config/profile and restart runtime (`Stop` -> `Start`).
+### Element: OBS Closed Captions
+- WebSocket host/port/password (OBS v5).
+- Output mode: source live/final, translation slots, first visible line.
+- Timing: partial throttle, min delta, clear after ms, dedupe.
+- Debug mirror — text source for CC debugging.
 
 ---
 
-## 10. Advanced Recognition & Diagnostics
+## 10. Word replacement
 
-This section is for fine-grained adaptation to mic quality, room noise, and speaking rhythm. Open the **ASR Advanced** dashboard tab.
-
-### Element: `?` help button (each field)
-- **What it does:** opens a short popover explaining that setting and how it affects recognition.
-- **Recommended line:** the value on the right (`Recommended: …`) is a practical starting point, not a hard limit.
-
-### Group: sensitivity and thresholds
-- Controls VAD/noise gating behavior.
-- If thresholds are too high: quiet speech gets dropped.
-- If thresholds are too low: noise triggers false speech activity.
-
-### Group: partial/final emission behavior
-- Controls update frequency, minimum change, and coalescing.
-- Stream use case often prefers fewer, more stable partial updates over maximum update rate.
-
-### Group: phrase segmentation
-- Pause/finalization limits define final phrase boundaries.
-- These boundaries influence translation timing and subtitle block readability.
-
-### Group: chunk window / overlap
-- Controls ASR context windowing and boundary continuity.
-- Bad balance can add latency or reduce stability at phrase edges.
-
-**Best practice:** change one setting at a time and validate in live preview before saving profile.
+- Find/replace rules **before** translation and output.
+- Built-in profanity lists (en, ru, ja, ko, zh).
+- Case-insensitive / whole words only.
+- TTS sync via `tts_sync_source_text_replacement` when TTS is enabled.
 
 ---
 
-## 11. Word replacement (before translation)
+## 11. TTS module
 
-### Element: `Enable word replacement`
-- **What it does:** applies replacement rules before translation and subtitle output.
-- **Why useful:** moderation, brand term normalization, repeated ASR correction.
+### Element: `/tts` window
+- Separate UI: **Speech** and **Twitch** tabs.
+- Open from dashboard or Tauri IPC `tts_open_window`.
 
-### Element: built-in profanity list
-- **What it does:** quickly enables baseline filtering for English, Russian, Japanese, Korean, and Chinese.
-- **Impact:** translation receives already replaced text, not original raw token.
+### Element: Speech
+- TTS provider, voice, rate/pitch/volume.
+- Audio routing: browser element or WinAPI per-process (`VOICESUB_TTS_PER_PROCESS_ROUTING`).
+- Subtitle-driven planner (`tts_plan_subtitle_speech`).
 
-### Element: matching rules (`Case-insensitive`, `Whole words only`)
-- Case-insensitive catches casing variants.
-- Whole-word mode prevents accidental inside-word replacements.
+### Element: Twitch
+- OAuth via system browser.
+- IRC chat → speech queue.
+- Filters, emotes, replacements (`voicesub-twitch` crate).
 
-### Element: dictionary controls (`Word or phrase`, `Replace with`, `Add`, `Remove selected`)
-- **Example:** replace `discord` with `Discord` to keep consistent casing in source and translation outputs.
+### Element: Python sidecar
+- `bin/modules/tts/runtime/` — embedded fetcher for Google TTS proxy.
+- `/api/tts/python/status` — runtime probe.
 
 ---
 
 ## 12. Tools & Data
 
-### Element: `Deep Runtime Detail` -> `Runtime Diagnostics`
-- **What it provides:** latency metrics, ASR diagnostics, translation diagnostics, queue/runtime state, worker state, OBS CC state, log path hints.
-- **Why it matters:** lets you localize failures to the exact stage instead of guessing.
+### Element: Runtime Diagnostics
+- Phase, worker connected, translation queue, OBS CC state, metrics.
+- Log paths: `logs/core.log`, `runtime-events.log`, `session-latest.jsonl`.
 
-### Element: `Local Config`, `Profiles`, diagnostics export
-- **Local Config:** current active runtime config state.
-- **Profiles:** reusable saved presets for specific streaming setups.
-- **Diagnostics export:** package for reproducible troubleshooting.
+### Element: profiles
+- CRUD via UI → `user-data/profiles/{name}.toml`.
+- Quick switching between streaming setups.
 
----
+### Element: Export Diagnostics
+- ZIP: redacted config, runtime status, session log, core log.
+- `GET /api/exports/diagnostics`.
 
-## 13. Local Parakeet
-
-### Element: `Local Parakeet` / `Official EU Parakeet Low Latency`
-- **What it is:** local AI recognition path.
-- **When to use:** when you need predictable local ASR behavior and especially when CUDA is available.
-
-Model reference:
-- [NVIDIA Parakeet model card](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2)
+### Element: deep diagnostics (env)
+- `VOICESUB_DEEP_DIAGNOSTICS=1` or `logging.full_enabled` in config.
+- Per-channel: `VOICESUB_TRACE_SUBTITLE`, `_BROWSER`, `_WS`, `_TTS`, …
 
 ---
 
-## 14. Web Speech
+## 13. Settings
 
-### Element: worker page (`/google-asr` and edge variant)
-- **What it does:** runs speech recognition in dedicated browser worker window and forwards results to runtime.
-- **UI blocks:** start/stop, partial/final behavior controls, websocket counters, live/final text diagnostics.
-- **Operational value:** if dashboard shows no text, worker page helps isolate browser-side recognition vs backend ingest issues.
+### Element: UI language (EN / RU / JA / KO / ZH)
+- Svelte i18n: `src/lib/i18n/locales/*.json`.
+- Saved in `ui.language` → Save config.
+- Worker gets `locale` query param on launch.
+- Overlay i18n: `bin/overlay/shared/js/i18n/`.
+- **Details:** `TECHNICAL_ARCHITECTURE.en.md` §23.
 
----
+### Element: SST config.json import
+- Migrates to `config.toml`, `config_version` → 8.
+- `local` / `remote` / experimental → `browser_google` + import hint.
+- `ui.show_remote_tools` → false.
 
-## 15. Web Speech (Experimental)
-
-### Element: experimental worker page (`/google-asr-experimental` and edge variant)
-- **What it does:** uses experimental startup path for browser recognition.
-- **Why available:** fallback path for systems where classic worker behavior is unstable.
-- **Behavior note:** can revert to normal start behavior when experimental path is not supported.
-
----
-
-## 16. Help
-
-### Element: built-in help topics
-- **What it does:** provides in-app guidance for startup, recognition, translation, subtitle output/style, OBS, and diagnostics.
-- **Why useful:** reduces time-to-fix for common setup and runtime problems.
+### Element: layout
+- `standard` vs `compact` — affects Tauri window size.
 
 ---
 
-## 17. Glossary
+## 14. Help
 
-- **`partial`:** in-progress text that may still change.
-- **`final`:** finalized phrase text.
-- **`translation slot`:** one target translation line (`translation_1..translation_5`).
-- **`overlay`:** `/overlay` page used in OBS Browser Source.
-- **`OBS Closed Captions`:** caption stream pushed to OBS websocket.
+Built-in topics: overview, recognition, translation, subtitles/style, OBS, tools. No remote mode section (removed from core).
 
+---
+
+## 15. Privacy and local-first
+
+- **Local-first:** default `127.0.0.1`; LAN only with `VOICESUB_ALLOW_LAN=1`.
+- API keys and Twitch tokens — local disk only.
+- Diagnostics export — redacted secrets.
+- Chrome worker — isolated profile, no sync.
+
+---
+
+## 16. Glossary
+
+| Term | Meaning |
+| --- | --- |
+| **partial** | In-progress recognized text |
+| **final** | Finalized phrase segment |
+| **translation slot** | Line `translation_1`…`translation_5` |
+| **overlay** | Vanilla `/overlay` page for OBS |
+| **browser worker** | Chrome window running Web Speech |
+| **completed block** | Final subtitle until next phrase finalizes |
+| **TTS module** | Sidecar `/tts` + Rust service |
+
+---
+
+## 17. Archived features (not in core 0.5.0)
+
+| SST feature | VoiceSub status |
+| --- | --- |
+| Local Parakeet | `legacy/modules-source/parakeet/` → Phase 4 module |
+| Remote controller/worker | `legacy/remote/` → future module |
+| Experimental browser | `legacy/experimental-browser/` — routes removed |
+| PyInstaller bootstrap | Replaced by Tauri NSIS installer |
+| Splash startup profiles | None — single `VoiceSub.exe` |
+
+For browser/translation/subtitle parity, see golden tests in `tests/golden/`.

@@ -1,0 +1,360 @@
+/* Compact = phone portrait window (390×844 logical) — single column, bottom tabs */
+
+body.voicesub-layout-compact {
+  --compact-phone-width: 390px;
+  overflow: hidden;
+  height: 100dvh;
+}
+
+body.voicesub-layout-compact .app-shell {
+  display: flex !important;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  width: 100%;
+  max-width: none;
+  height: 100dvh;
+  max-height: 100dvh;
+  min-height: 0;
+  margin: 0;
+  padding: 0 !important;
+  overflow: hidden;
+}
+
+body.voicesub-layout-compact .app-footer {
+  display: none;
+}
+
+body.voicesub-layout-compact .compact-phone-shell {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+/* Top app bar */
+body.voicesub-layout-compact .compact-top-bar {
+  flex: 0 0 auto;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: max(8px, env(safe-area-inset-top)) 12px 8px;
+  border-bottom: 1px solid var(--line-subtle);
+  background: var(--bg-panel);
+}
+
+body.voicesub-layout-compact .compact-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+body.voicesub-layout-compact .compact-brand {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+body.voicesub-layout-compact .compact-brand-title {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+body.voicesub-layout-compact .compact-brand-version {
+  font-size: 10px;
+}
+
+body.voicesub-layout-compact .compact-top-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+body.voicesub-layout-compact .compact-locale-field {
+  margin: 0;
+}
+
+body.voicesub-layout-compact .compact-locale-field .control {
+  min-height: 40px;
+  width: 100%;
+  font-size: 14px;
+}
+
+body.voicesub-layout-compact .compact-icon-btn {
+  min-width: 40px;
+  min-height: 40px;
+  padding-inline: 10px;
+}
+
+body.voicesub-layout-compact .compact-save-btn {
+  min-height: 40px;
+  padding-inline: 14px;
+  font-size: 13px;
+}
+
+body.voicesub-layout-compact .compact-save-status {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+body.voicesub-layout-compact .runtime-shell {
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line-subtle);
+  box-shadow: none;
+  padding: 10px;
+}
+
+body.voicesub-layout-compact .runtime-shell-main {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+body.voicesub-layout-compact .runtime-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+body.voicesub-layout-compact .runtime-actions .btn {
+  width: 100%;
+  min-height: 44px;
+}
+
+body.voicesub-layout-compact .badges {
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+body.voicesub-layout-compact .badge {
+  font-size: 10px;
+  padding: 3px 6px;
+}
+
+/* Scrollable main content */
+body.voicesub-layout-compact .compact-content-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px 12px 12px;
+  -webkit-overflow-scrolling: touch;
+}
+
+body.voicesub-layout-compact .compact-content-scroll > .tab-panel.active {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: min-content;
+}
+
+/* Live overview — strict single column */
+body.voicesub-layout-compact .compact-overview.overview-section-root {
+  display: flex !important;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+body.voicesub-layout-compact .compact-overview .overview-grid,
+body.voicesub-layout-compact .compact-overview .overview-bento-main {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+body.voicesub-layout-compact .compact-overview .overview-recognition-aside {
+  width: 100%;
+}
+
+body.voicesub-layout-compact .compact-overview .preview-surface {
+  --preview-surface-height: 160px;
+}
+
+body.voicesub-layout-compact .compact-overview .transcript-box--compact {
+  max-height: 88px;
+  font-size: 12px;
+}
+
+body.voicesub-layout-compact .compact-overview .section-heading h2 {
+  font-size: 16px;
+}
+
+/* Bottom tab bar (phone pattern) */
+body.voicesub-layout-compact .compact-bottom-nav {
+  flex: 0 0 auto;
+  z-index: 30;
+  position: relative;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  width: 100%;
+  min-width: 0;
+  border-top: 1px solid var(--line-subtle);
+  background: var(--glass-2);
+  padding-bottom: max(6px, env(safe-area-inset-bottom));
+  overflow: hidden;
+}
+
+@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  body.voicesub-layout-compact .compact-bottom-nav {
+    -webkit-backdrop-filter: blur(16px) saturate(1.3);
+    backdrop-filter: blur(16px) saturate(1.3);
+  }
+}
+
+body.voicesub-layout-compact .compact-bottom-nav-scroll {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 6px 4px 4px;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  touch-action: pan-x;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--text-secondary) 55%, transparent) transparent;
+}
+
+body.voicesub-layout-compact .compact-bottom-nav-scroll::-webkit-scrollbar {
+  height: 4px;
+}
+
+body.voicesub-layout-compact .compact-bottom-nav-scroll::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-secondary) 45%, transparent);
+}
+
+body.voicesub-layout-compact .compact-bottom-nav-track {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  width: max-content;
+  min-width: 100%;
+  gap: 2px;
+  padding-inline: 4px;
+}
+
+body.voicesub-layout-compact .compact-bottom-nav-edge {
+  flex: 0 0 28px;
+  width: 28px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: var(--bg-panel-elevated);
+  color: var(--text-primary);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 2;
+}
+
+body.voicesub-layout-compact .compact-bottom-nav-edge--left {
+  border-right: 1px solid var(--line-subtle);
+}
+
+body.voicesub-layout-compact .compact-bottom-nav-edge--right {
+  border-left: 1px solid var(--line-subtle);
+}
+
+body.voicesub-layout-compact .compact-bottom-nav.can-scroll-right::after,
+body.voicesub-layout-compact .compact-bottom-nav.can-scroll-left::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: max(6px, env(safe-area-inset-bottom));
+  width: 18px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+body.voicesub-layout-compact .compact-bottom-nav.can-scroll-right::after {
+  right: 0;
+  background: linear-gradient(270deg, var(--glass-2) 10%, transparent);
+}
+
+body.voicesub-layout-compact .compact-bottom-nav.can-scroll-left::before {
+  left: 0;
+  background: linear-gradient(90deg, var(--glass-2) 10%, transparent);
+}
+
+body.voicesub-layout-compact .compact-bottom-tab {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 56px;
+  max-width: 72px;
+  min-height: 52px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  text-align: center;
+}
+
+body.voicesub-layout-compact .compact-bottom-tab-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+}
+
+body.voicesub-layout-compact .compact-bottom-tab-label {
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1.15;
+  max-width: 64px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.voicesub-layout-compact .compact-bottom-tab.is-active {
+  color: var(--text-primary);
+  background: var(--accent-soft);
+}
+
+body.voicesub-layout-compact .compact-bottom-tab.is-active .compact-bottom-tab-icon {
+  color: rgb(var(--ui-accent-rgb, 108 199 255) / 1);
+}
+
+/* Settings panels — single column only */
+body.voicesub-layout-compact .grid-2:not(.bento-grid),
+body.voicesub-layout-compact .panel-bento-root .bento-grid {
+  grid-template-columns: 1fr !important;
+}
+
+body.voicesub-layout-compact .control,
+body.voicesub-layout-compact .btn {
+  min-height: 44px;
+}
+
+body.voicesub-layout-compact .tab-panel[data-tab-panel="translation"] .line-card-list {
+  grid-template-columns: 1fr;
+}
+
+body.voicesub-layout-compact .tab-panel[data-tab-panel="style"] .grid-2 {
+  grid-template-columns: 1fr;
+}

@@ -1,0 +1,121 @@
+:root {
+  /* Legacy SST aliases (kept for gradual migration) */
+  --sst-bg: #080a12;
+  --sst-panel: rgba(16, 18, 26, 0.62);
+  --sst-panel-strong: rgba(22, 24, 34, 0.78);
+  --sst-border: rgba(255, 255, 255, 0.08);
+  --sst-text: #f4f6fb;
+  --sst-muted: #a8b0c2;
+  --sst-ok: #34d399;
+  --sst-warning: #fbbf24;
+  --sst-danger: #f87171;
+  --sst-info: #60a5fa;
+  --sst-radius-sm: 6px;
+  --sst-radius-md: 10px;
+  --sst-radius-lg: 14px;
+  --sst-shadow-panel: 0 8px 32px rgba(0, 0, 0, 0.24);
+
+  /* Brand accents — overridden by ThemePanel via inline --ui-accent-*-rgb */
+  --ui-accent-rgb: 108 199 255;
+  --ui-accent-secondary-rgb: 255 108 230;
+  --ui-accent-tertiary-rgb: 124 227 173;
+
+  --brand-gradient: linear-gradient(
+    135deg,
+    rgb(var(--ui-accent-rgb)),
+    rgb(var(--ui-accent-secondary-rgb))
+  );
+  --brand-gradient-soft: linear-gradient(
+    135deg,
+    rgb(var(--ui-accent-rgb) / 0.28),
+    rgb(var(--ui-accent-secondary-rgb) / 0.16)
+  );
+
+  /* Atmosphere strength (user palette washes behind glass) */
+  --atmosphere-strength: 0.13;
+
+  /* Glass depth surfaces — neutral, not tinted by brand */
+  --glass-0: rgba(8, 10, 14, 0.52);
+  --glass-1: rgba(16, 18, 26, 0.62);
+  --glass-2: rgba(22, 24, 34, 0.78);
+  --glass-3: rgba(28, 30, 42, 0.88);
+  --glass-inset: rgba(0, 0, 0, 0.28);
+  --glass-blur: blur(14px) saturate(1.35);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-border-strong: rgba(255, 255, 255, 0.14);
+  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.22);
+
+  /* Semantic app tokens */
+  --bg-canvas: var(--glass-0);
+  --bg-app: rgba(10, 12, 18, 0.94);
+  --bg-panel: var(--glass-1);
+  --bg-panel-elevated: var(--glass-2);
+  --bg-control: rgba(12, 14, 20, 0.72);
+  --text-primary: var(--sst-text);
+  --text-secondary: var(--sst-muted);
+  --text-tertiary: #6e768a;
+  --text-positive: var(--sst-ok);
+  --accent: rgb(var(--ui-accent-rgb));
+  --accent-soft: rgb(var(--ui-accent-rgb) / 0.12);
+  --danger: var(--sst-danger);
+  --line-subtle: var(--glass-border);
+  --line-strong: var(--glass-border-strong);
+  --shadow-panel: var(--glass-shadow);
+  --shadow-focus: 0 0 0 3px rgb(var(--ui-accent-rgb) / 0.28);
+  --radius-sm: var(--sst-radius-sm);
+  --radius-md: var(--sst-radius-md);
+  --radius-lg: var(--sst-radius-lg);
+  --radius-xl: 18px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --control-height: 44px;
+  --chrome-height: 40px;
+  --font-ui: "Segoe UI Variable", "Segoe UI", "Yu Gothic UI", Tahoma, Geneva, Verdana, sans-serif;
+  --font-mono: "Cascadia Mono", Consolas, Menlo, monospace;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-fast: 120ms;
+  --duration-normal: 200ms;
+  --z-command-palette: 600;
+  --bento-gap: var(--space-4);
+  --bento-tile-min-height: 100px;
+  --bento-cols: 2;
+}
+
+html[data-ui-theme="light"] {
+  color-scheme: light;
+  --sst-bg: #f6f8fc;
+  --sst-panel: rgba(255, 255, 255, 0.72);
+  --sst-panel-strong: rgba(255, 255, 255, 0.86);
+  --sst-text: #0f1419;
+  --sst-muted: #4b5563;
+  --glass-0: rgba(248, 250, 252, 0.55);
+  --glass-1: rgba(255, 255, 255, 0.72);
+  --glass-2: rgba(255, 255, 255, 0.86);
+  --glass-3: rgba(255, 255, 255, 0.94);
+  --glass-inset: rgba(255, 255, 255, 0.65);
+  --glass-border: rgba(0, 0, 0, 0.06);
+  --glass-border-strong: rgba(0, 0, 0, 0.1);
+  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+  --glass-shadow: 0 8px 28px rgba(12, 18, 32, 0.1);
+  --bg-control: rgba(255, 255, 255, 0.88);
+  --atmosphere-strength: 0.09;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --glass-1: rgba(16, 18, 26, 0.94);
+    --glass-2: rgba(22, 24, 34, 0.97);
+    --glass-blur: none;
+    --atmosphere-strength: 0.06;
+  }
+
+  html[data-ui-theme="light"] {
+    --glass-1: rgba(255, 255, 255, 0.96);
+    --glass-2: #ffffff;
+  }
+}

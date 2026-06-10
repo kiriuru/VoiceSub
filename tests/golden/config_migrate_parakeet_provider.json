@@ -1,0 +1,14 @@
+{
+  "source_test": "voicesub import maps local parakeet ASR to browser_google",
+  "input": {
+    "config_version": 2,
+    "asr": {
+      "mode": "local",
+      "provider_preference": "official_eu_parakeet_realtime"
+    }
+  },
+  "expected": {
+    "asr_mode": "browser_google",
+    "provider_preference_absent": true
+  }
+}

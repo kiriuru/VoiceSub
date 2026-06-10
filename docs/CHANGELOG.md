@@ -1,16 +1,115 @@
-# Журнал изменений SST Desktop
+# Журнал изменений VoiceSub / SST Desktop
 
-Единая история изменений desktop-версии.
+Единая история изменений desktop-линии: **VoiceSub** `0.5.0+` (активная разработка) и **SST Desktop** `0.4.4` и ниже (frozen reference в `F:\AI\stream-sub-translator`).
 
-Этот файл — канонический changelog для релизов SST Desktop. Installer delta для текущей линии: [DESKTOP_RELEASE_CHANGELOG_0.4.1.md](./DESKTOP_RELEASE_CHANGELOG_0.4.1.md). Старые per-version delta (`0.3.x`, `0.4.0`) удалены — история только здесь.
+Этот файл — канонический changelog. Installer delta SST `0.4.1`: [DESKTOP_RELEASE_CHANGELOG_0.4.1.md](./DESKTOP_RELEASE_CHANGELOG_0.4.1.md). Старые per-version delta (`0.3.x`, `0.4.0`) удалены — история только здесь.
 
-**Формат записей (как [GitHub Release v0.2.9.2](https://github.com/kiriuru/stream_sub_translator/releases/tag/v0.2.9.2)):** одно предложение о версии; буллеты «что вошло» — только факты изменений; для desktop-exe — блок «формат release» (структура поставки, без перечисления старых профилей как новинки).
+**Формат записей (как [GitHub Release v0.2.9.2](https://github.com/kiriuru/stream_sub_translator/releases/tag/v0.2.9.2)):** одно предложение о версии; буллеты «что вошло» — только факты изменений; для desktop-exe / installer — блок «формат release» (структура поставки, без перечисления старых профилей как новинки).
 
 ## Unreleased
 
-_(пусто — см. [0.4.4](#044))_
+_(пусто)_
+
+## 0.5.0
+
+Major release. Преемник SST `0.4.4`. `PROJECT_VERSION` в `voicesub-types::version.rs` — **0.5.0**; `config_version` **8** (`user-data/config.toml`). Продукт переименован в **VoiceSub**; HTTP/WebSocket **контракты сохранены по смыслу** (parity-порт subtitle/translation lifecycle), но **стек и поставка полностью новые**. Публичный GitHub release и formal Phase 1 DoD — **отложены** (roadmap §12).
+
+### Формат release (NSIS)
+
+- Артефакт: **`VoiceSub_{version}_x64-setup.exe`** (Tauri 2 NSIS, `installMode: currentUser`).
+- **`VoiceSub.exe`** — Tauri shell; main webview → `http://127.0.0.1:8765/`.
+- Статика в bundle (`tauri.conf.json` resources): `bin/dashboard/`, `bin/overlay/`, `bin/worker/`, `bin/tts/`, `bin/fonts/`, `bin/modules/`.
+- Сборка: `build-release-msi.bat` → `build-release.ps1` → `npm run build` → TTS sidecar (при необходимости) → `validate-nsis-i18n.mjs` → `cargo tauri build` (NSIS) → copy `*-setup.exe` в `release_root/v{version}/` из `build/release.config.json`.
+- NSIS UI languages: English, Russian, Japanese, Korean, SimpChinese (`src-tauri/windows/installer.nsi`). Legacy WiX `src-tauri/wix/main.wxs` **не используется**.
+- **Нет** в core installer: Python, Node.js, torch, NeMo, pywebview, PyInstaller bootstrap.
+- **System dependency:** Google Chrome (или Edge для smoke) для Web Speech worker.
+- Splash startup profiles (`Quick Start`, `NVIDIA GPU`, `Remote Controller`, …) **удалены** — единый entry point.
+
+### Стек и архитектура
+
+- **Backend:** Rust Cargo workspace — `voicesub-types`, `voicesub-config`, `voicesub-subtitle`, `voicesub-translation`, `voicesub-browser`, `voicesub-ws`, `voicesub-http`, `voicesub-logging`, `voicesub-export`, `voicesub-obs`, `voicesub-audio`, `voicesub-tts`, `voicesub-twitch`, `voicesub-runtime`; тонкий `src-tauri/`.
+- **HTTP/WS:** embedded Axum на `127.0.0.1:8765` (`VOICESUB_ALLOW_LAN=1` → `0.0.0.0`); маршруты в `crates/voicesub-runtime/src/http/router.rs`.
+- **Dashboard:** Svelte 5 + Vite → `bin/dashboard/` (compile-time; Node.js только на машине сборки).
+- **OBS overlay:** vanilla HTML/JS → `bin/overlay/` (отдельно от dashboard bundle).
+- **Browser Speech worker:** Svelte 5 → `bin/worker/`; страницы `/google-asr`, `/google-asr-edge`.
+- **Логирование:** `tracing` backbone (`logs/core.log`, `logs/runtime-events.log`); opt-in JSONL traces (`VOICESUB_DEEP_DIAGNOSTICS`, `VOICESUB_TRACE_*`).
+
+### Удалено из active core (архив `legacy/`)
+
+- Local Parakeet / `local` ASR → `legacy/modules-source/parakeet/` (модуль Phase 4).
+- Remote controller/worker → `legacy/remote/`.
+- Experimental browser (`/google-asr-experimental*`) → `legacy/experimental-browser/`.
+- FastAPI + pywebview + PyInstaller bootstrap SST.
+- Splash-профили, `Stream Subtitle Translator Only Web.exe`, `desktop_profile_lock` для Parakeet unlock.
+
+### ASR (Browser Speech only)
+
+- Единственный production-режим core: **`browser_google`** (`/google-asr`).
+- Chrome supervisor: изолированный `--user-data-dir`, visible address bar, anti-throttle flags, EcoQoS opt-out (порт SST `browser_worker_launcher.py`).
+- Worker FSM: `src-worker/lib/asr/session-manager.ts`, `socket-bridge.ts`, force-finalization, session rotation (`max_browser_session_age_ms` default 180000).
+- `/api/devices/audio-inputs` — пустой список (микрофон через Chrome `getUserMedia`).
+
+### Subtitle и translation (Rust port)
+
+- **`voicesub-subtitle`**: `SubtitleLifecycleCore`, `SubtitleRouter`, presentation — parity SST lifecycle (completed block до нового final; late translations).
+- **`voicesub-translation`**: `TranslationDispatcher` — **13 providers**, slot-aware queue, stale drop, preview supersession `(segment_id, revision)`.
+- Golden fixtures: `tests/golden/`, crate-level `golden_*.rs`.
+
+### WebSocket и overlay
+
+- `/ws/events`: replay `runtime_update`, `subtitle_payload_update`, `overlay_update`; stale-guard в dashboard (`src/lib/ws.ts`) и overlay (`bin/overlay/overlay.js`, `ws-stale-guard-logic.js`).
+- Overlay reconnect: exponential backoff 1–10 s; последний кадр сохраняется при disconnect (OBS UX).
+- **Empty overlay cleanup (2026-06-10):** `bin/overlay/overlay.js` вызывает `disposeRenderContainer` при `result.empty` после TTL expiry / Stop / idle payload — parity с dashboard preview (`OverviewSection.svelte`). Cache-bust overlay: `overlay.html` → `overlay.js?v=20260610a`.
+- Контракт: `crates/voicesub-subtitle/tests/overlay_contract.rs` → `overlay_disposes_renderer_when_payload_is_empty`.
+
+### TTS-модуль и Twitch
+
+- UI: `src-tts/` → `bin/tts/`, маршрут `/tts`; manifest `bin/modules/tts/module.toml`.
+- Rust: `voicesub-tts`, `voicesub-twitch` — queue, subtitle speech planner, IRC, OAuth bridge.
+- Tauri IPC: `tts_*` commands (`src-tauri/src/tts.rs`); embedded Python sidecar `bin/modules/tts/runtime/` для Google TTS fetch.
+- API: `/api/tts/google`, `/api/tts/python`, `/api/tts/twitch/oauth-*`.
+
+### OBS Closed Captions
+
+- **`voicesub-obs`**: OBS WebSocket v5 client; config `obs_closed_captions` (порт SST semantics).
+
+### Конфигурация и миграции
+
+- Хранение: **`user-data/config.toml`** (JSON-shaped document в TOML).
+- `config_version` **8**; SST `config.json` import через `voicesub-config::migrate` (`local` / `remote` / experimental → `browser_google`).
+- Profiles: `user-data/profiles/{name}.toml`.
+- Env aliases: `VOICESUB_*` + совместимость `SST_*` для deep diagnostics.
+
+### Dashboard UI (Svelte)
+
+- Вкладки: Translation, Subtitles, Style, UI Theme, OBS, Word Replace, Tools & Data, Settings, Help.
+- Compact layout: Tauri IPC `set_dashboard_layout` (~390×844).
+- Command palette, idle subtitle preview (`src/lib/preview-payload.ts`) — placeholder до Start.
+- i18n: **en, ru, ja, ko, zh** — `src/lib/i18n/locales/*.json` + `tts-*.json`; export `npm run i18n:export`.
+
+### Документация
+
+- `docs/TECHNICAL_ARCHITECTURE.md`, `docs/TECHNICAL_ARCHITECTURE.en.md` — полная перезапись под VoiceSub 0.5.0.
+- `README.md`, `README.ru.md`, `docs/WIKI.en.md`, `docs/WIKI.ru.md` — актуализированы под новый стек.
+- Инженерный контракт: `docs/VOICESUB_ENGINEERING_CONTRACT.ru.md`; roadmap: `docs/plans/voicesub_roadmap.ru.md`.
+- **2026-06-10 sync:** MSI → NSIS installer во всех user/dev docs; overlay empty-state cleanup (`disposeRenderContainer`); `AGENTS.md` phase status; roadmap §12.
+
+### Тесты
+
+```powershell
+cargo test --workspace
+npm run build
+npm run test:frontend
+```
+
+- Phase 0 automated soak: `voicesub-http/tests/http_ws_smoke.rs::phase0_soak_checklist_automated`.
+- Golden parity full suite и public GitHub release gate — **deferred** (roadmap §12). Локальный NSIS installer собирается через `build-release.ps1`.
 
 ## 0.4.4
+
+> **Frozen line.** SST `0.4.4` — read-only reference (`F:\AI\stream-sub-translator`). Активная разработка — VoiceSub `0.5.0+`.
+
+Patch release. `PROJECT_VERSION` в `backend/versioning.py` — **0.4.4**; `config_version` **7**. Публичные HTTP/WebSocket route contracts и subtitle/translation lifecycle **не менялись**.
 
 Patch release. `PROJECT_VERSION` в `backend/versioning.py` — **0.4.4**; `config_version` **7**. Публичные HTTP/WebSocket route contracts и subtitle/translation lifecycle **не менялись**.
 

@@ -1,0 +1,162 @@
+{
+  "source_test": "tests.test_subtitle_ttl_lifecycle::test_golden_ttl_full_phrase_lifecycle",
+  "config": {
+    "source_lang": "ru",
+    "translation": {
+      "enabled": true,
+      "target_languages": ["en"],
+      "lines": [{
+        "slot_id": "translation_1",
+        "enabled": true,
+        "target_lang": "en",
+        "provider": "google_translate_v2",
+        "label": "EN"
+      }]
+    },
+    "subtitle_output": {
+      "show_source": true,
+      "show_translations": true,
+      "max_translation_languages": 1,
+      "display_order": ["source", "translation_1"]
+    },
+    "overlay": { "preset": "stacked", "compact": false },
+    "subtitle_style": {},
+    "subtitle_lifecycle": {
+      "completed_block_ttl_ms": 1200,
+      "completed_source_ttl_ms": 500,
+      "completed_translation_ttl_ms": 1200,
+      "pause_to_finalize_ms": 700,
+      "allow_early_replace_on_next_final": true,
+      "sync_source_and_translation_expiry": false,
+      "keep_completed_translation_during_active_partial": true,
+      "hard_max_phrase_ms": 12000
+    }
+  },
+  "steps": [
+    { "kind": "transcript_partial", "sequence": 1, "text": "При" },
+    { "kind": "transcript_partial", "sequence": 1, "text": "Первая фраза" },
+    { "kind": "transcript_final", "sequence": 1, "text": "Первая фраза" },
+    {
+      "kind": "translation",
+      "sequence": 1,
+      "source_text": "Первая фраза",
+      "translations": [{
+        "slot_id": "translation_1",
+        "text": "First phrase",
+        "target_lang": "en",
+        "provider": "google_translate_v2",
+        "success": true
+      }],
+      "is_complete": true
+    },
+    { "kind": "transcript_partial", "sequence": 2, "text": "Но" },
+    { "kind": "transcript_partial", "sequence": 2, "text": "Новая" },
+    { "kind": "transcript_partial", "sequence": 2, "text": "Новая фраза" },
+    { "kind": "transcript_final", "sequence": 2, "text": "Новая фраза" },
+    {
+      "kind": "translation",
+      "sequence": 2,
+      "source_text": "Новая фраза",
+      "translations": [{
+        "slot_id": "translation_1",
+        "text": "New phrase",
+        "target_lang": "en",
+        "provider": "google_translate_v2",
+        "success": true
+      }],
+      "is_complete": true
+    },
+    { "kind": "sleep_ms", "ms": 700 },
+    { "kind": "sleep_ms", "ms": 700 }
+  ],
+  "checkpoints": [
+    {
+      "after_step": 2,
+      "expected": {
+        "lifecycle_state": "partial_only",
+        "completed_block_visible": false,
+        "active_partial_text": "Первая фраза",
+        "visible_texts": ["Первая фраза"],
+        "overlay_texts": ["Первая фраза"]
+      }
+    },
+    {
+      "after_step": 3,
+      "expected": {
+        "lifecycle_state": "completed_only",
+        "completed_block_visible": true,
+        "active_partial_text": "",
+        "visible_texts": ["Первая фраза"],
+        "overlay_texts": ["Первая фраза"]
+      }
+    },
+    {
+      "after_step": 4,
+      "expected": {
+        "lifecycle_state": "completed_only",
+        "completed_block_visible": true,
+        "active_partial_text": "",
+        "visible_texts": ["Первая фраза", "First phrase"],
+        "overlay_texts": ["Первая фраза", "First phrase"]
+      }
+    },
+    {
+      "after_step": 6,
+      "expected": {
+        "lifecycle_state": "completed_with_partial",
+        "completed_block_visible": true,
+        "active_partial_text": "Новая",
+        "visible_texts": ["Новая", "First phrase"],
+        "overlay_texts": ["Новая", "First phrase"]
+      }
+    },
+    {
+      "after_step": 7,
+      "expected": {
+        "lifecycle_state": "completed_with_partial",
+        "completed_block_visible": true,
+        "active_partial_text": "Новая фраза",
+        "visible_texts": ["Новая фраза", "First phrase"],
+        "overlay_texts": ["Новая фраза", "First phrase"]
+      }
+    },
+    {
+      "after_step": 8,
+      "expected": {
+        "lifecycle_state": "completed_only",
+        "completed_block_visible": true,
+        "active_partial_text": "",
+        "visible_texts": ["Новая фраза"],
+        "overlay_texts": ["Новая фраза"]
+      }
+    },
+    {
+      "after_step": 9,
+      "expected": {
+        "lifecycle_state": "completed_only",
+        "completed_block_visible": true,
+        "active_partial_text": "",
+        "visible_texts": ["Новая фраза", "New phrase"],
+        "overlay_texts": ["Новая фраза", "New phrase"]
+      }
+    },
+    {
+      "after_step": 10,
+      "expected": {
+        "lifecycle_state": "completed_only",
+        "completed_block_visible": true,
+        "active_partial_text": "",
+        "visible_texts": ["New phrase"]
+      }
+    },
+    {
+      "after_step": 11,
+      "expected": {
+        "lifecycle_state": "idle",
+        "completed_block_visible": false,
+        "active_partial_text": "",
+        "visible_texts": []
+      }
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+[package]
+name = "voicesub-browser"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+voicesub-types = { workspace = true }
+voicesub-logging = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.55"
+windows = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_System_Threading",
+] }

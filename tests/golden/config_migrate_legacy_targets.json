@@ -1,0 +1,47 @@
+{
+  "expected": {
+    "config_version": 8,
+    "targets": [
+      "en",
+      "ja"
+    ],
+    "translation": {
+      "enabled": true,
+      "lines": [
+        {
+          "enabled": true,
+          "label": "EN",
+          "provider": "google_translate_v2",
+          "slot_id": "translation_1",
+          "target_lang": "en"
+        },
+        {
+          "enabled": true,
+          "label": "JA",
+          "provider": "google_translate_v2",
+          "slot_id": "translation_2",
+          "target_lang": "ja"
+        }
+      ],
+      "provider": "google_translate_v2",
+      "target_languages": [
+        "en",
+        "ja"
+      ]
+    },
+    "ui": {
+      "theme": "dark"
+    }
+  },
+  "input": {
+    "targets": [
+      "en",
+      "ja"
+    ],
+    "translation": {
+      "enabled": true,
+      "provider": "google_translate_v2"
+    }
+  },
+  "source_test": "test_config_migrations.py::test_old_config_without_version_migrates_to_current_schema"
+}

@@ -1,0 +1,15 @@
+{
+  "expected": {
+    "is_final": false,
+    "transcript_text": "hello"
+  },
+  "input": {
+    "final": "",
+    "generation_id": 1,
+    "is_final": false,
+    "partial": "hello",
+    "session_id": "sess-1",
+    "type": "external_asr_update"
+  },
+  "source_test": "test_browser_asr_service.py::handle_external_update"
+}

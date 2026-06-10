@@ -1,0 +1,40 @@
+fn main() {
+    tauri_build::try_build(
+        tauri_build::Attributes::new().app_manifest(
+            tauri_build::AppManifest::new().commands(&[
+                "voicesub_version",
+                "launch_browser_worker",
+                "set_dashboard_layout",
+                "tts_get_config",
+                "tts_set_provider",
+                "tts_set_enabled",
+                "tts_set_audio_device",
+                "tts_set_channel_audio_device",
+                "tts_set_playback_mode",
+                "tts_play_audio",
+                "tts_stop_channel",
+                "tts_list_output_devices",
+                "tts_get_audio_routing",
+                "tts_bind_window_audio",
+                "tts_update_speech_settings",
+                "tts_update_voice_settings",
+                "tts_plan_subtitle_speech",
+                "tts_reset_subtitle_planner",
+                "tts_channel_enqueue",
+                "tts_channel_begin_next",
+                "tts_channel_finish",
+                "tts_channel_clear",
+                "tts_channel_snapshot",
+                "tts_enqueue",
+                "tts_twitch_get_status",
+                "tts_twitch_connect",
+                "tts_twitch_disconnect",
+                "tts_update_twitch_settings",
+                "tts_sync_source_text_replacement",
+                "tts_open_window",
+                "tts_open_system_url",
+            ]),
+        ),
+    )
+    .expect("failed to run tauri-build");
+}

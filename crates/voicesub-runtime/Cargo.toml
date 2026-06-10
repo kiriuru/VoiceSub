@@ -1,0 +1,36 @@
+[package]
+name = "voicesub-runtime"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+voicesub-types = { workspace = true }
+voicesub-config = { workspace = true }
+voicesub-subtitle = { workspace = true }
+voicesub-translation = { workspace = true }
+voicesub-browser = { workspace = true }
+voicesub-ws = { workspace = true }
+voicesub-tts = { workspace = true }
+voicesub-logging = { workspace = true }
+voicesub-export = { workspace = true }
+voicesub-obs = { workspace = true }
+voicesub-twitch = { workspace = true }
+axum = { workspace = true }
+tokio = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+tracing = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+mime_guess = { workspace = true }
+reqwest = { workspace = true }
+urlencoding = { workspace = true }
+open = "5"
+
+[dev-dependencies]
+tokio = { workspace = true }
+reqwest = { workspace = true, features = ["json"] }
+serde_json = { workspace = true }
+voicesub-tts = { workspace = true }
+tempfile = "3"

@@ -1,0 +1,22 @@
+[package]
+name = "voicesub-ws"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+voicesub-types = { workspace = true }
+voicesub-browser = { workspace = true }
+voicesub-logging = { workspace = true }
+axum = { workspace = true }
+futures-util = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+axum = { workspace = true }
+tokio = { workspace = true }
+tokio-tungstenite = "0.26"
+futures-util = { workspace = true }
+serde_json = { workspace = true }

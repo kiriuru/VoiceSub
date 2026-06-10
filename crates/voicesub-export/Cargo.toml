@@ -1,0 +1,13 @@
+[package]
+name = "voicesub-export"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+voicesub-types = { workspace = true }
+voicesub-config = { workspace = true }
+voicesub-logging = { workspace = true }
+tracing = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+zip = { workspace = true }

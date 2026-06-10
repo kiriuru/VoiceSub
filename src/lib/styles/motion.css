@@ -1,0 +1,34 @@
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+.command-palette-overlay {
+  animation: vs-fade-in var(--duration-fast) var(--ease-out);
+}
+
+.command-palette {
+  animation: vs-slide-up var(--duration-normal) var(--ease-out);
+}
+
+@keyframes vs-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes vs-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

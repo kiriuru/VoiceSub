@@ -1,0 +1,11 @@
+{
+  "expected": {
+    "message": "browser_asr_worker_connected",
+    "transport_id": 1,
+    "type": "hello"
+  },
+  "input": {
+    "transport_id": 1
+  },
+  "source_test": "test_browser_asr_service.py::send_hello"
+}

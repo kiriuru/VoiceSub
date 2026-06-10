@@ -1,0 +1,26 @@
+import type { TwitchTtsSettings } from "./types";
+
+export const defaultTwitchSettings = (): TwitchTtsSettings => ({
+  enabled: false,
+  channel: "",
+  nick: "",
+  oauth_token: "",
+  oauth_client_id: "",
+  speak_chat: true,
+  include_username: true,
+  language: "en",
+  min_chars: 2,
+  max_chars: 200,
+  block_commands: true,
+  ignore_users: [],
+  strip_emotes: true,
+  strip_emoji: true,
+  emote_sources: { twitch: true, bttv: true, seventv: true },
+  detect_language: true,
+  lang_min_chars: 2,
+  enabled_languages: [],
+  nick_replacements: [],
+  include_builtin_profanity: true,
+  pause_style: "period",
+  speak_template: "{nick}. {text}",
+});

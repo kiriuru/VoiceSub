@@ -1,0 +1,13 @@
+id = "tts"
+name = "TTS"
+version = "0.1.0"
+description = "Text-to-speech for subtitles and Twitch chat; embedded Python runtime in bin/modules/tts/runtime"
+entry_window_label = "tts"
+entry_url_path = "/tts"
+requires_core = ">=0.5.0"
+
+[capabilities]
+google_translate_tts = true
+python_stdlib_tts = true
+twitch_irc = true
+audio_output_routing = true

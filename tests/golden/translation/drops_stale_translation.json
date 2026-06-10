@@ -1,0 +1,33 @@
+{
+  "source_test": "tests.test_translation_dispatcher::dispatcher_drops_stale_translation_result",
+  "config": {
+    "translation": {
+      "enabled": true,
+      "provider": "stub",
+      "target_languages": ["en"],
+      "lines": [{
+        "slot_id": "translation_1",
+        "enabled": true,
+        "target_lang": "en",
+        "provider": "stub",
+        "label": "EN"
+      }],
+      "timeout_ms": 500,
+      "max_concurrent_jobs": 2,
+      "provider_settings": {
+        "stub": { "delay_ms_translation_1": "200" }
+      }
+    }
+  },
+  "input": {
+    "sequence": 1,
+    "source_text": "hello",
+    "source_lang": "ru",
+    "relevant_until_ms": 20,
+    "wait_for_result_ms": 250
+  },
+  "expected": {
+    "published_events": 0,
+    "stale_results_dropped_min": 1
+  }
+}

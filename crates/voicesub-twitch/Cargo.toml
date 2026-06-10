@@ -1,0 +1,20 @@
+[package]
+name = "voicesub-twitch"
+version.workspace = true
+edition.workspace = true
+description = "Twitch IRC chat client for VoiceSub TTS module"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+voicesub-logging = { workspace = true }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+tokio-rustls = "0.26"
+webpki-roots = "0.26"
+reqwest = { workspace = true }
+emojis = "0.8"
+regex = { version = "1", default-features = false, features = ["std", "unicode"] }
+whatlang = "0.16"

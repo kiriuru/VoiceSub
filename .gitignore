@@ -1,82 +1,77 @@
-# Python
-.venv/
-.python/
-.bootstrap/
+# --- Rust / Tauri ---
+/target/
+**/target/
+src-tauri/WixTools/
+
+# --- Frontend build outputs (sources live in src/, src-worker/, src-tts/) ---
+bin/dashboard/
+bin/worker/
+bin/tts/
+node_modules/
+dist/
+dist-worker/
+dist-tts/
+
+# --- TTS embedded runtime (build: bin/modules/tts/build_runtime.bat) ---
+bin/modules/tts/runtime/**
+!bin/modules/tts/runtime/README.md
+!bin/modules/tts/runtime/.gitkeep
+
+# Optional Parakeet module weights (when sidecar exists)
+bin/modules/parakeet/models/**
+!bin/modules/parakeet/models/README.md
+!bin/modules/parakeet/models/.gitkeep
+
+# --- Python / legacy SST artifacts (must not re-enter the tree) ---
 __pycache__/
-*.pyc
-app-runtime/
-Stream Subtitle Translator.exe
-AGENTS.md
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+venv/
+.venv/
+vendor/
 
-# Desktop packaging — `desktop/` sources are in git; build/publish scripts stay local-only.
-desktop/logs/
-desktop/__pycache__/
-build-desktop.bat
-build-bootstrap-launcher.bat
-build-bootstrap-launcher-web-only.bat
-publish-desktop-releases.ps1
-publish-desktop-releases-web-only.ps1
+# Nuitka / PyInstaller intermediates
+*.build/
+*.dist/
+*.onefile-build/
 
-# Remote-lite packaging is part of the frozen remote surface — kept local-only.
-build-remote-lite.ps1
-
-# Local-only: ad-hoc dev scripts
-scripts/
-
-# Env
+# --- Local runtime / secrets ---
 .env
+!.env.example
+logs/
+user-data/
+*.log
+*.tmp
+.cache/
+.tmp/
 
-# OS/IDE
+# Release scripts output dir — keep only the config file
+build/*
+!build/release.config.json
+
+# --- OS / IDE ---
 .vscode/
 .idea/
 .DS_Store
 Thumbs.db
 .codex/
-.cache/
-.tmp/
-build/
-dist/
-logs/
-user-data/
-*.log
-*.tmp
+*.swp
+*~
 
-# Local app data, secrets, and machine-specific state
-backend/data/config.json
-backend/data/install_profile.txt
-backend/data/dictionary_overrides.json
-backend/data/profiles/*.json
-!backend/data/config.example.json
-!backend/data/dictionary_overrides.example.json
-!backend/data/profiles/.gitkeep
+# Installer binaries copied into the tree by mistake
+*.msi
+*-setup.exe
 
-# Runtime artifacts
-backend/data/logs/*
-backend/data/exports/*
-backend/data/cache/*
-backend/data/models/*
-!backend/data/logs/.gitkeep
-!backend/data/exports/.gitkeep
-!backend/data/cache/.gitkeep
-!backend/data/models/.gitkeep
-!backend/data/models/README.txt
-
-# Local ad-hoc diagnostics
+# --- Ad-hoc local diagnostics (historical SST paths) ---
 tmp_google_asr_inline_check.js
 .tmp-google-asr-inline-check.js
-
-# Local remote test/package artifacts
 SST desktop remote SST/
 desktop remote clean/
 *-desktop-remote-release/
 *-desktop-remote-release-clean/
 
-# Local-only docs (do not publish)
-docs/plans/
-docs/ETALON_RUNTIME_VERIFICATION.md
-docs/MANUAL_SMOKE_*.md
-docs/SMOKE_CHECKLIST_*.md
-docs/RELEASE_HARDENING_*.md
-docs/REMOTE_*.md
-docs/desktop-bootstrap-roadmap.md
-docs/DESKTOP_RELEASE_CHANGELOG_0.2.9*.md
+# --- Test / coverage ---
+coverage/

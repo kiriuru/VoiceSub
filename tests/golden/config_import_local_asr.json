@@ -1,0 +1,38 @@
+{
+  "expected": {
+    "asr": {
+      "browser": {},
+      "import_hint": "SST mode 'local' mapped to browser_google; Parakeet is a future module",
+      "mode": "browser_google"
+    },
+    "config_version": 8,
+    "translation": {
+      "lines": [
+        {
+          "enabled": true,
+          "label": "EN",
+          "provider": "google_translate_v2",
+          "slot_id": "translation_1",
+          "target_lang": "en"
+        }
+      ],
+      "provider": "google_translate_v2",
+      "target_languages": [
+        "en"
+      ]
+    },
+    "ui": {
+      "show_remote_tools": false
+    }
+  },
+  "input": {
+    "asr": {
+      "mode": "local"
+    },
+    "config_version": 3,
+    "remote": {
+      "enabled": true
+    }
+  },
+  "source_test": "voicesub roadmap §9"
+}

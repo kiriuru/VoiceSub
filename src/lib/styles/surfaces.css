@@ -1,0 +1,94 @@
+/* Glass depth surfaces — backdrop-filter only on top-level panels (perf) */
+
+.glass-panel {
+  background: var(--glass-1);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--glass-highlight), var(--glass-shadow);
+  contain: layout style;
+}
+
+.glass-panel.bento-tile {
+  contain: none;
+  overflow: visible;
+}
+
+@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .glass-panel {
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+  }
+}
+
+.glass-panel-elevated {
+  background: var(--glass-2);
+}
+
+.glass-inset {
+  background: var(--glass-inset);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  /* No nested backdrop-filter — tint only for readability */
+}
+
+.glass-chrome {
+  background: var(--glass-2);
+  border-bottom: 1px solid var(--glass-border);
+  box-shadow: var(--glass-highlight);
+}
+
+@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .glass-chrome {
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .glass-chrome {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background: var(--glass-3);
+  }
+}
+
+.theme-preview-stage {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--glass-border);
+  min-height: 140px;
+}
+
+.theme-preview-atmosphere {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 80% 55% at 14% 12%, rgb(var(--ui-accent-rgb) / 0.22), transparent 58%),
+    radial-gradient(ellipse 70% 50% at 86% 18%, rgb(var(--ui-accent-secondary-rgb) / 0.18), transparent 52%),
+    radial-gradient(ellipse 90% 45% at 50% 100%, rgb(var(--ui-accent-tertiary-rgb) / 0.14), transparent 48%),
+    linear-gradient(180deg, var(--glass-0), var(--bg-app));
+  pointer-events: none;
+}
+
+.theme-preview-card {
+  position: relative;
+  margin: var(--space-5);
+  padding: var(--space-4);
+  background: var(--glass-2);
+  border: 1px solid var(--glass-border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--glass-highlight), 0 4px 20px rgba(0, 0, 0, 0.18);
+}
+
+@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .theme-preview-card {
+    -webkit-backdrop-filter: blur(12px) saturate(1.3);
+    backdrop-filter: blur(12px) saturate(1.3);
+  }
+}
+
+.transcript-partial {
+  border-left: 3px solid rgb(var(--ui-accent-rgb));
+  background: rgb(var(--ui-accent-rgb) / 0.08);
+}

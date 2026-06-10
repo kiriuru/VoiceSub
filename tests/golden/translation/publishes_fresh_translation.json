@@ -1,0 +1,32 @@
+{
+  "source_test": "test_translation_dispatcher.py::test_publishes_fresh_translation",
+  "config": {
+    "translation": {
+      "enabled": true,
+      "provider": "stub",
+      "target_languages": ["en"],
+      "lines": [{
+        "slot_id": "translation_1",
+        "enabled": true,
+        "target_lang": "en",
+        "provider": "stub",
+        "label": "EN"
+      }],
+      "timeout_ms": 500,
+      "max_concurrent_jobs": 2
+    }
+  },
+  "input": {
+    "sequence": 1,
+    "source_text": "hello",
+    "source_lang": "ru",
+    "relevant_sequences": [1]
+  },
+  "expected": {
+    "incremental_count": 1,
+    "incremental_text": "hello-en",
+    "incremental_slot_id": "translation_1",
+    "complete_count": 1,
+    "complete_texts": ["hello-en"]
+  }
+}

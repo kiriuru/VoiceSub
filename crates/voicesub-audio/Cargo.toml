@@ -1,0 +1,27 @@
+[package]
+name = "voicesub-audio"
+version.workspace = true
+edition.workspace = true
+description = "Windows Core Audio device enumeration and per-process routing for VoiceSub modules"
+
+[dependencies]
+cpal = "0.15"
+rodio = { version = "0.19", default-features = false, features = ["mp3"] }
+serde = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+voicesub-logging = { workspace = true }
+serde_json = { workspace = true }
+windows-link = "0.1"
+
+[build-dependencies]
+cc = "1.2"
+
+[target.'cfg(windows)'.dependencies]
+wasapi = "0.16"
+windows = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Media_Audio",
+    "Win32_System_Com",
+    "Win32_System_WinRT",
+] }

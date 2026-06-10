@@ -1,0 +1,31 @@
+{
+  "name": "voicesub",
+  "private": true,
+  "version": "0.5.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "npm run i18n:export && vite build && npm run build:worker && npm run build:tts",
+    "build:worker": "vite build --config vite.worker.config.ts",
+    "build:tts": "vite build --config vite.tts.config.ts",
+    "i18n:export": "node scripts/export-i18n.mjs",
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "test:worker": "vitest run --config vitest.worker.config.ts",
+    "test:renderer": "vitest run --config vitest.renderer.config.ts",
+    "test:lib": "vitest run --config vitest.lib.config.ts",
+    "test:frontend": "npm run test:lib && npm run test:worker && npm run test:renderer"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.2.0"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^5.0.3",
+    "happy-dom": "^20.10.2",
+    "lucide-svelte": "^1.0.1",
+    "svelte": "^5.19.0",
+    "svelte-check": "^4.1.4",
+    "typescript": "^5.7.3",
+    "vite": "^6.0.7",
+    "vitest": "^3.2.6"
+  }
+}

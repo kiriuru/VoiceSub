@@ -1,0 +1,58 @@
+{
+  "source_test": "test_subtitle_router.py::test_new_partial_keeps_previous_completed_translation_block_visible_until_next_final",
+  "config": {
+    "source_lang": "ru",
+    "translation": {
+      "enabled": true,
+      "target_languages": ["en"],
+      "lines": [{
+        "slot_id": "translation_1",
+        "enabled": true,
+        "target_lang": "en",
+        "provider": "google_translate_v2",
+        "label": "EN"
+      }]
+    },
+    "subtitle_output": {
+      "show_source": true,
+      "show_translations": true,
+      "max_translation_languages": 1,
+      "display_order": ["source", "translation_1"]
+    },
+    "overlay": { "preset": "stacked", "compact": false },
+    "subtitle_style": {},
+    "subtitle_lifecycle": {
+      "completed_block_ttl_ms": 10000,
+      "completed_source_ttl_ms": 10000,
+      "completed_translation_ttl_ms": 10000,
+      "pause_to_finalize_ms": 700,
+      "allow_early_replace_on_next_final": true,
+      "sync_source_and_translation_expiry": true,
+      "hard_max_phrase_ms": 12000
+    }
+  },
+  "steps": [
+    { "kind": "transcript_final", "sequence": 1, "text": "Первая фраза" },
+    {
+      "kind": "translation",
+      "sequence": 1,
+      "source_text": "Первая фраза",
+      "translations": [{
+        "slot_id": "translation_1",
+        "label": "EN",
+        "target_lang": "en",
+        "text": "First phrase",
+        "provider": "google_translate_v2",
+        "success": true
+      }],
+      "is_complete": true
+    },
+    { "kind": "transcript_partial", "sequence": 2, "text": "Новая" }
+  ],
+  "expected": {
+    "lifecycle_state": "completed_with_partial",
+    "completed_block_visible": true,
+    "active_partial_text": "Новая",
+    "visible_texts": ["Новая", "First phrase"]
+  }
+}

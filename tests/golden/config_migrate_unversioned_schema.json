@@ -1,0 +1,31 @@
+{
+  "source_test": "test_config_migrations.py::test_old_config_without_version_migrates_to_current_schema",
+  "input": {
+    "targets": ["en", "ja"],
+    "translation": {
+      "enabled": true,
+      "provider": "google_translate_v2",
+      "provider_settings": {
+        "google_translate_v2": { "api_key": "AIza-demo" }
+      }
+    },
+    "subtitle_style": {
+      "preset": "clean_default",
+      "custom_presets": {
+        "stream": { "label": "Stream" }
+      }
+    }
+  },
+  "expected": {
+    "has_source_text_replacement": true,
+    "source_text_replacement_enabled": false,
+    "has_ui": true,
+    "has_asr": true,
+    "has_translation": true,
+    "remote_absent": true,
+    "translation_target_languages": ["en", "ja"],
+    "translation_lines_count": 2,
+    "translation_line_slots": ["translation_1", "translation_2"],
+    "has_custom_presets": true
+  }
+}

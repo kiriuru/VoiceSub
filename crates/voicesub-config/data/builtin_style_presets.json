@@ -1,0 +1,748 @@
+{
+  "clean_default": {
+    "preset": "clean_default",
+    "label": "Clean Default",
+    "description": "Neutral baseline: Inter on a transparent background with a minimal black outline.",
+    "built_in": true,
+    "recommended_max_visible_lines": null,
+    "base": {
+      "font_family": "\"Inter Regular\", \"Segoe UI\", Tahoma, sans-serif",
+      "font_size_px": 30,
+      "font_weight": 500,
+      "fill_color": "#ffffff",
+      "stroke_color": "#1c1f25",
+      "stroke_width_px": 1.5,
+      "shadow_color": "#000000",
+      "shadow_blur_px": 8,
+      "shadow_offset_x_px": 0,
+      "shadow_offset_y_px": 2,
+      "background_color": "#000000",
+      "background_opacity": 0,
+      "background_padding_x_px": 12,
+      "background_padding_y_px": 4,
+      "background_radius_px": 10,
+      "line_spacing_em": 1.15,
+      "letter_spacing_em": 0,
+      "text_align": "center",
+      "line_gap_px": 8,
+      "effect": "none"
+    },
+    "line_slots": {
+      "source": {
+        "enabled": false
+      },
+      "translation_1": {
+        "enabled": false
+      },
+      "translation_2": {
+        "enabled": false
+      },
+      "translation_3": {
+        "enabled": false
+      },
+      "translation_4": {
+        "enabled": false
+      },
+      "translation_5": {
+        "enabled": false
+      }
+    }
+  },
+  "streamer_bold": {
+    "preset": "streamer_bold",
+    "label": "Streamer Neon",
+    "description": "Loud display look: Oswald with a cyan fill and a hot-magenta glow for live gameplay.",
+    "built_in": true,
+    "recommended_max_visible_lines": null,
+    "base": {
+      "font_family": "\"Oswald Bold\", \"Impact\", \"Arial Narrow Bold\", sans-serif",
+      "font_size_px": 38,
+      "font_weight": 800,
+      "fill_color": "#00f0ff",
+      "stroke_color": "#0a0612",
+      "stroke_width_px": 3.5,
+      "shadow_color": "#ff2bd6",
+      "shadow_blur_px": 24,
+      "shadow_offset_x_px": 0,
+      "shadow_offset_y_px": 0,
+      "background_color": "#000000",
+      "background_opacity": 0,
+      "background_padding_x_px": 12,
+      "background_padding_y_px": 4,
+      "background_radius_px": 10,
+      "line_spacing_em": 1.15,
+      "letter_spacing_em": 0.02,
+      "text_align": "center",
+      "line_gap_px": 10,
+      "effect": "glow"
+    },
+    "line_slots": {
+      "source": {
+        "enabled": false
+      },
+      "translation_1": {
+        "enabled": false
+      },
+      "translation_2": {
+        "enabled": false
+      },
+      "translation_3": {
+        "enabled": false
+      },
+      "translation_4": {
+        "enabled": false
+      },
+      "translation_5": {
+        "enabled": false
+      }
+    }
+  },
+  "dual_tone": {
+    "preset": "dual_tone",
+    "label": "Dual Color",
+    "description": "Lato body with distinct fill colors per slot so source and each translation read at a glance.",
+    "built_in": true,
+    "recommended_max_visible_lines": null,
+    "base": {
+      "font_family": "\"Lato Regular\", \"Verdana\", \"Segoe UI\", sans-serif",
+      "font_size_px": 30,
+      "font_weight": 700,
+      "fill_color": "#ffffff",
+      "stroke_color": "#13151a",
+      "stroke_width_px": 2,
+      "shadow_color": "#000000",
+      "shadow_blur_px": 6,
+      "shadow_offset_x_px": 0,
+      "shadow_offset_y_px": 2,
+      "background_color": "#000000",
+      "background_opacity": 0,
+      "background_padding_x_px": 12,
+      "background_padding_y_px": 4,
+      "background_radius_px": 10,
+      "line_spacing_em": 1.15,
+      "letter_spacing_em": 0.0,
+      "text_align": "center",
+      "line_gap_px": 8,
+      "effect": "fade"
+    },
+    "line_slots": {
+      "source": {
+        "enabled": true,
+        "fill_color": "#ffd60a",
+        "stroke_color": "#4a3000"
+      },
+      "translation_1": {
+        "enabled": true,
+        "fill_color": "#7be2ff",
+        "stroke_color": "#0b2c3a"
+      },
+      "translation_2": {
+        "enabled": true,
+        "fill_color": "#a8ffb8",
+        "stroke_color": "#0b3a18"
+      },
+      "translation_3": {
+        "enabled": true,
+        "fill_color": "#ff9fc5",
+        "stroke_color": "#3a0b22"
+      },
+      "translation_4": {
+        "enabled": false
+      },
+      "translation_5": {
+        "enabled": false
+      }
+    }
+  },
+  "compact_overlay": {
+    "preset": "compact_overlay",
+    "label": "Compact Bar",
+    "description": "Source Sans 3 inside a tight semi-opaque black bar \u2014 small footprint, maximum legibility.",
+    "built_in": true,
+    "recommended_max_visible_lines": 2,
+    "base": {
+      "font_family": "\"Source Sans 3 Regular\", \"Source Sans 3 Bold\", \"Segoe UI\", sans-serif",
+      "font_size_px": 22,
+      "font_weight": 600,
+      "fill_color": "#ffffff",
+      "stroke_color": "#000000",
+      "stroke_width_px": 0,
+      "shadow_color": "#000000",
+      "shadow_blur_px": 0,
+      "shadow_offset_x_px": 0,
+      "shadow_offset_y_px": 0,
+      "background_color": "#0a0d12",
+      "background_opacity": 90,
+      "background_padding_x_px": 14,
+      "background_padding_y_px": 4,
+      "background_radius_px": 4,
+      "line_spacing_em": 1.05,
+      "letter_spacing_em": 0,
+      "text_align": "center",
+      "line_gap_px": 4,
+      "effect": "none"
+    },
+    "line_slots": {
+      "source": {
+        "enabled": false
+      },
+      "translation_1": {
+        "enabled": false
+      },
+      "translation_2": {
+        "enabled": false
+      },
+      "translation_3": {
+        "enabled": false
+      },
+      "translation_4": {
+        "enabled": false
+      },
+      "translation_5": {
+        "enabled": false
+      }
+    }
+  },
+  "soft_shadow": {
+    "preset": "soft_shadow",
+    "label": "Soft Cloud",
+    "description": "Comfortaa with a wide diffused shadow and zero outline \u2014 feels airy, no edge crunch.",
+    "built_in": true,
+    "recommended_max_visible_lines": null,
+    "base": {
+      "font_family": "\"Comfortaa Regular\", \"Segoe UI\", sans-serif",
+      "font_size_px": 30,
+      "font_weight": 500,
+      "fill_color": "#fff8eb",
+      "stroke_color": "#3a2a18",
+      "stroke_width_px": 0,
+      "shadow_color": "#1d1410",
+      "shadow_blur_px": 22,
+      "shadow_offset_x_px": 0,
+      "shadow_offset_y_px": 6,
+      "background_color": "#000000",
+      "background_opacity": 0,
+      "background_padding_x_px": 12,
+      "background_padding_y_px": 4,
+      "background_radius_px": 10,
+      "line_spacing_em": 1.15,
+      "letter_spacing_em": 0.01,
+      "text_align": "center",
+      "line_gap_px": 9,
+      "effect": "subtle_pop"
+    },
+    "line_slots": {
+      "source": {
+        "enabled": false
+      },
+      "translation_1": {
+        "enabled": false
+      },
+      "translation_2": {
+        "enabled": false
+      },
+      "translation_3": {
+        "enabled": false
+      },
+      "translation_4": {
+        "enabled": false
+      },
+      "translation_5": {
+        "enabled": false
+      }
+    }
+  },
+  "anime_stream": {
+    "preset": "anime_stream",
+    "label": "Anime Stream",
+    "description": "Mochiy Pop One for Latin/Japanese + Comfortaa Bold for Cyrillic \u2014 classic anime fansub caption: white fill, crisp violet outline, soft dark drop shadow.",
+    "built_in": true,
+    "recommended_max_visible_lines": 2,
+    "base": {
+      "font_family": "\"Mochiy Pop One Regular\", \"Comfortaa Bold\", \"Underdog Regular\", \"Bangers Regular\", \"Comic Relief Bold\", \"Poppins Bold\", \"Segoe UI\", sans-serif",
+      "font_size_px": 40,
+      "font_weight": 800,
+      "fill_color": "#ffffff",
+      "stroke_color": "#3a1a5c",
+      "stroke_width_px": 1,
+      "shadow_color": "#15071f",
+      "shadow_blur_px": 8,
+      "shadow_offset_x_px": 0,
+      "shadow_offset_y_px": 3,
+      "background_color": "#000000",
+      "background_opacity": 0,
+      "background_padding_x_px": 12,
+      "background_padding_y_px": 4,
+      "background_radius_px": 10,
+      "line_spacing_em": 1.1,
+      "letter_spacing_em": 0.015,
+      "text_align": "center",
+      "line_gap_px": 6,
+      "effect": "subtle_pop"
+    },
+    "line_slots": {
+      "source": {
+        "enabled": false
+      },
+      "translation_1": {
+        "enabled": false
+      },
+      "translation_2": {
+        "enabled": false
+      },
+      "translation_3": {
+        "enabled": false
+      },
+      "translation_4": {
+        "enabled": false
+      },
+      "translation_5": {
+        "enabled": false
+      }
+    }
+  },
+  "accessibility_high_contrast": {
+    "preset": "accessibility_high_contrast",
+    "label": "Max Contrast",
+    "description": "Pure white Montserrat Bold on a solid 100%-opaque black plate \u2014 WCAG AAA contrast in any environment.",
+    "built_in": true,
+    "recommended_max_visible_lines": 2,
+    "base": {
+      "font_family": "\"Montserrat Bold\", \"Montserrat Regular\", \"Segoe UI\", sans-serif",
+      "font_size_px": 36,
+      "font_weight": 800,
+      "fill_color": "#ffffff",
+      "stroke_color": "#000000",
+      "stroke_width_px": 0,
+      "shadow_color": "#000000",
+      "shadow_blur_px": 0,
+      "shadow_offset_x_px": 0,
+      "shadow_offset_y_px": 0,
+      "background_color": "#000000",
+      "background_opacity": 100,
+      "background_padding_x_px": 24,
+      "background_padding_y_px": 10,
+      "background_radius_px": 6,
+      "line_spacing_em": 1.2,
+      "letter_spacing_em": 0.02,
+      "text_align": "center",
+      "line_gap_px": 8,
+      "effect": "none"
+    },
+    "line_slots": {
+      "source": {
+        "enabled": false
+      },
+      "translation_1": {
+        "enabled": false
+      },
+      "translation_2": {
+        "enabled": false
+      },
+      "translation_3": {
+        "enabled": false
+      },
+      "translation_4": {
+        "enabled": false
+      },
+      "translation_5": {
+        "enabled": false
+      }
+    }
+  },
+  "dark_cinema": {
+    "preset": "dark_cinema",
+    "label": "Cinema Plate",
+    "description": "Playfair Display ivory on a solid warm sepia plate \u2014 letterboxed art-house aesthetic, readable on any background.",
+    "built_in": true,
+    "recommended_max_visible_lines": 2,
+    "base": {
+      "font_family": "\"Playfair Display Bold\", \"Playfair Display Regular\", Georgia, \"Times New Roman\", serif",
+      "font_size_px": 30,
+      "font_weight": 700,
+      "fill_color": "#f4e3b8",
+      "stroke_color": "#1a0a05",
+      "stroke_width_px": 0,
+      "shadow_color": "#08040a",
+      "shadow_blur_px": 6,
+      "shadow_offset_x_px": 0,
+      "shadow_offset_y_px": 2,
+      "background_color": "#1a0d08",
+      "background_opacity": 95,
+      "background_padding_x_px": 26,
+      "background_padding_y_px": 10,
+      "background_radius_px": 4,
+      "line_spacing_em": 1.18,
+      "letter_spacing_em": 0.02,
+      "text_align": "center",
+      "line_gap_px": 8,
+      "effect": "fade"
+    },
+    "line_slots": {
+      "source": {
+        "enabled": false
+      },
+      "translation_1": {
+        "enabled": true,
+        "fill_color": "#e8d4a0",
+        "stroke_color": "#08040a",
+        "font_size_px": 24
+      },
+      "translation_2": {
+        "enabled": false
+      },
+      "translation_3": {
+        "enabled": false
+      },
+      "translation_4": {
+        "enabled": false
+      },
+      "translation_5": {
+        "enabled": false
+      }
+    }
+  },
+  "meeting_soft": {
+    "preset": "meeting_soft",
+    "label": "Podcast Subtle",
+    "description": "Roboto Regular in light grey with no stroke and no plate \u2014 minimal, talking-head friendly.",
+    "built_in": true,
+    "recommended_max_visible_lines": 3,
+    "base": {
+      "font_family": "\"Roboto Regular\", \"Segoe UI\", \"Calibri\", sans-serif",
+      "font_size_px": 24,
+      "font_weight": 400,
+      "fill_color": "#e8edf5",
+      "stroke_color": "#000000",
+      "stroke_width_px": 0,
+      "shadow_color": "#0b1018",
+      "shadow_blur_px": 8,
+      "shadow_offset_x_px": 0,
+      "shadow_offset_y_px": 1,
+      "background_color": "#000000",
+      "background_opacity": 0,
+      "background_padding_x_px": 12,
+      "background_padding_y_px": 4,
+      "background_radius_px": 10,
+      "line_spacing_em": 1.18,
+      "letter_spacing_em": 0,
+      "text_align": "center",
+      "line_gap_px": 5,
+      "effect": "none"
+    },
+    "line_slots": {
+      "source": {
+        "enabled": false
+      },
+      "translation_1": {
+        "enabled": false
+      },
+      "translation_2": {
+        "enabled": false
+      },
+      "translation_3": {
+        "enabled": false
+      },
+      "translation_4": {
+        "enabled": false
+      },
+      "translation_5": {
+        "enabled": false
+      }
+    }
+  },
+  "retro_terminal": {
+    "preset": "retro_terminal",
+    "label": "Retro Terminal",
+    "description": "VT323 amber phosphor on a dark CRT panel \u2014 DEC VT320 / Apple ][ vibe with PT Mono for Cyrillic.",
+    "built_in": true,
+    "recommended_max_visible_lines": 3,
+    "base": {
+      "font_family": "\"VT323 Regular\", \"PT Mono Regular\", \"Share Tech Mono Regular\", \"Consolas\", \"Courier New\", monospace",
+      "font_size_px": 36,
+      "font_weight": 400,
+      "fill_color": "#ffb000",
+      "stroke_color": "#3a1c00",
+      "stroke_width_px": 0,
+      "shadow_color": "#ff8800",
+      "shadow_blur_px": 14,
+      "shadow_offset_x_px": 0,
+      "shadow_offset_y_px": 0,
+      "background_color": "#0a0805",
+      "background_opacity": 92,
+      "background_padding_x_px": 18,
+      "background_padding_y_px": 6,
+      "background_radius_px": 2,
+      "line_spacing_em": 1.05,
+      "letter_spacing_em": 0.04,
+      "text_align": "center",
+      "line_gap_px": 4,
+      "effect": "glow"
+    },
+    "line_slots": {
+      "source": {
+        "enabled": false
+      },
+      "translation_1": {
+        "enabled": false
+      },
+      "translation_2": {
+        "enabled": false
+      },
+      "translation_3": {
+        "enabled": false
+      },
+      "translation_4": {
+        "enabled": false
+      },
+      "translation_5": {
+        "enabled": false
+      }
+    }
+  },
+  "fallout_pipboy": {
+    "preset": "fallout_pipboy",
+    "label": "Fallout Pip-Boy",
+    "description": "Share Tech Mono in Pip-Boy phosphor green with a strong scanline glow; Ubuntu Mono Bold covers Cyrillic.",
+    "built_in": true,
+    "recommended_max_visible_lines": 3,
+    "base": {
+      "font_family": "\"Share Tech Mono Regular\", \"Ubuntu Mono Bold\", \"Ubuntu Mono Regular\", \"PT Mono Regular\", \"VT323 Regular\", \"Consolas\", \"Courier New\", monospace",
+      "font_size_px": 30,
+      "font_weight": 400,
+      "fill_color": "#4cff79",
+      "stroke_color": "#001f0a",
+      "stroke_width_px": 0,
+      "shadow_color": "#16ff3c",
+      "shadow_blur_px": 18,
+      "shadow_offset_x_px": 0,
+      "shadow_offset_y_px": 0,
+      "background_color": "#020806",
+      "background_opacity": 95,
+      "background_padding_x_px": 18,
+      "background_padding_y_px": 6,
+      "background_radius_px": 2,
+      "line_spacing_em": 1.08,
+      "letter_spacing_em": 0.05,
+      "text_align": "center",
+      "line_gap_px": 5,
+      "effect": "glow"
+    },
+    "line_slots": {
+      "source": {
+        "enabled": false
+      },
+      "translation_1": {
+        "enabled": false
+      },
+      "translation_2": {
+        "enabled": false
+      },
+      "translation_3": {
+        "enabled": false
+      },
+      "translation_4": {
+        "enabled": false
+      },
+      "translation_5": {
+        "enabled": false
+      }
+    }
+  },
+  "comic_burst": {
+    "preset": "comic_burst",
+    "label": "Comic Burst",
+    "description": "Bangers in comic-yellow with a chunky black outline and a hot-red shadow \u2014 Marvel SFX panel energy; Comic Relief Bold covers Cyrillic.",
+    "built_in": true,
+    "recommended_max_visible_lines": 1,
+    "base": {
+      "font_family": "\"Bangers Regular\", \"Comic Relief Bold\", \"Comic Relief Regular\", \"Impact\", \"Arial Black\", sans-serif",
+      "font_size_px": 46,
+      "font_weight": 400,
+      "fill_color": "#ffd60a",
+      "stroke_color": "#0a0a0a",
+      "stroke_width_px": 5,
+      "shadow_color": "#d6172a",
+      "shadow_blur_px": 4,
+      "shadow_offset_x_px": 4,
+      "shadow_offset_y_px": 6,
+      "background_color": "#000000",
+      "background_opacity": 0,
+      "background_padding_x_px": 12,
+      "background_padding_y_px": 4,
+      "background_radius_px": 10,
+      "line_spacing_em": 1.15,
+      "letter_spacing_em": 0.045,
+      "text_align": "center",
+      "line_gap_px": 8,
+      "effect": "zoom_in"
+    },
+    "line_slots": {
+      "source": {
+        "enabled": false
+      },
+      "translation_1": {
+        "enabled": false
+      },
+      "translation_2": {
+        "enabled": false
+      },
+      "translation_3": {
+        "enabled": false
+      },
+      "translation_4": {
+        "enabled": false
+      },
+      "translation_5": {
+        "enabled": false
+      }
+    }
+  },
+  "cyberpunk_neon": {
+    "preset": "cyberpunk_neon",
+    "label": "Cyberpunk Neon",
+    "description": "Orbitron Black in hot magenta with a cyan halo glow on a deep navy plate; Exo 2 Black handles Cyrillic with the same sci-fi geometry.",
+    "built_in": true,
+    "recommended_max_visible_lines": 2,
+    "base": {
+      "font_family": "\"Orbitron Black\", \"Exo 2 Black\", \"Orbitron Regular\", \"Exo 2 Regular\", \"Audiowide\", sans-serif",
+      "font_size_px": 32,
+      "font_weight": 900,
+      "fill_color": "#ff2bd6",
+      "stroke_color": "#03001a",
+      "stroke_width_px": 2,
+      "shadow_color": "#00f0ff",
+      "shadow_blur_px": 22,
+      "shadow_offset_x_px": 0,
+      "shadow_offset_y_px": 0,
+      "background_color": "#070416",
+      "background_opacity": 88,
+      "background_padding_x_px": 20,
+      "background_padding_y_px": 8,
+      "background_radius_px": 4,
+      "line_spacing_em": 1.15,
+      "letter_spacing_em": 0.06,
+      "text_align": "center",
+      "line_gap_px": 7,
+      "effect": "glow"
+    },
+    "line_slots": {
+      "source": {
+        "enabled": false
+      },
+      "translation_1": {
+        "enabled": false
+      },
+      "translation_2": {
+        "enabled": false
+      },
+      "translation_3": {
+        "enabled": false
+      },
+      "translation_4": {
+        "enabled": false
+      },
+      "translation_5": {
+        "enabled": false
+      }
+    }
+  },
+  "noir_typewriter": {
+    "preset": "noir_typewriter",
+    "label": "Film Noir",
+    "description": "Special Elite typewriter on a deep ink plate \u2014 1940s detective / typewritten dossier mood; Cutive Mono carries the same vibe for Cyrillic.",
+    "built_in": true,
+    "recommended_max_visible_lines": 2,
+    "base": {
+      "font_family": "\"Special Elite Regular\", \"Cutive Mono Regular\", \"PT Mono Regular\", \"Courier New\", \"Consolas\", monospace",
+      "font_size_px": 28,
+      "font_weight": 400,
+      "fill_color": "#ece1c4",
+      "stroke_color": "#1a1208",
+      "stroke_width_px": 0,
+      "shadow_color": "#000000",
+      "shadow_blur_px": 4,
+      "shadow_offset_x_px": 0,
+      "shadow_offset_y_px": 2,
+      "background_color": "#100a06",
+      "background_opacity": 92,
+      "background_padding_x_px": 22,
+      "background_padding_y_px": 10,
+      "background_radius_px": 0,
+      "line_spacing_em": 1.18,
+      "letter_spacing_em": 0.03,
+      "text_align": "center",
+      "line_gap_px": 6,
+      "effect": "fade"
+    },
+    "line_slots": {
+      "source": {
+        "enabled": false
+      },
+      "translation_1": {
+        "enabled": false
+      },
+      "translation_2": {
+        "enabled": false
+      },
+      "translation_3": {
+        "enabled": false
+      },
+      "translation_4": {
+        "enabled": false
+      },
+      "translation_5": {
+        "enabled": false
+      }
+    }
+  },
+  "vlog_pastel": {
+    "preset": "vlog_pastel",
+    "label": "Vlog Pastel",
+    "description": "Poppins on a warm pastel pill \u2014 cozy lifestyle / vlog look, plays nicely with soft backgrounds.",
+    "built_in": true,
+    "recommended_max_visible_lines": 2,
+    "base": {
+      "font_family": "\"Poppins Regular\", \"Poppins Bold\", \"Segoe UI\", sans-serif",
+      "font_size_px": 28,
+      "font_weight": 600,
+      "fill_color": "#3a1e3d",
+      "stroke_color": "#3a1e3d",
+      "stroke_width_px": 0,
+      "shadow_color": "#a37fc3",
+      "shadow_blur_px": 14,
+      "shadow_offset_x_px": 0,
+      "shadow_offset_y_px": 3,
+      "background_color": "#ffdce5",
+      "background_opacity": 90,
+      "background_padding_x_px": 18,
+      "background_padding_y_px": 7,
+      "background_radius_px": 22,
+      "line_spacing_em": 1.15,
+      "letter_spacing_em": 0.0,
+      "text_align": "center",
+      "line_gap_px": 6,
+      "effect": "slide_up"
+    },
+    "line_slots": {
+      "source": {
+        "enabled": false
+      },
+      "translation_1": {
+        "enabled": false
+      },
+      "translation_2": {
+        "enabled": false
+      },
+      "translation_3": {
+        "enabled": false
+      },
+      "translation_4": {
+        "enabled": false
+      },
+      "translation_5": {
+        "enabled": false
+      }
+    }
+  }
+}
