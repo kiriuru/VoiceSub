@@ -8,7 +8,7 @@
 
 ## 0.5.0
 
-Major release. Преемник frozen SST `0.4.4`. Все пункты ниже — **изменения относительно SST `0.4.4`**. `PROJECT_VERSION` в `voicesub-types::version.rs` — **0.5.0**; `config_version` **8** (`user-data/config.toml`). Продукт переименован в **VoiceSub**; HTTP/WebSocket **контракты сохранены по смыслу** (parity-порт subtitle/translation lifecycle), но **стек и поставка полностью новые**. Публичный GitHub release `v0.5.0` и formal Phase 1 DoD — **ещё не опубликованы** (roadmap §12); локальный NSIS installer собирается через `build-release.ps1`.
+Major release. Преемник frozen SST `0.4.4`. Все пункты ниже — **изменения относительно SST `0.4.4`**. `PROJECT_VERSION` в `voicesub-types::version.rs` — **0.5.0**; `config_version` **8** (`user-data/config.toml`). Продукт переименован в **VoiceSub**; HTTP/WebSocket **контракты сохранены по смыслу** (parity-порт subtitle/translation lifecycle), но **стек и поставка полностью новые**. GitHub release: [v0.5.0](https://github.com/kiriuru/stream_sub_translator/releases/tag/v0.5.0). Formal Phase 1 DoD golden gate — **deferred** (roadmap §12).
 
 ### Формат release (NSIS)
 
