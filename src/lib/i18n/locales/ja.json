@@ -50,6 +50,7 @@
   "worker.force_finalization_timeout_ms": "強制 final 前のアイドルタイムアウト (ms)",
   "worker.force_finalization_timeout_ms.note": "partial 更新がない状態でどれだけ待ってから、現在のライブテキストを final セグメントとして送るか。",
   "style.ui_theme.aurora": "オーロラ",
+  "style.ui_theme.anime": "アニメ",
   "style.ui_theme.preview.cta": "アクセントボタン",
   "app.chrome.search": "コマンドを検索…",
   "command_palette.title": "コマンドパレット",

@@ -50,6 +50,7 @@
   "worker.force_finalization_timeout_ms": "Таймаут простоя перед принудительным final (мс)",
   "worker.force_finalization_timeout_ms.note": "Сколько ждать без обновлений partial перед отправкой текущего текста как final.",
   "style.ui_theme.aurora": "Аврора",
+  "style.ui_theme.anime": "Аниме",
   "style.ui_theme.preview.cta": "Акцентная кнопка",
   "app.chrome.search": "Поиск команд…",
   "command_palette.title": "Палитра команд",

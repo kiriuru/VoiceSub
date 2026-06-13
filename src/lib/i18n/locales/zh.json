@@ -50,6 +50,7 @@
   "worker.force_finalization_timeout_ms": "强制 final 前的空闲超时 (ms)",
   "worker.force_finalization_timeout_ms.note": "在没有 partial 更新的情况下，等待多久后将当前 live 文本作为 final 段发送。",
   "style.ui_theme.aurora": "极光",
+  "style.ui_theme.anime": "动漫",
   "style.ui_theme.preview.cta": "强调按钮",
   "app.chrome.search": "搜索命令…",
   "command_palette.title": "命令面板",

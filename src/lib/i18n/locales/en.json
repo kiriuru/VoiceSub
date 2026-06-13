@@ -50,6 +50,7 @@
   "worker.force_finalization_timeout_ms": "Forced-final idle timeout (ms)",
   "worker.force_finalization_timeout_ms.note": "How long to wait without partial updates before sending the current live text as a final segment.",
   "style.ui_theme.aurora": "Aurora",
+  "style.ui_theme.anime": "Anime",
   "style.ui_theme.preview.cta": "Accent button",
   "app.chrome.search": "Search commands…",
   "command_palette.title": "Command palette",

@@ -50,6 +50,7 @@
   "worker.force_finalization_timeout_ms": "강제 final 전 유휴 타임아웃 (ms)",
   "worker.force_finalization_timeout_ms.note": "partial 업데이트 없이 얼마나 기다린 뒤 현재 라이브 텍스트를 final 세그먼트로 보낼지.",
   "style.ui_theme.aurora": "오로라",
+  "style.ui_theme.anime": "애니메",
   "style.ui_theme.preview.cta": "강조 버튼",
   "app.chrome.search": "명령 검색…",
   "command_palette.title": "명령 팔레트",
