@@ -5,7 +5,7 @@ use axum::extract::State;
 use axum::Json;
 use serde::Deserialize;
 use serde_json::{json, Value};
-use voicesub_logging::ui_trace;
+use voicesub_logging::{is_ui_trace_enabled, ui_trace};
 
 use super::state::HttpState;
 
@@ -42,6 +42,9 @@ pub struct UiTraceRequest {
 }
 
 pub async fn logs_ui_trace(Json(body): Json<UiTraceRequest>) -> Json<Value> {
+    if !is_ui_trace_enabled() {
+        return Json(json!({ "logged": false, "reason": "compact_mode" }));
+    }
     let fields = body.fields.unwrap_or_else(|| json!({}));
     ui_trace(&body.surface, &body.phase, &body.event, fields);
     Json(json!({ "logged": true }))

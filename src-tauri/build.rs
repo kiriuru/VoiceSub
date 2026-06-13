@@ -25,6 +25,8 @@ fn main() {
                 "tts_channel_finish",
                 "tts_channel_clear",
                 "tts_channel_snapshot",
+                "tts_channel_force_idle",
+                "tts_get_resource_telemetry",
                 "tts_enqueue",
                 "tts_twitch_get_status",
                 "tts_twitch_connect",
@@ -34,6 +36,7 @@ fn main() {
                 "tts_open_window",
                 "tts_open_system_url",
                 "open_external_https_url",
+                "open_local_http_url",
             ]),
         ),
     )

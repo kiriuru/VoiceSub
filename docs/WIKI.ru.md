@@ -1,6 +1,6 @@
 # VoiceSub — WIKI
 
-Операционный гайд по интерфейсу VoiceSub `0.5.0`. Формат описания элементов: **что это**, **зачем**, **как работает**, **на что влияет**, **типовые ошибки**.
+Операционный гайд по интерфейсу VoiceSub `0.5.1`. Формат описания элементов: **что это**, **зачем**, **как работает**, **на что влияет**, **типовые ошибки**.
 
 Техническая архитектура: `docs/TECHNICAL_ARCHITECTURE.md`. Предшественник SST `0.4.4` — только reference; поведение core описано здесь для VoiceSub.
 
@@ -9,8 +9,8 @@
 ## 0. О продукте и версии
 
 ### Элемент: VoiceSub vs SST
-- **VoiceSub** — активная линия `0.5.0` (Rust + Tauri + Svelte).
-- **SST** `0.4.4` — frozen reference; настройки импортируются, но режимы Parakeet/Remote/Experimental в core не поднимаются.
+- **VoiceSub** — активная линия `0.5.1` (Rust + Tauri + Svelte); baseline первого релиза — `0.5.0`.
+- **SST** `0.4.4` — frozen reference; настройки импортируются, но режимы Parakeet/Experimental в core не поднимаются.
 - **Overlay URL новый:** `http://127.0.0.1:8765/overlay` — обновите Browser Source в OBS вручную.
 
 ### Элемент: системные требования
@@ -20,7 +20,7 @@
 - Микрофон в Chrome worker; интернет — для внешних провайдеров перевода (опционально).
 
 ### Элемент: установка и обновление (NSIS)
-- **Что делает:** `VoiceSub_0.5.0_x64-setup.exe` ставит `VoiceSub.exe` и статические ресурсы (`bin/dashboard`, overlay, worker, tts).
+- **Что делает:** `VoiceSub_0.5.1_x64-setup.exe` ставит `VoiceSub.exe` и статические ресурсы (`bin/dashboard`, overlay, worker, tts).
 - **Для чего:** один установщик без Python/Node в runtime; при отсутствии WebView2 — загрузка через bootstrapper (`downloadBootstrapper` в Tauri).
 - **Обновление:** закройте приложение → запустите новый `setup.exe` поверх → `user-data/` и `logs/` сохраняются рядом с install path / project root.
 - **Разработчикам:** `build-release-msi.bat` → `build-release.ps1` → `F:\AI\VoiceSub - release\v{version}\`.
@@ -137,7 +137,7 @@
 - Network preflight → terminal `recognition_network_unreachable` после серии network errors.
 - Force-finalization при залипшем partial.
 
-**Не доступно в core:** local Parakeet, experimental `/google-asr-experimental`, remote ingest.
+**Не доступно в core:** local Parakeet, experimental `/google-asr-experimental`.
 
 ---
 
@@ -249,13 +249,17 @@
 
 ### Элемент: Speech
 - Провайдер TTS, голос, rate/pitch/volume.
-- Audio routing: browser element или WinAPI per-process (`VOICESUB_TTS_PER_PROCESS_ROUTING`).
-- Планировщик речи от subtitle payload (`tts_plan_subtitle_speech`).
+- **Воспроизведение:** режим **Native** (cpal @ 1.0×) или **Sonic** (libsonic tempo stretch); отдельные WASAPI-устройства для speech и Twitch.
+- Планировщик речи от subtitle payload (`tts_plan_subtitle_speech`); playback через IPC `tts_play_audio` (без HTMLAudio в браузере).
 
 ### Элемент: Twitch
-- OAuth через system browser.
-- IRC chat → очередь озвучки.
-- Фильтры, emotes, replacements (crate `voicesub-twitch`).
+- OAuth через system browser; implicit grant + poll token.
+- **До 5 каналов** на одно подключение (список логинов без `#`); бейдж `IRC: connected #channel` или `3/5 каналов`.
+- IRC chat → очередь озвучки (`twitch` channel); фильтры emotes, links, symbols, lang — **без переподключения** при смене настроек.
+- Поле **«Не озвучивать символы»** — comma-separated токены, удаляемые из текста (пусто = все символы в речи).
+- Цифры в сообщениях (`5`, `100`, `5ю`) сохраняются при emoji/emote strip.
+- Справка **?** у «Ник бота» — IRC-логин аккаунта, с которого идёт `JOIN` (не ник зрителя); popover сдвигается в viewport (`popover-position.ts`).
+- Crate `voicesub-twitch`; UI `TwitchPanel.svelte`, config `user-data/modules/tts/config.toml`.
 
 ### Элемент: Python sidecar
 - `bin/modules/tts/runtime/` — embedded fetcher для Google TTS proxy.
@@ -294,8 +298,7 @@
 
 ### Элемент: импорт SST config.json
 - Миграция в `config.toml`, `config_version` → 8.
-- `local` / `remote` / experimental → `browser_google` + import hint.
-- `ui.show_remote_tools` → false.
+- `local` / experimental → `browser_google` + import hint.
 
 ### Элемент: layout
 - `standard` vs `compact` — влияет на Tauri window size.
@@ -304,7 +307,7 @@
 
 ## 14. Справка (Help)
 
-Встроенные темы: обзор, распознавание, перевод, субтитры/стиль, OBS, инструменты. Без раздела remote mode (удалён из core).
+Встроенные темы: обзор, распознавание, перевод, субтитры/стиль, OBS, инструменты.
 
 ---
 
@@ -336,7 +339,6 @@
 | Было в SST | Статус в VoiceSub |
 | --- | --- |
 | Local Parakeet | `legacy/modules-source/parakeet/` → модуль Phase 4 |
-| Remote controller/worker | `legacy/remote/` → будущий модуль |
 | Experimental browser | `legacy/experimental-browser/` — удалён из routes |
 | PyInstaller bootstrap | Заменён Tauri NSIS installer |
 | Splash startup profiles | Нет — единый `VoiceSub.exe` |

@@ -10,6 +10,7 @@
     saveProfile,
   } from "../api";
   import { normalizeConfigPayload } from "../config-normalize";
+  import { formatObsCcRuntimeStatus } from "../obs-status-i18n";
   import { redactObject } from "../redaction";
   import type { ConfigPayload, DiagnosticsSnapshot, StylePresetCatalog } from "../types";
 
@@ -31,7 +32,7 @@
   }
 
   $: loc = $locale;
-  $: tr = (key: string) => t(key, undefined, loc);
+  $: tr = (key: string, vars?: Record<string, string>) => t(key, vars, loc);
 
   let profiles: string[] = [];
   let profileName = "";
@@ -305,12 +306,7 @@
     <span>{tr("tools.runtime.full_logging")}</span>
   </label>
   <p class="muted">{tr("tools.runtime.full_logging.hint")}</p>
-  <p class="muted mono-block">
-    OBS CC: {String(diagnostics.obs?.connection_state || "disabled")}
-    {#if diagnostics.obs?.last_error}
-      · {String(diagnostics.obs.last_error)}
-    {/if}
-  </p>
+  <p class="muted mono-block">{formatObsCcRuntimeStatus(diagnostics.obs, tr)}</p>
   </article>
   </div>
 

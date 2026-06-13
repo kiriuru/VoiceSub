@@ -7,7 +7,6 @@
     updateTwitchSettings,
   } from "../lib/tts-ipc";
   import { isNativePlaybackMode } from "../lib/audio-player";
-  import { isSetSinkIdSupported } from "../lib/browser-audio-output";
   import type { AudioOutputDevice, TtsPlaybackMode } from "../lib/types";
   import { twitchOAuthRedirectUri } from "../lib/twitch-oauth";
   import {
@@ -15,11 +14,19 @@
     openTwitchOAuthInSystemBrowser,
   } from "../lib/twitch-oauth-flow";
   import { defaultTwitchSettings } from "../lib/twitch-defaults";
+  import {
+    TWITCH_MAX_CHANNELS,
+    channelsFromRows,
+    resolveChannelRows,
+  } from "../lib/twitch-channels";
   import ReplacementPairEditor from "./ReplacementPairEditor.svelte";
   import { locale, t, getLocale } from "../../src/lib/i18n";
   import type { LocaleCode } from "../../src/lib/types";
+  import { formatSpeechVolume } from "../lib/playback-format";
   import { prependActivityLog } from "../lib/activity-log";
   import { ttsTrace, ttsTraceText } from "../lib/tts-trace";
+  import { clampPopoverPosition, rectFromElement } from "../lib/popover-position";
+  import { tick } from "svelte";
   import type {
     TwitchPauseStyle,
     TwitchChatMessage,
@@ -44,7 +51,7 @@
     moduleEnabled,
     moduleSpeechRate = 1,
     moduleSpeechVolume = 1,
-    playbackMode = "browser",
+    playbackMode = "native",
     audioOutputs = [],
     onConnectionChange,
     onTwitchConfigSaved,
@@ -56,21 +63,28 @@
   );
 
   const nativePlayback = $derived(isNativePlaybackMode(playbackMode));
-  const setSinkSupported = isSetSinkIdSupported();
 
   let status = $state<TwitchConnectionStatus>({
     state: "disconnected",
     channel: "",
+    channels: [],
     message: "",
   });
   let error = $state("");
   let busy = $state(false);
+  let settingsSaved = $state(false);
+  let settingsSaving = $state(false);
   let chatLog = $state<TwitchChatMessage[]>([]);
   let ignoreUsersText = $state("");
+  let stripSymbolsText = $state("");
   let enabledLanguagesText = $state("");
   let ignoreUsersDirty = $state(false);
+  let stripSymbolsDirty = $state(false);
   let enabledLanguagesDirty = $state(false);
   let ignoreUsersInput: HTMLInputElement | null = null;
+  let stripSymbolsInput: HTMLInputElement | null = null;
+  let channelRows = $state<string[]>([""]);
+  let channelRowsDirty = $state(false);
 
   const nickPairs = $derived(twitch.nick_replacements ?? []);
 
@@ -87,13 +101,55 @@
     return t(key, vars, currentLocale);
   }
   let settingsTimer: ReturnType<typeof setTimeout> | null = null;
+  let settingsSavedTimer: ReturnType<typeof setTimeout> | null = null;
+  let persistTail: Promise<void> = Promise.resolve();
   let oauthPollTimer: ReturnType<typeof setInterval> | null = null;
   let showOAuthToken = $state(false);
   let oauthNotice = $state("");
+  let nickHelpOpen = $state(false);
+  let nickHelpPositioned = $state(false);
+  let nickHelpTriggerEl = $state<HTMLButtonElement | null>(null);
+  let nickHelpPopoverEl = $state<HTMLDivElement | null>(null);
+  let nickHelpPos = $state({ top: 0, left: 0 });
   const oauthRedirectUri = twitchOAuthRedirectUri();
 
+  const canAddChannel = $derived(channelRows.length < TWITCH_MAX_CHANNELS);
+  const hasConnectCredentials = $derived.by(() => {
+    const { channels } = channelsFromRows(channelRows);
+    return channels.length > 0 && twitch.nick.trim().length > 0;
+  });
+
+  $effect(() => {
+    if (!channelRowsDirty) {
+      const rows = resolveChannelRows(twitch);
+      channelRows = rows.length > 0 ? rows : [""];
+    }
+  });
   const isConnected = $derived(status.state === "connected");
   const isConnecting = $derived(status.state === "connecting");
+
+  const channelBadgeLabel = $derived.by(() => {
+    const configured = channelsFromRows(channelRows).channels;
+    const joined =
+      status.channels?.length ??
+      (status.channel ? status.channel.split(", ").filter((entry) => entry.trim()).length : 0);
+
+    if (configured.length <= 1 && joined <= 1) {
+      const single =
+        status.channels?.[0] ??
+        (status.channel || (configured[0] ? `#${configured[0]}` : ""));
+      return single;
+    }
+
+    const total = configured.length || joined || TWITCH_MAX_CHANNELS;
+    const count = joined > 0 ? joined : configured.length;
+    return tr("tts.twitch.channels_badge", { joined: count, total });
+  });
+
+  const showChannelBadge = $derived(
+    (isConnected || isConnecting) &&
+      (channelBadgeLabel.trim().length > 0 || channelsFromRows(channelRows).channels.length > 0),
+  );
 
   const twitchAudioOutputs = $derived.by(() => {
     const deviceId = twitch.audio_output_device_id || "";
@@ -116,6 +172,10 @@
     if (!ignoreUsersDirty && document.activeElement !== ignoreUsersInput) {
       ignoreUsersText = users;
     }
+    const symbols = (twitch.strip_symbols ?? []).join(", ");
+    if (!stripSymbolsDirty && document.activeElement !== stripSymbolsInput) {
+      stripSymbolsText = symbols;
+    }
     const langs = (twitch.enabled_languages ?? []).join(", ");
     if (!enabledLanguagesDirty) {
       enabledLanguagesText = langs;
@@ -127,6 +187,7 @@
     ttsTrace("twitch", "connection_update", {
       state: next.state,
       channel: next.channel,
+      channels: next.channels?.length ?? 0,
       message: next.message,
     });
     onConnectionChange?.(next);
@@ -157,19 +218,44 @@
     }
   }
 
+  function enqueuePersist() {
+    persistTail = persistTail
+      .then(() => persistSettings())
+      .catch(() => {
+        // persistSettings records UI error state
+      });
+  }
+
   function queueSave() {
     if (settingsTimer) clearTimeout(settingsTimer);
     settingsTimer = setTimeout(() => {
       settingsTimer = null;
-      void persistSettings();
+      enqueuePersist();
     }, 400);
+  }
+
+  function saveNow() {
+    if (settingsTimer) {
+      clearTimeout(settingsTimer);
+      settingsTimer = null;
+    }
+    enqueuePersist();
   }
 
   function flushPendingSave() {
     if (!settingsTimer) return;
     clearTimeout(settingsTimer);
     settingsTimer = null;
-    void persistSettings();
+    enqueuePersist();
+  }
+
+  function markSettingsSaved() {
+    settingsSaved = true;
+    if (settingsSavedTimer) clearTimeout(settingsSavedTimer);
+    settingsSavedTimer = setTimeout(() => {
+      settingsSavedTimer = null;
+      settingsSaved = false;
+    }, 2500);
   }
 
   function stopOAuthPoll() {
@@ -187,7 +273,7 @@
       twitch = { ...twitch, oauth_token: token };
       oauthNotice = tr("tts.twitch.oauth_received");
       ttsTrace("twitch", "oauth_implicit_ok", { source: "system_browser" });
-      queueSave();
+      saveNow();
       error = "";
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -223,9 +309,62 @@
     showOAuthToken = !showOAuthToken;
   }
 
+  async function toggleNickHelp(event: MouseEvent) {
+    event.stopPropagation();
+    if (nickHelpOpen) {
+      nickHelpOpen = false;
+      nickHelpPositioned = false;
+      return;
+    }
+    nickHelpPositioned = false;
+    nickHelpOpen = true;
+    await tick();
+    if (nickHelpTriggerEl && nickHelpPopoverEl) {
+      nickHelpPos = clampPopoverPosition(
+        rectFromElement(nickHelpTriggerEl),
+        rectFromElement(nickHelpPopoverEl),
+        {
+          viewportWidth: window.innerWidth,
+          viewportHeight: window.innerHeight,
+        },
+      );
+      nickHelpPositioned = true;
+    }
+  }
+
+  function closeNickHelp() {
+    nickHelpOpen = false;
+    nickHelpPositioned = false;
+  }
+
+  function updateChannelRow(index: number, value: string) {
+    channelRowsDirty = true;
+    channelRows = channelRows.map((row, rowIndex) =>
+      rowIndex === index ? value : row,
+    );
+    queueSave();
+  }
+
+  function addChannelRow() {
+    if (!canAddChannel) return;
+    channelRowsDirty = true;
+    channelRows = [...channelRows, ""];
+  }
+
+  function removeChannelRow(index: number) {
+    channelRowsDirty = true;
+    if (channelRows.length <= 1) {
+      channelRows = [""];
+      queueSave();
+      return;
+    }
+    channelRows = channelRows.filter((_, rowIndex) => rowIndex !== index);
+    queueSave();
+  }
+
   function updateNickReplacements(pairs: TwitchReplacement[]) {
     twitch = { ...twitch, nick_replacements: pairs };
-    queueSave();
+    saveNow();
   }
 
   function emoteSources() {
@@ -234,8 +373,13 @@
   }
 
   async function persistSettings() {
+    settingsSaving = true;
     try {
       const ignore_users = ignoreUsersText
+        .split(/[,\n;]/)
+        .map((entry) => entry.trim())
+        .filter(Boolean);
+      const strip_symbols = stripSymbolsText
         .split(/[,\n;]/)
         .map((entry) => entry.trim())
         .filter(Boolean);
@@ -243,9 +387,13 @@
         .split(/[,;\s]+/)
         .map((entry) => entry.trim().toLowerCase())
         .filter(Boolean);
+      const { channels, channel } = channelsFromRows(channelRows);
       const next = {
         ...twitch,
+        channels,
+        channel,
         ignore_users,
+        strip_symbols,
         enabled_languages,
         nick_replacements: [...(twitch.nick_replacements ?? [])],
         emote_sources: emoteSources(),
@@ -253,27 +401,38 @@
       twitch = next;
       const saved = await updateTwitchSettings(next);
       twitch = saved.twitch ?? next;
+      channelRowsDirty = false;
+      channelRows = resolveChannelRows(twitch);
+      if (channelRows.length === 0) channelRows = [""];
       ignoreUsersDirty = false;
+      stripSymbolsDirty = false;
       enabledLanguagesDirty = false;
       onTwitchConfigSaved?.(twitch);
+      markSettingsSaved();
       ttsTrace("twitch", "settings_saved", {
-        channel: next.channel,
+        channels: next.channels?.length ?? 0,
         enabled: next.enabled,
         lang: next.language,
         ignore_users: next.ignore_users.length,
+        strip_symbols: next.strip_symbols.length,
+        strip_links: next.strip_links ?? true,
       });
       error = "";
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       ttsTrace("twitch", "settings_save_error", { message });
       error = message;
+    } finally {
+      settingsSaving = false;
     }
   }
 
   async function handleConnect() {
     busy = true;
     error = "";
-    ttsTrace("twitch", "connect_click", { channel: twitch.channel });
+    ttsTrace("twitch", "connect_click", {
+      channels: channelsFromRows(channelRows).channels.length,
+    });
     try {
       await persistSettings();
       status = await connectTwitchChat();
@@ -306,7 +465,6 @@
       error = "";
       ttsTrace("twitch", "audio_device", {
         device_id: deviceId || "default",
-        native: nativePlayback,
       });
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);
@@ -319,7 +477,7 @@
     ttsTrace("twitch", "disconnect_click", {});
     try {
       await disconnectTwitchChat();
-      status = { state: "disconnected", channel: "", message: "" };
+      status = { state: "disconnected", channel: "", channels: [], message: "" };
       ttsTrace("twitch", "disconnect_ok", {});
       onConnectionChange?.(status);
     } catch (err) {
@@ -336,6 +494,7 @@
     return () => {
       flushPendingSave();
       stopOAuthPoll();
+      if (settingsSavedTimer) clearTimeout(settingsSavedTimer);
     };
   });
 </script>
@@ -350,48 +509,96 @@
     <span class="badge" class:active={isConnected}>
       {tr("tts.twitch.irc")}: {status.state}
     </span>
-    {#if status.channel}
-      <span class="badge">{status.channel}</span>
+    {#if showChannelBadge}
+      <span class="badge" class:active={isConnected}>{channelBadgeLabel}</span>
+    {/if}
+    {#if settingsSaving}
+      <span class="badge">{tr("tts.twitch.settings_saving")}</span>
+    {:else if settingsSaved}
+      <span class="badge active">{tr("tts.twitch.settings_saved")}</span>
     {/if}
     {#if error || status.message}
       <span class="badge err">{error || status.message}</span>
     {/if}
   </div>
 
-  <p class="muted">{tr("tts.twitch.intro")}</p>
+  <label class="checkbox-row stack-field--full">
+    <input
+      type="checkbox"
+      checked={twitch.enabled}
+      onchange={(e) => {
+        twitch = { ...twitch, enabled: (e.currentTarget as HTMLInputElement).checked };
+        saveNow();
+      }}
+    />
+    <span>{tr("tts.twitch.enable")}</span>
+  </label>
 
-  <div class="tts-settings-grid">
-    <label class="checkbox-row stack-field--full">
-      <input
-        type="checkbox"
-        checked={twitch.enabled}
-        onchange={(e) => {
-          twitch = { ...twitch, enabled: (e.currentTarget as HTMLInputElement).checked };
-          queueSave();
-        }}
-      />
-      <span>{tr("tts.twitch.enable")}</span>
-    </label>
+  <div class="tts-twitch-connect">
+    <div class="tts-twitch-connect__head">
+      <h3>{tr("tts.twitch.connection_title")}</h3>
+      <p class="muted">{tr("tts.twitch.channels_hint", { max: TWITCH_MAX_CHANNELS })}</p>
+    </div>
+
+    <div class="tts-twitch-channels">
+      <span class="tts-twitch-channels__label">{tr("tts.twitch.channels")}</span>
+      <div class="tts-twitch-channel-list">
+        {#each channelRows as row, index (index)}
+          <div class="tts-twitch-channel-row">
+            <span class="tts-twitch-channel-row__prefix">#</span>
+            <input
+              class="control"
+              placeholder={tr("tts.twitch.channel_placeholder")}
+              value={row}
+              disabled={isConnected || isConnecting}
+              oninput={(e) =>
+                updateChannelRow(index, (e.currentTarget as HTMLInputElement).value)}
+            />
+            <button
+              type="button"
+              class="btn btn-ghost btn-sm tts-twitch-channel-row__remove"
+              title={tr("tts.twitch.channel_remove")}
+              disabled={isConnected || isConnecting || (channelRows.length <= 1 && !row.trim())}
+              onclick={() => removeChannelRow(index)}
+            >
+              ×
+            </button>
+          </div>
+        {/each}
+      </div>
+      {#if canAddChannel}
+        <button
+          type="button"
+          class="btn btn-ghost btn-sm tts-twitch-channel-add"
+          disabled={isConnected || isConnecting}
+          onclick={addChannelRow}
+        >
+          {tr("tts.twitch.channel_add")}
+        </button>
+      {/if}
+    </div>
 
     <label class="stack-field">
-      <span>{tr("tts.twitch.channel")}</span>
-      <input
-        class="control"
-        placeholder={tr("tts.twitch.channel_placeholder")}
-        value={twitch.channel}
-        oninput={(e) => {
-          twitch = { ...twitch, channel: (e.currentTarget as HTMLInputElement).value };
-          queueSave();
-        }}
-      />
-    </label>
-
-    <label class="stack-field">
-      <span>{tr("tts.twitch.nick")}</span>
+      <div class="stack-field__label-row">
+        <span>{tr("tts.twitch.nick")}</span>
+        <span class="tts-telemetry-help">
+          <button
+            type="button"
+            class="tts-telemetry-help-trigger"
+            bind:this={nickHelpTriggerEl}
+            aria-label={tr("tts.twitch.nick_help_trigger")}
+            aria-expanded={nickHelpOpen}
+            onclick={toggleNickHelp}
+          >
+            ?
+          </button>
+        </span>
+      </div>
       <input
         class="control"
         placeholder={tr("tts.twitch.nick_placeholder")}
         value={twitch.nick}
+        disabled={isConnected || isConnecting}
         oninput={(e) => {
           twitch = { ...twitch, nick: (e.currentTarget as HTMLInputElement).value };
           queueSave();
@@ -408,6 +615,7 @@
           autocomplete="off"
           placeholder={tr("tts.twitch.oauth_placeholder")}
           value={twitch.oauth_token}
+          disabled={isConnected || isConnecting}
           oninput={(e) => {
             twitch = { ...twitch, oauth_token: (e.currentTarget as HTMLInputElement).value };
             queueSave();
@@ -416,6 +624,7 @@
         <button
           type="button"
           class="btn btn-ghost btn-sm"
+          disabled={isConnected || isConnecting}
           onclick={toggleOAuthTokenVisibility}
         >
           {showOAuthToken ? tr("tts.twitch.oauth_hide") : tr("tts.twitch.oauth_show")}
@@ -424,6 +633,7 @@
       <button
         type="button"
         class="btn btn-primary tts-twitch-oauth-btn"
+        disabled={isConnected || isConnecting}
         onclick={handleGetOAuthToken}
       >
         {tr("tts.twitch.oauth_get")}
@@ -436,21 +646,38 @@
       </p>
     </div>
 
+    <div class="tts-twitch-connect__actions">
+      <button
+        type="button"
+        class="btn btn-primary"
+        disabled={busy || isConnecting || isConnected || !moduleEnabled || !twitch.enabled || !hasConnectCredentials}
+        onclick={() => void handleConnect()}
+      >
+        {isConnecting ? tr("tts.twitch.connecting") : tr("tts.twitch.connect")}
+      </button>
+      <button
+        type="button"
+        class="btn btn-ghost"
+        disabled={busy || !isConnected}
+        onclick={() => void handleDisconnect()}
+      >
+        {tr("tts.twitch.disconnect")}
+      </button>
+    </div>
+  </div>
+
+  <div class="tts-settings-grid">
     <label class="stack-field stack-field--full">
       <span>{tr("tts.twitch.audio_output")}</span>
       <select
         class="control"
         value={twitch.audio_output_device_id || ""}
         onchange={(e) => void handleTwitchAudioDeviceChange(e)}
-        disabled={!nativePlayback && !setSinkSupported}
       >
         {#each twitchAudioOutputs as device (device.id || "default")}
           <option value={device.id}>{device.label}</option>
         {/each}
       </select>
-      {#if !nativePlayback && !setSinkSupported}
-        <span class="muted">{tr("tts.twitch.audio_output_unsupported")}</span>
-      {/if}
     </label>
 
     <label class="stack-field">
@@ -479,7 +706,7 @@
             ...twitch,
             min_chars: Number((e.currentTarget as HTMLInputElement).value) || 1,
           };
-          queueSave();
+          saveNow();
         }}
       />
     </label>
@@ -493,7 +720,7 @@
             ...twitch,
             include_username: (e.currentTarget as HTMLInputElement).checked,
           };
-          queueSave();
+          saveNow();
         }}
       />
       <span>{tr("tts.twitch.include_username")}</span>
@@ -508,7 +735,7 @@
             ...twitch,
             block_commands: (e.currentTarget as HTMLInputElement).checked,
           };
-          queueSave();
+          saveNow();
         }}
       />
       <span>{tr("tts.twitch.block_commands")}</span>
@@ -530,46 +757,65 @@
       />
     </label>
 
+    <label class="stack-field stack-field--full">
+      <span>{tr("tts.twitch.strip_symbols")}</span>
+      <input
+        class="control"
+        bind:this={stripSymbolsInput}
+        placeholder={tr("tts.twitch.strip_symbols_placeholder")}
+        value={stripSymbolsText}
+        oninput={(e) => {
+          stripSymbolsDirty = true;
+          stripSymbolsText = (e.currentTarget as HTMLInputElement).value;
+          queueSave();
+        }}
+        onblur={() => flushPendingSave()}
+      />
+      <span class="muted">{tr("tts.twitch.strip_symbols_hint")}</span>
+    </label>
+
     <details class="tts-twitch-advanced stack-field--full">
       <summary>{tr("tts.twitch.advanced")}</summary>
       <div class="tts-twitch-advanced__body">
-        <div class="stack-field">
-          <label class="checkbox-row">
-            <input
-              type="checkbox"
-              checked={twitchRateOverride}
-              onchange={(e) => {
-                const checked = (e.currentTarget as HTMLInputElement).checked;
-                twitch = {
-                  ...twitch,
-                  speech_rate: checked ? moduleSpeechRate : 0,
-                };
-                queueSave();
-              }}
-            />
-            <span>{tr("tts.twitch.override_rate")}</span>
-          </label>
-          {#if twitchRateOverride}
-            <input
-              type="range"
-              min="0.5"
-              max="2"
-              step="0.05"
-              value={twitch.speech_rate ?? moduleSpeechRate}
-              onchange={(e) => {
-                twitch = {
-                  ...twitch,
-                  speech_rate: Number((e.currentTarget as HTMLInputElement).value) || 0.5,
-                };
-                queueSave();
-              }}
-            />
-          {:else}
-            <span class="muted">
-              {tr("tts.twitch.inherit_rate", { rate: moduleSpeechRate })}
-            </span>
-          {/if}
-        </div>
+        {#if !nativePlayback}
+          <div class="stack-field">
+            <label class="checkbox-row">
+              <input
+                type="checkbox"
+                checked={twitchRateOverride}
+                onchange={(e) => {
+                  const checked = (e.currentTarget as HTMLInputElement).checked;
+                  twitch = {
+                    ...twitch,
+                    speech_rate: checked ? moduleSpeechRate : 0,
+                  };
+                  saveNow();
+                }}
+              />
+              <span>{tr("tts.twitch.override_rate")}</span>
+            </label>
+            {#if twitchRateOverride}
+              <input
+                type="range"
+                min="0.5"
+                max="2"
+                step="0.05"
+                value={twitch.speech_rate ?? moduleSpeechRate}
+                onchange={(e) => {
+                  twitch = {
+                    ...twitch,
+                    speech_rate: Number((e.currentTarget as HTMLInputElement).value) || 0.5,
+                  };
+                  saveNow();
+                }}
+              />
+            {:else}
+              <span class="muted">
+                {tr("tts.twitch.inherit_rate", { rate: moduleSpeechRate })}
+              </span>
+            {/if}
+          </div>
+        {/if}
 
         <div class="stack-field">
           <label class="checkbox-row">
@@ -582,29 +828,38 @@
                   ...twitch,
                   speech_volume: checked ? moduleSpeechVolume : -1,
                 };
-                queueSave();
+                saveNow();
               }}
             />
             <span>{tr("tts.twitch.override_volume")}</span>
           </label>
           {#if twitchVolumeOverride}
+            <span class="stack-field__label-row">
+              <span class="muted">{tr("tts.speech.volume")}</span>
+              <output class="stack-field__value" for="tts-twitch-volume">
+                {formatSpeechVolume(twitch.speech_volume ?? moduleSpeechVolume)}
+              </output>
+            </span>
             <input
+              id="tts-twitch-volume"
               type="range"
               min="0"
               max="1"
               step="0.05"
               value={twitch.speech_volume ?? moduleSpeechVolume}
-              onchange={(e) => {
+              oninput={(e) => {
                 twitch = {
                   ...twitch,
                   speech_volume: Number((e.currentTarget as HTMLInputElement).value),
                 };
-                queueSave();
               }}
+              onchange={() => saveNow()}
             />
           {:else}
             <span class="muted">
-              {tr("tts.twitch.inherit_volume", { volume: moduleSpeechVolume })}
+              {tr("tts.twitch.inherit_volume", {
+                volume: formatSpeechVolume(moduleSpeechVolume),
+              })}
             </span>
           {/if}
         </div>
@@ -622,7 +877,7 @@
                 ...twitch,
                 max_queue_items: Number((e.currentTarget as HTMLInputElement).value) || 0,
               };
-              queueSave();
+              saveNow();
             }}
           />
           <span class="muted">{tr("tts.twitch.max_queue_hint")}</span>
@@ -637,7 +892,7 @@
                 ...twitch,
                 strip_emotes: (e.currentTarget as HTMLInputElement).checked,
               };
-              queueSave();
+              saveNow();
             }}
           />
           <span>{tr("tts.twitch.strip_emotes")}</span>
@@ -651,10 +906,24 @@
                 ...twitch,
                 strip_emoji: (e.currentTarget as HTMLInputElement).checked,
               };
-              queueSave();
+              saveNow();
             }}
           />
           <span>{tr("tts.twitch.strip_emoji")}</span>
+        </label>
+        <label class="checkbox-row">
+          <input
+            type="checkbox"
+            checked={twitch.strip_links ?? true}
+            onchange={(e) => {
+              twitch = {
+                ...twitch,
+                strip_links: (e.currentTarget as HTMLInputElement).checked,
+              };
+              saveNow();
+            }}
+          />
+          <span>{tr("tts.twitch.strip_links")}</span>
         </label>
         <div class="tts-twitch-emote-sources">
           <span class="muted">{tr("tts.twitch.emote_sources")}</span>
@@ -670,7 +939,7 @@
                     twitch: (e.currentTarget as HTMLInputElement).checked,
                   },
                 };
-                queueSave();
+                saveNow();
               }}
             />
             <span>{tr("tts.twitch.emote_twitch")}</span>
@@ -687,7 +956,7 @@
                     bttv: (e.currentTarget as HTMLInputElement).checked,
                   },
                 };
-                queueSave();
+                saveNow();
               }}
             />
             <span>{tr("tts.twitch.emote_bttv")}</span>
@@ -704,7 +973,7 @@
                     seventv: (e.currentTarget as HTMLInputElement).checked,
                   },
                 };
-                queueSave();
+                saveNow();
               }}
             />
             <span>{tr("tts.twitch.emote_7tv")}</span>
@@ -719,7 +988,7 @@
                 ...twitch,
                 detect_language: (e.currentTarget as HTMLInputElement).checked,
               };
-              queueSave();
+              saveNow();
             }}
           />
           <span>{tr("tts.twitch.detect_language")}</span>
@@ -737,7 +1006,7 @@
                 ...twitch,
                 lang_min_chars: Number((e.currentTarget as HTMLInputElement).value) || 4,
               };
-              queueSave();
+              saveNow();
             }}
           />
         </label>
@@ -768,7 +1037,7 @@
                 ...twitch,
                 max_chars: Number((e.currentTarget as HTMLInputElement).value) || 200,
               };
-              queueSave();
+              saveNow();
             }}
           />
           <span class="muted">{tr("tts.twitch.max_chars_hint")}</span>
@@ -783,7 +1052,7 @@
                 ...twitch,
                 pause_style: (e.currentTarget as HTMLSelectElement).value as TwitchPauseStyle,
               };
-              queueSave();
+              saveNow();
             }}
           >
             <option value="period">{tr("tts.twitch.pause.period")}</option>
@@ -791,13 +1060,14 @@
             <option value="dash">{tr("tts.twitch.pause.dash")}</option>
             <option value="ellipsis">{tr("tts.twitch.pause.ellipsis")}</option>
           </select>
+          <span class="muted">{tr("tts.twitch.pause_style_hint")}</span>
         </label>
         <label class="stack-field stack-field--full">
           <span>{tr("tts.twitch.speak_template")}</span>
           <input
             class="control"
             placeholder={tr("tts.twitch.speak_template_placeholder")}
-            value={twitch.speak_template ?? "{nick}. {text}"}
+            value={twitch.speak_template ?? "{nick}{pause}{text}"}
             oninput={(e) => {
               twitch = {
                 ...twitch,
@@ -806,6 +1076,7 @@
               queueSave();
             }}
           />
+          <span class="muted">{tr("tts.twitch.speak_template_hint")}</span>
         </label>
         <label class="checkbox-row stack-field--full">
           <input
@@ -816,7 +1087,7 @@
                 ...twitch,
                 include_builtin_profanity: (e.currentTarget as HTMLInputElement).checked,
               };
-              queueSave();
+              saveNow();
             }}
           />
           <span>{tr("tts.twitch.profanity_builtin")}</span>
@@ -837,30 +1108,15 @@
     </details>
   </div>
 
-  <div class="tts-inline-actions">
-    <button
-      type="button"
-      class="btn btn-primary"
-      disabled={busy || isConnecting || isConnected || !moduleEnabled || !twitch.enabled}
-      onclick={() => void handleConnect()}
-    >
-      {isConnecting ? tr("tts.twitch.connecting") : tr("tts.twitch.connect")}
-    </button>
-    <button
-      type="button"
-      class="btn btn-ghost"
-      disabled={busy || !isConnected}
-      onclick={() => void handleDisconnect()}
-    >
-      {tr("tts.twitch.disconnect")}
-    </button>
-  </div>
-
   {#if chatLog.length}
     <ul class="transcript-box tts-activity-log">
       {#each chatLog as line (line.id)}
         <li>
-          <strong>{line.display_name}</strong>: {line.text}
+          <strong>{line.display_name}</strong>
+          {#if line.channel}
+            <span class="muted">{line.channel}</span>
+          {/if}
+          : {line.text}
           {#if line.speakable !== false}
             <span class="muted">
               → [{line.language}] {line.speak_text}
@@ -876,5 +1132,31 @@
     </ul>
   {:else}
     <p class="muted">{tr("tts.twitch.chat_empty")}</p>
+  {/if}
+
+  {#if nickHelpOpen}
+    <button
+      type="button"
+      class="tts-telemetry-help-backdrop"
+      aria-label={tr("tts.twitch.nick_help_close")}
+      tabindex="-1"
+      onclick={closeNickHelp}
+    ></button>
+    <div
+      class="tts-telemetry-help-popover"
+      class:tts-telemetry-help-popover--pending={!nickHelpPositioned}
+      role="dialog"
+      aria-labelledby="tts-twitch-nick-help-title"
+      bind:this={nickHelpPopoverEl}
+      style:top="{nickHelpPos.top}px"
+      style:left="{nickHelpPos.left}px"
+      onclick={(event) => event.stopPropagation()}
+    >
+      <p id="tts-twitch-nick-help-title" class="tts-telemetry-help-popover__title">
+        {tr("tts.twitch.nick_help_title")}
+      </p>
+      <p>{tr("tts.twitch.nick_help_intro")}</p>
+      <p>{tr("tts.twitch.nick_help_token")}</p>
+    </div>
   {/if}
 </section>

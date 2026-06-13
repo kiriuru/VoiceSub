@@ -1,8 +1,8 @@
 # TTS Dual Sink + Native Playback — опорный план реализации
 
-**Статус:** MVP реализован (2026-06-10); reference для post-MVP  
-**Дата:** 2026-06-10  
-**Продукт:** VoiceSub `0.5.0+`  
+**Статус:** реализовано в **0.5.1** (2026-06-13); reference для post-MVP  
+**Дата:** 2026-06-13 (обновлено)  
+**Продукт:** VoiceSub `0.5.1`  
 **Модуль:** TTS (`src-tts/`, `crates/voicesub-tts/`, `crates/voicesub-audio/`)
 
 ---

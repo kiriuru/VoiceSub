@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use voicesub_config::read_full_logging_enabled;
+
 use super::runtime::resolve_base_url;
 use super::state::HttpState;
 use axum::body::Body;
@@ -26,11 +28,13 @@ pub async fn export_diagnostics(State(state): State<Arc<HttpState>>) -> Response
         store.payload().clone()
     };
     let base = resolve_base_url(state.as_ref()).await;
+    let include_deep_traces = read_full_logging_enabled(&config_payload);
     match state.export_service.export_diagnostics_bundle(
         runtime_status,
         config_payload,
         &state.paths,
         &base,
+        include_deep_traces,
     ) {
         Ok(path) => serve_zip_file(path),
         Err(err) => (

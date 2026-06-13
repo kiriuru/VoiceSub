@@ -110,11 +110,33 @@ impl RuntimeOrchestrator {
         drop(config_payload);
         let launcher = BrowserWorkerLauncher::new(&state.paths.user_data_dir);
 
+        let previous_worker_pid = {
+            let inner = self.inner.lock().await;
+            inner.worker_pid
+        };
+        if let Some(pid) = previous_worker_pid {
+            if BrowserWorkerLauncher::terminate_worker(pid) {
+                tracing::info!(
+                    pid,
+                    "terminated previous browser worker before relaunch"
+                );
+            } else {
+                tracing::warn!(
+                    pid,
+                    "failed to terminate previous browser worker before relaunch"
+                );
+            }
+        }
+
         let launch_result = launcher.launch_worker(&worker_target, &chrome_launch);
         let mut inner = self.inner.lock().await;
         match launch_result {
             Ok(result) => {
-                inner.worker_pid = Some(result.pid);
+                inner.worker_pid = if result.pid == 0 {
+                    None
+                } else {
+                    Some(result.pid)
+                };
                 inner.running = true;
                 inner.phase = "listening";
                 inner.started_at_utc = Some(started_at);

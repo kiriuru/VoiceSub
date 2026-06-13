@@ -39,11 +39,11 @@ impl DualChannelSpeechQueue {
         channel: &str,
         item: SpeechQueueItem,
         max_items: u32,
-    ) -> Result<usize, ChannelQueueError> {
+    ) -> Result<(usize, Vec<SpeechQueueItem>), ChannelQueueError> {
         let queue = self.queue_for(channel)?;
         let mut guard = queue.lock().expect("speech queue lock");
-        guard.enqueue_with_cap(item, max_items);
-        Ok(guard.len())
+        let dropped = guard.enqueue_with_cap(item, max_items);
+        Ok((guard.len(), dropped))
     }
 
     pub fn begin_next(&self, channel: &str) -> Result<Option<SpeechQueueItem>, ChannelQueueError> {
@@ -51,13 +51,16 @@ impl DualChannelSpeechQueue {
         Ok(queue.lock().expect("speech queue lock").begin_next())
     }
 
-    pub fn mark_finished(&self, channel: &str, item_id: &str) -> Result<(), ChannelQueueError> {
+    pub fn mark_finished(
+        &self,
+        channel: &str,
+        item_id: &str,
+    ) -> Result<crate::queue::MarkFinishedOutcome, ChannelQueueError> {
         let queue = self.queue_for(channel)?;
-        queue
+        Ok(queue
             .lock()
             .expect("speech queue lock")
-            .mark_finished(item_id);
-        Ok(())
+            .mark_finished(item_id))
     }
 
     pub fn clear(&self, channel: &str) -> Result<(), ChannelQueueError> {
@@ -82,6 +85,13 @@ impl DualChannelSpeechQueue {
         let queue = self.queue_for(channel)?;
         Ok(queue.lock().expect("speech queue lock").state())
     }
+
+    pub fn force_idle(&self, channel: &str) -> Result<(), ChannelQueueError> {
+        let queue = self.queue_for(channel)?;
+        queue.lock().expect("speech queue lock").force_idle();
+        debug!(target: "voicesub.tts", channel, "channel queue forced idle");
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -95,7 +105,40 @@ mod tests {
             text: "hello".to_string(),
             source: String::new(),
             lang: "en".to_string(),
+            dedupe_key: None,
         }
+    }
+
+    #[test]
+    fn force_idle_only_affects_target_channel() {
+        let queues = DualChannelSpeechQueue::new();
+        queues
+            .enqueue(CHANNEL_SPEECH, item("s1"), 8)
+            .expect("speech enqueue");
+        queues
+            .enqueue(CHANNEL_SPEECH, item("s2"), 8)
+            .expect("speech enqueue");
+        queues
+            .enqueue(CHANNEL_TWITCH, item("t1"), 8)
+            .expect("twitch enqueue");
+        let _ = queues.begin_next(CHANNEL_SPEECH).expect("speech begin");
+        queues.force_idle(CHANNEL_SPEECH).expect("speech force idle");
+        assert_eq!(
+            queues
+                .begin_next(CHANNEL_SPEECH)
+                .expect("speech begin again")
+                .expect("item")
+                .id,
+            "s2"
+        );
+        assert_eq!(
+            queues
+                .begin_next(CHANNEL_TWITCH)
+                .expect("twitch begin")
+                .expect("item")
+                .id,
+            "t1"
+        );
     }
 
     #[test]

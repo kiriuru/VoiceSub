@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex, Once, OnceLock};
 
 use tempfile::TempDir;
 use voicesub_config::{AppConfig, HttpBindConfig};
@@ -14,8 +14,24 @@ fn workspace_root() -> std::path::PathBuf {
 }
 
 static INTEGRATION_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+static ENSURE_SKIP_BROWSER: Once = Once::new();
+
+fn ensure_skip_browser_worker_in_tests() {
+    ENSURE_SKIP_BROWSER.call_once(|| {
+        if matches!(
+            std::env::var("VOICESUB_FORCE_BROWSER_WORKER").ok().as_deref(),
+            Some("1") | Some("true") | Some("yes")
+        ) {
+            return;
+        }
+        unsafe {
+            std::env::set_var("VOICESUB_SKIP_BROWSER_WORKER", "1");
+        }
+    });
+}
 
 pub fn integration_lock() -> std::sync::MutexGuard<'static, ()> {
+    ensure_skip_browser_worker_in_tests();
     INTEGRATION_LOCK
         .get_or_init(|| Mutex::new(()))
         .lock()

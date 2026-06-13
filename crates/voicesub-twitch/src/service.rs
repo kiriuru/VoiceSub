@@ -35,7 +35,10 @@ pub enum TwitchConnectionState {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TwitchConnectionStatus {
     pub state: TwitchConnectionState,
+    /// Comma-separated `#channel` labels for compact display.
     pub channel: String,
+    #[serde(default)]
+    pub channels: Vec<String>,
     pub message: String,
 }
 
@@ -44,6 +47,7 @@ impl Default for TwitchConnectionStatus {
         Self {
             state: TwitchConnectionState::Disconnected,
             channel: String::new(),
+            channels: Vec::new(),
             message: String::new(),
         }
     }
@@ -140,7 +144,7 @@ impl TwitchChatService {
             info!(target: "voicesub.twitch", "twitch irc disconnect requested");
             trace::trace("service", "disconnect", json!({}));
         }
-        self.set_status(TwitchConnectionState::Disconnected, "", "");
+        self.set_status(TwitchConnectionState::Disconnected, "", &[], "");
         self.broadcast_connection();
     }
 
@@ -159,7 +163,7 @@ impl TwitchChatService {
             "service",
             "connect_requested",
             json!({
-                "channel": settings.normalized_channel(),
+                "channels": settings.normalized_channels(),
                 "nick": settings.nick.trim(),
                 "lang": settings.language,
             }),
@@ -167,15 +171,17 @@ impl TwitchChatService {
 
         self.disconnect();
         let refresh_settings = settings.clone();
-        let connect_channel = refresh_settings.normalized_channel();
+        let connect_channels = refresh_settings.normalized_channels();
+        let connect_label = refresh_settings.normalized_channels_label();
         self.apply_settings(settings);
 
         let emotes = self.emotes.clone();
         let refresh_runtime = self.runtime.clone();
+        let refresh_logins = refresh_settings.channel_logins();
         refresh_runtime.spawn(async move {
             let _ = emotes
-                .refresh(
-                    &refresh_settings.channel_login(),
+                .refresh_all(
+                    &refresh_logins,
                     &refresh_settings.resolve_client_id(),
                     &refresh_settings.oauth_token,
                     &refresh_settings.emote_sources,
@@ -198,7 +204,18 @@ impl TwitchChatService {
             } else {
                 String::new()
             };
-            inner.set_status(mapped, channel.unwrap_or(""), &message);
+            let label = channel.unwrap_or("");
+            let channels: Vec<String> = if label.is_empty() {
+                Vec::new()
+            } else {
+                label
+                    .split(", ")
+                    .map(str::trim)
+                    .filter(|entry| !entry.is_empty())
+                    .map(str::to_string)
+                    .collect()
+            };
+            inner.set_status(mapped, label, &channels, &message);
             inner.broadcast_connection();
             trace::trace(
                 "service",
@@ -257,15 +274,27 @@ impl TwitchChatService {
             .map_err(|_| TwitchError::Irc("lock poisoned".into()))?
             .replace(ActiveSession { stop_tx, task });
 
-        self.set_status(TwitchConnectionState::Connecting, &connect_channel, "");
+        self.set_status(
+            TwitchConnectionState::Connecting,
+            &connect_label,
+            &connect_channels,
+            "",
+        );
         self.broadcast_connection();
         Ok(self.status())
     }
 
-    fn set_status(&self, state: TwitchConnectionState, channel: &str, message: &str) {
+    fn set_status(
+        &self,
+        state: TwitchConnectionState,
+        channel: &str,
+        channels: &[String],
+        message: &str,
+    ) {
         if let Ok(mut guard) = self.inner.status.lock() {
             guard.state = state;
             guard.channel = channel.to_string();
+            guard.channels = channels.to_vec();
             guard.message = message.to_string();
         }
     }
@@ -278,6 +307,7 @@ impl TwitchChatService {
             json!({
                 "state": format!("{:?}", status.state),
                 "channel": status.channel,
+                "channels": status.channels,
                 "message": status.message,
             }),
         );
@@ -289,10 +319,17 @@ impl TwitchChatService {
 }
 
 impl Inner {
-    fn set_status(&self, state: TwitchConnectionState, channel: &str, message: &str) {
+    fn set_status(
+        &self,
+        state: TwitchConnectionState,
+        channel: &str,
+        channels: &[String],
+        message: &str,
+    ) {
         if let Ok(mut guard) = self.status.lock() {
             guard.state = state;
             guard.channel = channel.to_string();
+            guard.channels = channels.to_vec();
             guard.message = message.to_string();
         }
     }
@@ -307,5 +344,39 @@ impl Inner {
             "type": "twitch_connection_update",
             "payload": status,
         }));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+
+    #[test]
+    fn apply_settings_updates_live_chat_without_reconnect() {
+        let rt = tokio::runtime::Runtime::new().expect("runtime");
+        let svc = TwitchChatService::new(Arc::new(|_| {}), rt.handle().clone());
+
+        let mut first = TwitchTtsSettings::default();
+        first.strip_symbols = vec!["@".into()];
+        first.strip_links = true;
+        svc.apply_settings(first);
+
+        let live = svc.live.read().expect("live lock");
+        assert_eq!(live.chat.strip_symbols, vec!["@".to_string()]);
+        assert!(live.chat.strip_links);
+        drop(live);
+
+        let mut second = TwitchTtsSettings::default();
+        second.strip_symbols = vec!["#".into(), "%".into()];
+        second.strip_links = false;
+        svc.apply_settings(second);
+
+        let live = svc.live.read().expect("live lock");
+        assert_eq!(
+            live.chat.strip_symbols,
+            vec!["#".to_string(), "%".to_string()]
+        );
+        assert!(!live.chat.strip_links);
     }
 }

@@ -9,6 +9,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use serde::Serialize;
 use serde_json::Value;
 
+use crate::diagnostics::should_persist_client_log;
 use crate::redaction::{redact_mapping, redact_text};
 
 const LOG_FILE: &str = "session-latest.jsonl";
@@ -94,6 +95,17 @@ impl SessionLogManager {
                 ok: true,
                 logged: false,
                 reason: Some("empty_message".into()),
+            };
+        }
+
+        if !should_persist_client_log(channel, source) {
+            if let Ok(mut diag) = self.diagnostics.lock() {
+                diag.client_log_events_dropped += 1;
+            }
+            return ClientLogResult {
+                ok: true,
+                logged: false,
+                reason: Some("compact_mode_filtered".into()),
             };
         }
 
@@ -276,6 +288,22 @@ mod tests {
         let result = logger.log("dashboard", "   ", None, None);
         assert!(!result.logged);
         assert_eq!(result.reason.as_deref(), Some("empty_message"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn compact_mode_filters_tts_client_log() {
+        let dir = std::env::temp_dir().join(format!("vs-session-tts-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let logger = SessionLogManager::new(&dir);
+        let result = logger.log(
+            "tts",
+            "engine.speak_end",
+            Some("tts-window"),
+            None,
+        );
+        assert!(!result.logged);
+        assert_eq!(result.reason.as_deref(), Some("compact_mode_filtered"));
         let _ = fs::remove_dir_all(dir);
     }
 }

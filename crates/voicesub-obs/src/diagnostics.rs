@@ -1,6 +1,7 @@
 use serde::Serialize;
 use serde_json::{json, Value};
 
+use crate::error_codes::native_status;
 use crate::settings::ObsCaptionSettings;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Default)]
@@ -59,19 +60,13 @@ impl ObsCaptionDiagnostics {
         let mut native_caption_status = self.native_caption_status.clone();
         if native_enabled && native_caption_status.is_none() {
             native_caption_status = if !self.connected {
-                Some("OBS websocket is not connected.".into())
+                Some(native_status::NOT_CONNECTED.into())
             } else if self.stream_output_active == Some(true) {
-                Some("OBS stream output is active. Native captions can be delivered.".into())
+                Some(native_status::STREAM_ACTIVE.into())
             } else if self.stream_output_active == Some(false) {
-                Some(
-                    "OBS stream output is not active. Native SendStreamCaption will not reach viewers."
-                        .into(),
-                )
+                Some(native_status::STREAM_INACTIVE.into())
             } else {
-                Some(
-                    "OBS websocket is connected, but stream caption readiness has not been confirmed yet."
-                        .into(),
-                )
+                Some(native_status::READINESS_PENDING.into())
             };
         }
         json!({

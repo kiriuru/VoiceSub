@@ -27,6 +27,7 @@
   import type { CommandPaletteHandlers } from "./lib/command-palette";
   import { applyUiPaletteToDocument } from "./lib/ui-theme-css";
   import { publishUiConfigSync } from "./lib/ui-config-sync";
+  import { isUpdateBannerDismissedForVersion, shouldShowUpdateBanner } from "./lib/update-banner-state";
   import { getRestartRequiredReasons } from "./lib/config-restart";
   import {
     formatTranslationConfigError,
@@ -134,7 +135,7 @@
     patchApp({
       version: currentVersion,
       versionInfo,
-      updateBannerDismissed: Boolean(latest) && dismissedFor === latest,
+      updateBannerDismissed: isUpdateBannerDismissedForVersion(latest, dismissedFor),
     });
   }
 
@@ -378,7 +379,7 @@
 
 <UpdateBanner
   versionInfo={snapshot.versionInfo}
-  visible={!snapshot.updateBannerDismissed}
+  visible={shouldShowUpdateBanner(snapshot.versionInfo, snapshot.updateBannerDismissed)}
   onClose={() => {
     const latest = snapshot.versionInfo?.sync?.latest_known_version || "";
     if (latest) dismissUpdateBanner(latest);

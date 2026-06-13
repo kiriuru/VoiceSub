@@ -1,7 +1,7 @@
 use crate::emotes::EmoteRegistry;
 use crate::lang::{language_allowed, resolve_message_language};
 use crate::replacements::resolve_spoken_nick;
-use crate::settings::{TwitchPauseStyle, TwitchTtsSettings};
+use crate::settings::TwitchTtsSettings;
 use crate::source_text_replacement::{
     apply_builtin_profanity, profanity_settings_for_twitch, SourceTextReplacementSettings,
 };
@@ -42,7 +42,35 @@ pub fn process_chat_message(
         raw_text.trim().to_string()
     };
 
+    if settings.strip_links {
+        clean_text = crate::links::strip_links_from_text(&clean_text);
+        clean_text = crate::emoji::normalize_whitespace(&clean_text);
+    }
+
+    clean_text = crate::lang::strip_leading_speaker_label(&clean_text);
+    clean_text = crate::emoji::normalize_whitespace(&clean_text);
+
+    clean_text = crate::lang::strip_twitch_mentions(&clean_text);
+
+    clean_text = crate::symbols::strip_configured_symbols(&clean_text, &settings.strip_symbols);
+
+    if settings.strip_links {
+        clean_text = crate::links::strip_links_from_text(&clean_text);
+        clean_text = crate::emoji::normalize_whitespace(&clean_text);
+    }
+
     clean_text = apply_builtin_profanity(&clean_text, &profanity_settings_for_twitch(settings));
+
+    if !crate::lang::has_meaningful_linguistic_content(&clean_text) {
+        return empty_result(
+            settings,
+            login,
+            display_name,
+            raw_text,
+            false,
+            Some("min_chars"),
+        );
+    }
 
     if clean_text.chars().count() < settings.min_chars as usize {
         return empty_result(
@@ -102,18 +130,15 @@ fn build_speak_text(settings: &TwitchTtsSettings, spoken_nick: &str, clean_text:
     if !settings.include_username {
         return clean_text.to_string();
     }
-    let template = settings.speak_template.trim();
-    if template.contains("{nick}") || template.contains("{text}") {
+    let pause = crate::settings::pause_separator(settings.pause_style);
+    let template = crate::settings::normalize_speak_template(settings.speak_template.trim());
+    if template.contains("{nick}") || template.contains("{text}") || template.contains("{pause}") {
         return template
+            .replace("{pause}", pause)
             .replace("{nick}", spoken_nick)
             .replace("{text}", clean_text);
     }
-    match settings.pause_style {
-        TwitchPauseStyle::Comma => format!("{spoken_nick}, {clean_text}"),
-        TwitchPauseStyle::Period => format!("{spoken_nick}. {clean_text}"),
-        TwitchPauseStyle::Dash => format!("{spoken_nick} — {clean_text}"),
-        TwitchPauseStyle::Ellipsis => format!("{spoken_nick}… {clean_text}"),
-    }
+    format!("{spoken_nick}{pause}{clean_text}")
 }
 
 fn empty_result(
@@ -184,6 +209,56 @@ mod tests {
             None,
         );
         assert_eq!(out.speak_text, "Bob says: ping");
+    }
+
+    #[test]
+    fn pause_style_controls_default_template_separator() {
+        let registry = EmoteRegistry::new();
+        let period = TwitchTtsSettings::default();
+        let comma = TwitchTtsSettings {
+            pause_style: crate::settings::TwitchPauseStyle::Comma,
+            ..Default::default()
+        };
+        let period_out = process_chat_message(
+            &period,
+            &no_replacement(),
+            &registry,
+            "bob",
+            "Bob",
+            "hello",
+            None,
+        );
+        let comma_out = process_chat_message(
+            &comma,
+            &no_replacement(),
+            &registry,
+            "bob",
+            "Bob",
+            "hello",
+            None,
+        );
+        assert_eq!(period_out.speak_text, "Bob. hello");
+        assert_eq!(comma_out.speak_text, "Bob, hello");
+    }
+
+    #[test]
+    fn legacy_template_uses_pause_style_not_hardcoded_punctuation() {
+        let settings = TwitchTtsSettings {
+            speak_template: "{nick}. {text}".into(),
+            pause_style: crate::settings::TwitchPauseStyle::Dash,
+            ..Default::default()
+        };
+        let registry = EmoteRegistry::new();
+        let out = process_chat_message(
+            &settings,
+            &no_replacement(),
+            &registry,
+            "bob",
+            "Bob",
+            "hello",
+            None,
+        );
+        assert_eq!(out.speak_text, "Bob — hello");
     }
 
     #[test]
@@ -288,5 +363,227 @@ mod tests {
         );
         assert!(!out.speakable);
         assert_eq!(out.skip_reason, Some("min_chars"));
+    }
+
+    #[test]
+    fn strip_links_removes_urls_from_speech() {
+        let settings = TwitchTtsSettings::default();
+        let registry = EmoteRegistry::new();
+        let out = process_chat_message(
+            &settings,
+            &no_replacement(),
+            &registry,
+            "u",
+            "User",
+            "look https://twitch.tv/foo please",
+            None,
+        );
+        assert!(out.speakable);
+        assert_eq!(out.clean_text, "look please");
+        assert_eq!(out.speak_text, "User. look please");
+    }
+
+    #[test]
+    fn strip_links_disabled_keeps_urls() {
+        let settings = TwitchTtsSettings {
+            strip_links: false,
+            ..Default::default()
+        };
+        let registry = EmoteRegistry::new();
+        let out = process_chat_message(
+            &settings,
+            &no_replacement(),
+            &registry,
+            "u",
+            "User",
+            "go https://twitch.tv/foo",
+            None,
+        );
+        assert!(out.speakable);
+        assert_eq!(out.clean_text, "go https://twitch.tv/foo");
+    }
+
+    #[test]
+    fn mention_reply_detects_russian_not_portuguese() {
+        let settings = TwitchTtsSettings::default();
+        let registry = EmoteRegistry::new();
+        let out = process_chat_message(
+            &settings,
+            &no_replacement(),
+            &registry,
+            "sasha_12041998",
+            "sasha_12041998",
+            "@KamakiriMeido Привет",
+            None,
+        );
+        assert!(out.speakable);
+        assert_eq!(out.language, "ru");
+        assert_eq!(out.clean_text, "Привет");
+        assert_eq!(out.speak_text, "sasha_12041998. Привет");
+    }
+
+    #[test]
+    fn link_only_speaker_label_is_not_speakable() {
+        let settings = TwitchTtsSettings::default();
+        let registry = EmoteRegistry::new();
+        let out = process_chat_message(
+            &settings,
+            &no_replacement(),
+            &registry,
+            "wallenber",
+            "Wallenber",
+            "Wallenber: https://www.youtube.com/watch?v=zqBnOfSmKQo",
+            None,
+        );
+        assert!(!out.speakable);
+        assert_eq!(out.skip_reason, Some("min_chars"));
+    }
+
+    #[test]
+    fn youtube_playlist_link_line_is_not_speakable() {
+        let settings = TwitchTtsSettings::default();
+        let registry = EmoteRegistry::new();
+        let sample =
+            "Wallenber: https://www.youtube.com/watch?v=3VTkBuxU4yk&list=RDMM&index=5";
+        let out = process_chat_message(
+            &settings,
+            &no_replacement(),
+            &registry,
+            "wallenber",
+            "Wallenber",
+            sample,
+            None,
+        );
+        assert!(!out.speakable);
+        assert_eq!(out.skip_reason, Some("min_chars"));
+    }
+
+    #[test]
+    fn bare_youtube_url_is_not_speakable_even_when_strip_links_disabled() {
+        let settings = TwitchTtsSettings {
+            strip_links: false,
+            ..Default::default()
+        };
+        let registry = EmoteRegistry::new();
+        let sample =
+            "https://www.youtube.com/watch?v=3VTkBuxU4yk&list=RDMM&index=5";
+        let out = process_chat_message(
+            &settings,
+            &no_replacement(),
+            &registry,
+            "wallenber",
+            "Wallenber",
+            sample,
+            None,
+        );
+        assert!(!out.speakable);
+        assert_eq!(out.skip_reason, Some("min_chars"));
+    }
+
+    #[test]
+    fn broken_url_after_symbol_strip_does_not_detect_dutch() {
+        let settings = TwitchTtsSettings {
+            strip_links: false,
+            ..Default::default()
+        };
+        let registry = EmoteRegistry::new();
+        let sample =
+            "https://www.youtube.com/watch?v=3VTkBuxU4yk&list=RDMM&index=5";
+        let out = process_chat_message(
+            &settings,
+            &no_replacement(),
+            &registry,
+            "wallenber",
+            "Wallenber",
+            sample,
+            None,
+        );
+        assert!(!out.speakable);
+        assert_ne!(out.language, "nl");
+    }
+
+    #[test]
+    fn strip_symbols_removes_configured_tokens_from_speech() {
+        let settings = TwitchTtsSettings {
+            strip_symbols: vec!["@".into(), "&".into(), "$".into()],
+            ..Default::default()
+        };
+        let registry = EmoteRegistry::new();
+        let out = process_chat_message(
+            &settings,
+            &no_replacement(),
+            &registry,
+            "u",
+            "User",
+            "pay & go @all",
+            None,
+        );
+        assert!(out.speakable);
+        assert_eq!(out.clean_text, "pay go");
+    }
+
+    #[test]
+    fn empty_strip_symbols_keeps_special_chars() {
+        let settings = TwitchTtsSettings {
+            strip_symbols: vec![],
+            ..Default::default()
+        };
+        let registry = EmoteRegistry::new();
+        let out = process_chat_message(
+            &settings,
+            &no_replacement(),
+            &registry,
+            "u",
+            "User",
+            "a & b",
+            None,
+        );
+        assert!(out.speakable);
+        assert_eq!(out.clean_text, "a & b");
+    }
+
+    #[test]
+    fn preserves_digits_in_russian_chat_line() {
+        let settings = TwitchTtsSettings::default();
+        let registry = EmoteRegistry::new();
+        let sample = "я ограничился 5ю каналами, но по идее можно до 100 сделать";
+        let out = process_chat_message(
+            &settings,
+            &no_replacement(),
+            &registry,
+            "kiriuru",
+            "Kiriuru",
+            sample,
+            None,
+        );
+        assert!(out.speakable, "expected speakable: {:?}", out.skip_reason);
+        assert!(
+            out.clean_text.contains('5') && out.clean_text.contains("100"),
+            "digits must remain in clean_text, got: {}",
+            out.clean_text
+        );
+    }
+
+    #[test]
+    fn pipeline_strips_emotes_but_preserves_digits() {
+        let settings = TwitchTtsSettings::default();
+        let registry = EmoteRegistry::new();
+        registry.seed_test_emotes(&["kappa"], &["OMEGALUL"]);
+        let out = process_chat_message(
+            &settings,
+            &no_replacement(),
+            &registry,
+            "u",
+            "User",
+            "Kappa OMEGALUL нужно 100 и 5ю каналов",
+            None,
+        );
+        assert!(out.speakable);
+        assert_eq!(
+            out.clean_text,
+            "нужно 100 и 5ю каналов"
+        );
+        assert!(out.speak_text.contains("100"));
+        assert!(out.speak_text.contains('5'));
     }
 }

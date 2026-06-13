@@ -155,6 +155,19 @@ export async function openExternalUrl(url: string): Promise<void> {
   }
 }
 
+export async function openLocalUrl(url: string): Promise<void> {
+  const trimmed = url.trim();
+  if (!trimmed) {
+    return;
+  }
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    await invoke("open_local_http_url", { url: trimmed });
+  } catch {
+    window.open(trimmed, "_blank", "noopener,noreferrer");
+  }
+}
+
 export async function listRecommendedOpenAiModels(): Promise<{ models: string[]; recommended?: boolean }> {
   return jsonFetch("/api/openai/recommended-models");
 }

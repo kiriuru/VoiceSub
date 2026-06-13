@@ -1,13 +1,15 @@
 # VoiceSub 0.5.0 — план перехода на новую архитектуру
 
+> **Текущая линия кода:** patch **`0.5.1`** — см. `docs/CHANGELOG.md` §0.5.1. Документ описывает переход **0.4.4 → 0.5.0**; patch-изменения после релиза — в CHANGELOG.
+
 **Статус:** принятый internal roadmap (канон для `F:\AI\VoiceSub`)  
-**Дата:** 2026-06-10 (обновлено)  
+**Дата:** 2026-06-13 (обновлено)  
 **Предшественник:** SST `0.4.4` — `F:\AI\stream-sub-translator`  
-**Версия:** `0.5.0` | **Продукт:** VoiceSub  
+**Baseline:** `0.5.0` | **Текущий patch:** `0.5.1` | **Продукт:** VoiceSub  
 
 Политика: `AGENTS.md`. **Инженерный контракт (обязателен):** `docs/VOICESUB_ENGINEERING_CONTRACT.ru.md`. Техническая архитектура — `docs/TECHNICAL_ARCHITECTURE.md` (обновляется по фазам).
 
-**Сводка выполнения (2026-06-10):** Фаза 0 закрыта (soak пройден). **NSIS installer pipeline работает** (`VoiceSub_0.5.0_x64-setup.exe`). Golden parity, formal DoD Фазы 1 и публикация на GitHub — **отложены**. Паритет полей SST dashboard / preview=OBS / выбор default worker UI — **сняты** (свой стек и компоновка UI). Подробнее: §12.
+**Сводка выполнения (2026-06-13):** Фаза 0 закрыта (soak пройден). **NSIS installer pipeline работает** (`VoiceSub_0.5.1_x64-setup.exe`). Patch **0.5.1**: native/Sonic TTS dual-sink, Twitch multi-channel (до 5), hot-apply фильтров, сохранение цифр в чате. Golden parity, formal DoD Фазы 1 и публикация на GitHub — **отложены**. Паритет полей SST dashboard / preview=OBS / выбор default worker UI — **сняты** (свой стек и компоновка UI). Подробнее: §12.
 
 ---
 
@@ -19,7 +21,7 @@
 | Название / версия | **VoiceSub `0.5.0`** |
 | ASR в core | Только **Web Speech classic** (`/google-asr`, `/google-asr-edge`) |
 | Experimental browser | **Удалить из проекта целиком** (код → archive, не в runtime) |
-| Remote mode | **Удалить из проекта целиком** (код → archive, позже **отдельный модуль**) |
+| Remote mode | **Удалён из проекта** |
 | Parakeet | **Убрать из core**; код → `legacy/modules/parakeet/` до Фазы 4 |
 | Backend | **Rust** (Cargo workspace) |
 | Shell | **Tauri** → **`VoiceSub.exe`**, иконка **как в SST** |
@@ -41,9 +43,9 @@
 
 ## 2. Цель
 
-**0.5.0:** Web Speech → опциональный перевод → лёгкий OBS overlay + Svelte dashboard → экспорт. Без Python/Parakeet/Remote/Experimental в tree.
+**0.5.0:** Web Speech → опциональный перевод → лёгкий OBS overlay + Svelte dashboard → экспорт. Без Python/Parakeet/Experimental в tree.
 
-**В core 0.5.0:** TTS-модуль уже в поставке (`bin/modules/tts/`, `/tts`). **После 0.5.0:** sidecar Parakeet, (позже) Remote.
+**В core 0.5.0:** TTS-модуль уже в поставке (`bin/modules/tts/`, `/tts`). **После 0.5.0:** sidecar Parakeet.
 
 Границы: local-first `127.0.0.1`, без cloud/SaaS, translation lifecycle non-negotiable (§7).
 
@@ -75,12 +77,10 @@ flowchart TB
   MM[Module Manager]
   PAR[module: parakeet]
   TTS[module: tts]
-  REM[module: remote - later]
 
   RC --> MM
   MM --> PAR
   MM --> TTS
-  MM -.-> REM
 ```
 
 ### 3.3 Rust workspace layout (Q-P1 — best practice)
@@ -127,7 +127,6 @@ F:\AI\VoiceSub\
 │       ├── lib.rs             # Tauri builder, invoke_handler, HTTP server mount
 │       └── main.rs            # voicesub_app_lib::run()
 ├── legacy/                    # archived SST code removed from active tree
-│   ├── remote/                # full remote SST surface for future module
 │   ├── experimental-browser/  # google-asr-experimental*
 │   └── modules-source/        # parakeet python sources until modules/parakeet
 └── modules/                   # runtime-installed optional modules (Phase 4)
@@ -143,11 +142,9 @@ F:\AI\VoiceSub\
 
 | Удалить из core/routes/UI | Архив | Будущее |
 | --- | --- | --- |
-| Remote controller/worker | `legacy/remote/` | модуль `remote` |
 | `browser_google_experimental` | `legacy/experimental-browser/` | не планируется в core |
 | `asr.mode=local`, Parakeet in-process | `legacy/modules-source/parakeet/` | модуль `parakeet` |
 | PyInstaller / pywebview launcher | reference only, затем delete | — |
-| `start-remote-*.bat` | `legacy/remote/` | — |
 
 **Маршруты worker:**
 
@@ -181,7 +178,7 @@ Tauri workspace skeleton + Chrome launch parity + `/ws/asr_worker` ingest + tran
 | HTTP API | runtime, settings, obs/url, version, exports |
 | Logging | structured + rotation + session JSONL |
 
-**Не в Фазе 1:** Core Audio, Parakeet, Python, Remote, Experimental, TTS.
+**Не в Фазе 1:** Core Audio, Parakeet, Python, Experimental, TTS.
 
 ### Фаза 2 — Svelte dashboard + Tauri shell
 
@@ -207,7 +204,7 @@ Tauri workspace skeleton + Chrome launch parity + `/ws/asr_worker` ingest + tran
 
 ### Фаза 4 — Модули
 
-`module.toml` + sidecar. **TTS** — уже в core 0.5.0. **Parakeet** (Python + Core Audio) и **Remote** — после стабилизации 0.5.0, из `legacy/`.
+`module.toml` + sidecar. **TTS** — уже в core 0.5.0. **Parakeet** (Python + Core Audio) — после стабилизации 0.5.0, из `legacy/`.
 
 ---
 
@@ -269,7 +266,7 @@ PoC soak (automated + manual 30 min) — **done** (§10).
 - `config.json` v7 → `config.toml`
 - `asr.mode=local` → fallback `browser_google` + hint «Parakeet module»
 - `asr.mode=browser_google_experimental` → `browser_google`
-- remote секция → игнор/удаление при import
+- SST `remote` секция → удаление при import
 - models → `modules/parakeet/models/` (когда модуль появится)
 
 ---
@@ -292,7 +289,7 @@ PoC soak (automated + manual 30 min) — **done** (§10).
 | --- | --- |
 | Q1 | Запрет **только Node.js**; runtime и NSIS installer self-contained; Vite/Svelte/Rust/Tauri — целевой стек |
 | Q2 | VoiceSub 0.5.0 |
-| Q3 / Q-R1 | Remote **удалить** из проекта → `legacy/remote/` → модуль позже |
+| Q3 / Q-R1 | LAN Remote mode **удалён** из VoiceSub (не планируется) |
 | Q4 / Q-O1 | Overlay **vanilla HTML**, лёгкий, для OBS |
 | Q5 | TOML + SST import |
 | Q6 | 13 providers, full dispatcher port |
@@ -310,7 +307,7 @@ PoC soak (automated + manual 30 min) — **done** (§10).
 
 ---
 
-## 12. Статус выполнения (2026-06-10)
+## 12. Статус выполнения (2026-06-13)
 
 Решения оператора по закрытию/пересмотру пунктов плана:
 
@@ -321,6 +318,7 @@ PoC soak (automated + manual 30 min) — **done** (§10).
 | S3 | **Formal DoD sign-off Фазы 1** — отложено |
 | S4 | **Полный паритет полей SST dashboard; preview payload = OBS; выбор default worker UI** — **снято** (новый стек и компоновка UI, не копия SST dashboard) |
 | S5 | **Релиз 0.5.0 / NSIS installer** — pipeline готов (`build-release.ps1`); публикация на GitHub — отложено |
+| S6 | **Patch 0.5.1** — native/Sonic TTS dual-sink, Twitch multi-channel + hot-apply, digit-safe chat filters, `VOICESUB_SKIP_BROWSER_WORKER` в integration tests; см. `docs/CHANGELOG.md` §0.5.1 |
 
 PoC report: `docs/plans/voicesub_poc_report.md`.
 

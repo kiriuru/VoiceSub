@@ -88,34 +88,67 @@ export const PROVIDER_GROUP_I18N_KEYS: Record<string, string> = {
   "Local LLM": "translation.provider_group.local_llm",
 };
 
+/** Top-20 localization targets for translation (Steam/Twitch 2025). */
 export const LANGUAGES = [
-  { code: "en", label: "English" },
-  { code: "ja", label: "Japanese" },
-  { code: "de", label: "German" },
-  { code: "es", label: "Spanish" },
-  { code: "fr", label: "French" },
-  { code: "it", label: "Italian" },
-  { code: "ko", label: "Korean" },
-  { code: "pt", label: "Portuguese" },
-  { code: "ru", label: "Russian" },
-  { code: "zh-cn", label: "Chinese (Simplified)" },
-];
+  { code: "en", labelKey: "translation.target_lang.en" },
+  { code: "zh-cn", labelKey: "translation.target_lang.zh_cn" },
+  { code: "zh-tw", labelKey: "translation.target_lang.zh_tw" },
+  { code: "ru", labelKey: "translation.target_lang.ru" },
+  { code: "es", labelKey: "translation.target_lang.es" },
+  { code: "pt", labelKey: "translation.target_lang.pt" },
+  { code: "de", labelKey: "translation.target_lang.de" },
+  { code: "ko", labelKey: "translation.target_lang.ko" },
+  { code: "fr", labelKey: "translation.target_lang.fr" },
+  { code: "ja", labelKey: "translation.target_lang.ja" },
+  { code: "tr", labelKey: "translation.target_lang.tr" },
+  { code: "hi", labelKey: "translation.target_lang.hi" },
+  { code: "it", labelKey: "translation.target_lang.it" },
+  { code: "ar", labelKey: "translation.target_lang.ar" },
+  { code: "pl", labelKey: "translation.target_lang.pl" },
+  { code: "id", labelKey: "translation.target_lang.id" },
+  { code: "sv", labelKey: "translation.target_lang.sv" },
+  { code: "nl", labelKey: "translation.target_lang.nl" },
+  { code: "vi", labelKey: "translation.target_lang.vi" },
+  { code: "th", labelKey: "translation.target_lang.th" },
+] as const;
 
+export const TRANSLATION_LANGUAGE_CODES = LANGUAGES.map((entry) => entry.code);
+
+/**
+ * Web Speech API (Chrome worker) recognition locales for the top-20 set.
+ * Regional variants follow the localization list (en-US/en-GB, es-ES/es-MX, zh-CN/zh-TW).
+ * uk-UA is kept for existing configs and Eastern European streams.
+ */
 export const BROWSER_RECOGNITION_LANGUAGES = [
-  { code: "ru-RU", label: "Russian (ru-RU)" },
   { code: "en-US", label: "English (en-US)" },
+  { code: "en-GB", label: "English (en-GB)" },
   { code: "en-AU", label: "English Australia (en-AU)" },
-  { code: "de-DE", label: "German (de-DE)" },
-  { code: "es-ES", label: "Spanish (es-ES)" },
-  { code: "fr-FR", label: "French (fr-FR)" },
-  { code: "it-IT", label: "Italian (it-IT)" },
-  { code: "ja-JP", label: "Japanese (ja-JP)" },
-  { code: "ko-KR", label: "Korean (ko-KR)" },
-  { code: "pl-PL", label: "Polish (pl-PL)" },
-  { code: "pt-BR", label: "Portuguese (pt-BR)" },
-  { code: "uk-UA", label: "Ukrainian (uk-UA)" },
   { code: "zh-CN", label: "Chinese Simplified (zh-CN)" },
-];
+  { code: "zh-TW", label: "Chinese Traditional (zh-TW)" },
+  { code: "ru-RU", label: "Russian (ru-RU)" },
+  { code: "es-ES", label: "Spanish (es-ES)" },
+  { code: "es-MX", label: "Spanish (es-MX)" },
+  { code: "pt-BR", label: "Portuguese (pt-BR)" },
+  { code: "de-DE", label: "German (de-DE)" },
+  { code: "ko-KR", label: "Korean (ko-KR)" },
+  { code: "fr-FR", label: "French (fr-FR)" },
+  { code: "ja-JP", label: "Japanese (ja-JP)" },
+  { code: "tr-TR", label: "Turkish (tr-TR)" },
+  { code: "hi-IN", label: "Hindi (hi-IN)" },
+  { code: "it-IT", label: "Italian (it-IT)" },
+  { code: "ar-SA", label: "Arabic (ar-SA)" },
+  { code: "pl-PL", label: "Polish (pl-PL)" },
+  { code: "id-ID", label: "Indonesian (id-ID)" },
+  { code: "sv-SE", label: "Swedish (sv-SE)" },
+  { code: "nl-NL", label: "Dutch (nl-NL)" },
+  { code: "vi-VN", label: "Vietnamese (vi-VN)" },
+  { code: "th-TH", label: "Thai (th-TH)" },
+  { code: "uk-UA", label: "Ukrainian (uk-UA)" },
+] as const;
+
+export const BROWSER_RECOGNITION_LANGUAGE_CODES = BROWSER_RECOGNITION_LANGUAGES.map(
+  (entry) => entry.code
+);
 
 export const OVERLAY_PRESETS = ["single", "dual-line", "stacked", "compact"] as const;
 

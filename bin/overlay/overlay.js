@@ -445,16 +445,6 @@
       clearOverlayPresentation("idle empty overlay");
       return;
     }
-    postOverlayUiTrace("visual_state", {
-      lifecycle_state: payload.lifecycle_state || "unknown",
-      completed_block_visible: Boolean(payload.completed_block_visible),
-      visible_item_count: itemTexts.length,
-      active_partial: Boolean(overlayState.activePartialText),
-      show_source: overlayState.showSource,
-      show_translations: overlayState.showTranslations,
-      preset: overlayState.preset,
-      compact: overlayState.compact,
-    });
     render();
   }
 

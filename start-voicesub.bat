@@ -36,10 +36,9 @@ if "%SKIP_BUILD%"=="0" (
   echo [1/2] Skipping frontend build ^(--no-build^).
 )
 
-set "VOICESUB_TRACE_SUBTITLE=1"
-set "RUST_LOG=voicesub_subtitle=debug,voicesub_runtime=debug,voicesub_logging=debug"
-echo [trace] subtitle TTL trace: logs\subtitle-trace.jsonl + logs\ui-trace.jsonl
-echo [trace] disable: set VOICESUB_TRACE_SUBTITLE=0 before launch
+REM Optional dev tracing (off by default — matches release compact logging):
+REM set "VOICESUB_TRACE_SUBTITLE=1"
+REM set "RUST_LOG=voicesub_subtitle=debug,voicesub_runtime=debug"
 echo.
 
 echo [maintenance] Pruning stale target/incremental caches if over 5 GiB...

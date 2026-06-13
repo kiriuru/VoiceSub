@@ -572,7 +572,7 @@
 
             {#each LANGUAGES as lang}
 
-              <option value={lang.code}>{lang.label}</option>
+              <option value={lang.code}>{tr(lang.labelKey)}</option>
 
             {/each}
 
@@ -734,7 +734,7 @@
 
                     {#each LANGUAGES as lang}
 
-                      <option value={lang.code}>{lang.label}</option>
+                      <option value={lang.code}>{tr(lang.labelKey)}</option>
 
                     {/each}
 

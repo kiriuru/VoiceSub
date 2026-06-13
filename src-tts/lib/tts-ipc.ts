@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { ResourceTelemetry } from "./resource-telemetry";
 import type { SourceTextReplacementSettings } from "./source-text-replacement";
 import type {
   AudioOutputDevice,
@@ -51,9 +52,19 @@ export async function setTtsChannelAudioDevice(
 }
 
 export async function setTtsPlaybackMode(
-  mode: "native" | "browser",
+  mode: TtsPlaybackMode,
 ): Promise<TtsConfig> {
   return invoke<TtsConfig>("tts_set_playback_mode", { mode });
+}
+
+export async function updateVoiceSettings(
+  speechRate: number,
+  speechVolume: number,
+): Promise<TtsConfig> {
+  return invoke<TtsConfig>("tts_update_voice_settings", {
+    speechRate,
+    speechVolume,
+  });
 }
 
 export async function listRustOutputDevices(): Promise<AudioOutputDevice[]> {
@@ -75,16 +86,6 @@ export async function updateSpeechSettings(speech: TtsSpeechSettings): Promise<T
   return invoke<TtsConfig>("tts_update_speech_settings", { speech });
 }
 
-export async function updateVoiceSettings(
-  speechRate: number,
-  speechVolume: number,
-): Promise<TtsConfig> {
-  return invoke<TtsConfig>("tts_update_voice_settings", {
-    speechRate,
-    speechVolume,
-  });
-}
-
 export async function planSubtitleSpeech(
   payload: Record<string, unknown>,
 ): Promise<SpeechQueueItem[]> {
@@ -97,13 +98,27 @@ export async function resetSubtitlePlanner(): Promise<void> {
 
 export type SpeechChannel = "speech" | "twitch";
 
+export type ChannelEnqueueResult = {
+  queue_len: number;
+  dropped_ids: string[];
+};
+
 export async function channelEnqueue(
   channel: SpeechChannel,
   id: string,
   text: string,
   lang: string,
-): Promise<number> {
-  return invoke<number>("tts_channel_enqueue", { channel, id, text, lang });
+): Promise<ChannelEnqueueResult> {
+  const result = await invoke<ChannelEnqueueResult>("tts_channel_enqueue", {
+    channel,
+    id,
+    text,
+    lang,
+  });
+  return {
+    queue_len: result.queue_len,
+    dropped_ids: result.dropped_ids ?? [],
+  };
 }
 
 export async function channelBeginNext(
@@ -127,6 +142,14 @@ export async function channelSnapshot(
   channel: SpeechChannel,
 ): Promise<SpeechQueueItem[]> {
   return invoke<SpeechQueueItem[]>("tts_channel_snapshot", { channel });
+}
+
+export async function channelForceIdle(channel: SpeechChannel): Promise<void> {
+  return invoke("tts_channel_force_idle", { channel });
+}
+
+export async function fetchResourceTelemetry(): Promise<ResourceTelemetry> {
+  return invoke<ResourceTelemetry>("tts_get_resource_telemetry");
 }
 
 /** @deprecated Use `channelEnqueue("speech", …)` */
@@ -163,4 +186,16 @@ export async function syncSourceTextReplacement(
   replacement: SourceTextReplacementSettings,
 ): Promise<void> {
   return invoke("tts_sync_source_text_replacement", { replacement });
+}
+
+export async function reportTtsWebviewActivity(
+  runtimeActive: boolean,
+  ttsEnabled: boolean,
+  enginesBusy: boolean,
+): Promise<void> {
+  return invoke("tts_report_webview_activity", {
+    runtimeActive,
+    ttsEnabled,
+    enginesBusy,
+  });
 }

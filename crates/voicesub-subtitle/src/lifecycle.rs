@@ -11,6 +11,9 @@ use crate::types::{
     SubtitleLineItem, SubtitlePayloadEvent, TranscriptEvent, TranscriptKind, TranslationEvent,
 };
 
+/// Bound lifecycle record map size for multi-hour sessions.
+const LIFECYCLE_RECORDS_MAX: usize = 512;
+
 pub(crate) struct SubtitleLifecycleCore {
     config_getter: Box<dyn Fn() -> Value + Send + Sync>,
     records: HashMap<u64, Value>,
@@ -222,6 +225,7 @@ impl SubtitleLifecycleCore {
         }
         self.log.transcript_final(&event);
         self.log.lifecycle_config(&self.lifecycle_config());
+        self.prune_old_records();
         self.promote_or_defer(event.sequence, presentation);
     }
 
@@ -468,6 +472,45 @@ impl SubtitleLifecycleCore {
 
     fn monotonic_now(&self) -> f64 {
         self.start_instant.elapsed().as_secs_f64()
+    }
+
+    /// Drop oldest finalized records that are no longer needed for display or expiry.
+    fn prune_old_records(&mut self) {
+        if self.records.len() <= LIFECYCLE_RECORDS_MAX {
+            return;
+        }
+        let mut protected = HashSet::new();
+        if let Some(seq) = self.completed_sequence {
+            protected.insert(seq);
+        }
+        if let Some(seq) = self.pending_final_sequence {
+            protected.insert(seq);
+        }
+        if let Some(seq) = self.latest_final_sequence {
+            protected.insert(seq);
+        }
+        if let Some(partial) = self.active_partial.as_ref() {
+            if let Some(seq) = partial.get("sequence").and_then(|v| v.as_u64()) {
+                protected.insert(seq);
+            }
+        }
+
+        let mut removable: Vec<u64> = self
+            .records
+            .keys()
+            .copied()
+            .filter(|seq| !protected.contains(seq))
+            .collect();
+        removable.sort_unstable();
+
+        while self.records.len() > LIFECYCLE_RECORDS_MAX && !removable.is_empty() {
+            if let Some(seq) = removable.first().copied() {
+                removable.remove(0);
+                self.records.remove(&seq);
+            } else {
+                break;
+            }
+        }
     }
 
     fn translation_required_for_display(&self) -> bool {
@@ -965,4 +1008,34 @@ fn format_expires_utc(delta_ms: i64) -> String {
         .unwrap_or(0)
         .saturating_add((delta_ms / 1000).max(0) as u64);
     format!("{secs}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn prune_old_records_keeps_active_sequences() {
+        let schedule = Arc::new(|_sequence: u64, _delay: f64| {});
+        let mut core = SubtitleLifecycleCore::new(
+            Box::new(|| json!({})),
+            schedule,
+            SubtitleLog::default(),
+        );
+        core.completed_sequence = Some(600);
+        core.pending_final_sequence = Some(601);
+        core.latest_final_sequence = Some(601);
+        core.active_partial = Some(json!({ "sequence": 602 }));
+
+        for seq in 1..=600u64 {
+            core.records.insert(seq, json!({ "sequence": seq }));
+        }
+        assert_eq!(core.records.len(), 600);
+
+        core.prune_old_records();
+
+        assert!(core.records.contains_key(&600));
+        assert!(core.records.len() <= LIFECYCLE_RECORDS_MAX);
+        assert!(!core.records.contains_key(&1));
+    }
 }

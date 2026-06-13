@@ -1,5 +1,7 @@
 use serde_json::{json, Value};
 
+use std::sync::{mpsc, OnceLock};
+
 use crate::event_sequence::SharedEventSequencer;
 use crate::events::EventsHub;
 
@@ -78,6 +80,34 @@ impl WsEventPublisher {
     }
 }
 
+struct SyncBroadcastJob {
+    hub: EventsHub,
+    message: Value,
+}
+
+fn sync_broadcast_loop(rx: mpsc::Receiver<SyncBroadcastJob>) {
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("ws publisher broadcast runtime");
+    for job in rx {
+        rt.block_on(job.hub.broadcast(job.message));
+    }
+}
+
+static SYNC_BROADCAST_TX: OnceLock<mpsc::Sender<SyncBroadcastJob>> = OnceLock::new();
+
+fn sync_broadcast_sender() -> &'static mpsc::Sender<SyncBroadcastJob> {
+    SYNC_BROADCAST_TX.get_or_init(|| {
+        let (tx, rx) = mpsc::channel();
+        std::thread::Builder::new()
+            .name("voicesub-ws-sync-broadcast".into())
+            .spawn(move || sync_broadcast_loop(rx))
+            .expect("spawn sync broadcast thread");
+        tx
+    })
+}
+
 fn broadcast_now(events: &EventsHub, message: Value) {
     if let Ok(handle) = tokio::runtime::Handle::try_current() {
         let events = events.clone();
@@ -86,14 +116,16 @@ fn broadcast_now(events: &EventsHub, message: Value) {
         });
         return;
     }
-    let events = events.clone();
-    std::thread::spawn(move || {
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .expect("ws publisher broadcast runtime");
-        rt.block_on(events.broadcast(message));
-    });
+    let tx = sync_broadcast_sender();
+    if tx
+        .send(SyncBroadcastJob {
+            hub: events.clone(),
+            message,
+        })
+        .is_err()
+    {
+        tracing::warn!("sync ws broadcast channel closed; dropping message");
+    }
 }
 
 #[cfg(test)]

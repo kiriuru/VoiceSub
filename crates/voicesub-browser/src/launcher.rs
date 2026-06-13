@@ -7,6 +7,28 @@ use tracing::{info, instrument, warn};
 use crate::chrome_flags::BrowserChromeLaunchConfig;
 use crate::ecoqos::opt_out_chrome_power_throttling;
 
+/// When true, [`BrowserWorkerLauncher::launch_worker`] returns a stub result without spawning Chrome.
+///
+/// `cfg!(test)` only applies to unit tests compiled into the same crate (e.g.
+/// `voicesub-browser` inline tests). Integration tests (`tests/*.rs`) build
+/// dependencies without `cfg(test)` — set `VOICESUB_SKIP_BROWSER_WORKER=1`
+/// in those harnesses (see `voicesub-http/tests/common.rs`).
+pub fn browser_worker_launch_skipped() -> bool {
+    if matches!(
+        std::env::var("VOICESUB_FORCE_BROWSER_WORKER").ok().as_deref(),
+        Some("1") | Some("true") | Some("yes")
+    ) {
+        return false;
+    }
+    if cfg!(test) {
+        return true;
+    }
+    matches!(
+        std::env::var("VOICESUB_SKIP_BROWSER_WORKER").ok().as_deref(),
+        Some("1") | Some("true") | Some("yes")
+    )
+}
+
 #[derive(Debug, Error)]
 pub enum BrowserLaunchError {
     #[error("chrome executable not found")]
@@ -62,6 +84,23 @@ impl BrowserWorkerLauncher {
         worker_url: &str,
         chrome_launch: &BrowserChromeLaunchConfig,
     ) -> Result<LaunchResult, BrowserLaunchError> {
+        if browser_worker_launch_skipped() {
+            info!(
+                target: "voicesub.browser",
+                worker_url,
+                "browser worker launch skipped (test build or VOICESUB_SKIP_BROWSER_WORKER)"
+            );
+            let chrome_path = find_chrome_executable().unwrap_or_else(|| PathBuf::from("chrome.exe"));
+            let profile_dir = self.profile_dir(worker_url, &chrome_path);
+            let _ = std::fs::create_dir_all(&profile_dir);
+            return Ok(LaunchResult {
+                chrome_path,
+                profile_dir,
+                pid: 0,
+                args: Vec::new(),
+            });
+        }
+
         let chrome_path = find_chrome_executable().ok_or(BrowserLaunchError::ChromeNotFound)?;
         let profile_dir = self.profile_dir(worker_url, &chrome_path);
         std::fs::create_dir_all(&profile_dir).map_err(BrowserLaunchError::ProfileDir)?;
@@ -275,5 +314,17 @@ mod tests {
     fn access_denied_detection_matches_win32_code_5() {
         let err = std::io::Error::from_raw_os_error(5);
         assert!(is_access_denied(&err));
+    }
+
+    #[test]
+    fn launch_worker_skipped_under_test_build_without_spawning_chrome() {
+        assert!(super::browser_worker_launch_skipped());
+        let launcher = BrowserWorkerLauncher::new("user-data");
+        let config = BrowserChromeLaunchConfig::default();
+        let result = launcher
+            .launch_worker("http://127.0.0.1:51077/google-asr?autostart=1", &config)
+            .expect("stub launch");
+        assert_eq!(result.pid, 0);
+        assert!(result.args.is_empty());
     }
 }

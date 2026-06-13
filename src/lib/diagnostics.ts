@@ -1,4 +1,8 @@
 import type { DiagnosticsSnapshot, RuntimeStatus } from "./types";
+import {
+  formatObsCaptionError,
+  formatObsOutputMode,
+} from "./obs-status-i18n";
 
 export function diagnosticsFromRuntime(runtime: RuntimeStatus): DiagnosticsSnapshot {
   const raw = runtime as Record<string, unknown>;
@@ -32,16 +36,16 @@ export function obsStatusMessage(
   }
   if (diag.connection_state === "connected") {
     return tr("obs.cc.status.connected", {
-      mode: String(diag.output_mode || "disabled"),
+      mode: formatObsOutputMode(String(diag.output_mode || "disabled"), tr),
     });
   }
   if (diag.connection_state === "auth_failed") {
-    const authError = String(diag.last_error || "OBS websocket authentication failed.");
+    const authError = formatObsCaptionError(String(diag.last_error || "auth_failed"), tr);
     return tr("obs.cc.status.error", { error: authError });
   }
   const lastError = String(diag.last_error || "").trim();
   if (lastError) {
-    return tr("obs.cc.status.error", { error: lastError });
+    return tr("obs.cc.status.error", { error: formatObsCaptionError(lastError, tr) });
   }
   return tr("obs.cc.status.waiting");
 }

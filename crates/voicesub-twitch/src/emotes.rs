@@ -5,7 +5,7 @@ use std::time::Instant;
 use serde::Deserialize;
 use tracing::{debug, info, warn};
 
-use crate::emoji::{normalize_whitespace, strip_unicode_emoji};
+use crate::emoji::{is_plain_decimal_token, normalize_whitespace, strip_unicode_emoji};
 use crate::settings::TwitchEmoteSources;
 
 pub const DEFAULT_TWITCH_CLIENT_ID: &str = "oraf2d29s9mm8kxq4xx97zo28xaj7b";
@@ -37,6 +37,17 @@ impl EmoteRegistry {
             .read()
             .map(|guard| guard.clone())
             .unwrap_or_default()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn seed_test_emotes(&self, twitch: &[&str], bttv: &[&str]) {
+        let mut guard = self.inner.write().expect("emote lock");
+        for name in twitch {
+            guard.twitch.insert(name.to_ascii_lowercase());
+        }
+        for code in bttv {
+            insert_third_party_code(&mut guard.bttv, code);
+        }
     }
 
     pub fn clean_message_text(
@@ -79,6 +90,9 @@ impl EmoteRegistry {
                 if no_emoji.is_empty() {
                     return String::new();
                 }
+                if is_plain_decimal_token(&no_emoji) {
+                    return no_emoji;
+                }
                 let lc = no_emoji.to_ascii_lowercase();
                 if sources.twitch && sets.twitch.contains(&lc) {
                     return String::new();
@@ -105,11 +119,79 @@ impl EmoteRegistry {
         sources: &TwitchEmoteSources,
     ) -> Result<EmoteSets, String> {
         let login = channel_login.trim().trim_start_matches('#').to_lowercase();
-        if login.is_empty() {
+        self.refresh_all(&[login], client_id, oauth_token, sources)
+            .await
+    }
+
+    pub async fn refresh_all(
+        &self,
+        logins: &[String],
+        client_id: &str,
+        oauth_token: &str,
+        sources: &TwitchEmoteSources,
+    ) -> Result<EmoteSets, String> {
+        let normalized: Vec<String> = logins
+            .iter()
+            .map(|raw| raw.trim().trim_start_matches('#').to_lowercase())
+            .filter(|login| !login.is_empty())
+            .collect();
+        if normalized.is_empty() {
             return Err("channel login is empty".into());
         }
 
         let client = reqwest::Client::new();
+        let mut merged = EmoteSets::default();
+        for login in &normalized {
+            match fetch_sets_for_login(&client, login, client_id, oauth_token, sources).await {
+                Ok(partial) => {
+                    merged.twitch.extend(partial.twitch);
+                    merged.bttv.extend(partial.bttv);
+                    merged.seventv.extend(partial.seventv);
+                }
+                Err(err) => {
+                    warn!(
+                        target: "voicesub.twitch.emotes",
+                        channel = %login,
+                        error = %err,
+                        "channel emote fetch failed"
+                    );
+                }
+            }
+        }
+        merged.channel_login = normalized.join(",");
+        merged.twitch_count = merged.twitch.len();
+        merged.bttv_count = merged.bttv.len();
+        merged.seventv_count = merged.seventv.len();
+        merged.last_refresh = Some(Instant::now());
+
+        if let Ok(mut guard) = self.inner.write() {
+            *guard = merged.clone();
+        }
+
+        info!(
+            target: "voicesub.twitch.emotes",
+            channels = %merged.channel_login,
+            twitch = merged.twitch_count,
+            bttv = merged.bttv_count,
+            seventv = merged.seventv_count,
+            "emote cache refreshed"
+        );
+        Ok(merged)
+    }
+}
+
+async fn fetch_sets_for_login(
+    client: &reqwest::Client,
+    channel_login: &str,
+    client_id: &str,
+    oauth_token: &str,
+    sources: &TwitchEmoteSources,
+) -> Result<EmoteSets, String> {
+        let login = channel_login.trim().trim_start_matches('#').to_lowercase();
+        if login.is_empty() {
+            return Err("channel login is empty".into());
+        }
+
         let mut twitch = HashSet::new();
         let mut bttv = HashSet::new();
         let mut seventv = HashSet::new();
@@ -118,9 +200,9 @@ impl EmoteRegistry {
         let mut broadcaster_id: Option<String> = None;
 
         if sources.twitch || sources.bttv || sources.seventv {
-            broadcaster_id = fetch_broadcaster_id(&client, &login, client_id, &bearer).await;
+            broadcaster_id = fetch_broadcaster_id(client, &login, client_id, &bearer).await;
             if broadcaster_id.is_none() {
-                broadcaster_id = fetch_broadcaster_id_fallback(&client, &login).await;
+                broadcaster_id = fetch_broadcaster_id_fallback(client, &login).await;
             }
             if broadcaster_id.is_none() {
                 warn!(
@@ -133,7 +215,7 @@ impl EmoteRegistry {
 
         if sources.twitch {
             if let Err(err) = fetch_twitch_emotes(
-                &client,
+                client,
                 client_id,
                 &bearer,
                 broadcaster_id.as_deref(),
@@ -148,7 +230,7 @@ impl EmoteRegistry {
         if sources.bttv {
             if let Some(id) = broadcaster_id.as_deref() {
                 if let Err(err) =
-                    fetch_bttv_emotes(&client, id, &mut bttv).await
+                    fetch_bttv_emotes(client, id, &mut bttv).await
                 {
                     warn!(target: "voicesub.twitch.emotes", error = %err, "bttv emote fetch failed");
                 }
@@ -158,14 +240,14 @@ impl EmoteRegistry {
         if sources.seventv {
             if let Some(id) = broadcaster_id.as_deref() {
                 if let Err(err) =
-                    fetch_seventv_emotes(&client, id, &mut seventv).await
+                    fetch_seventv_emotes(client, id, &mut seventv).await
                 {
                     warn!(target: "voicesub.twitch.emotes", error = %err, "7tv emote fetch failed");
                 }
             }
         }
 
-        let snapshot = EmoteSets {
+        let mut snapshot = EmoteSets {
             twitch,
             bttv,
             seventv,
@@ -175,25 +257,10 @@ impl EmoteRegistry {
             seventv_count: 0,
             last_refresh: Some(Instant::now()),
         };
-        let mut snapshot = snapshot;
         snapshot.twitch_count = snapshot.twitch.len();
         snapshot.bttv_count = snapshot.bttv.len();
         snapshot.seventv_count = snapshot.seventv.len();
-
-        if let Ok(mut guard) = self.inner.write() {
-            *guard = snapshot.clone();
-        }
-
-        info!(
-            target: "voicesub.twitch.emotes",
-            channel = %login,
-            twitch = snapshot.twitch_count,
-            bttv = snapshot.bttv_count,
-            seventv = snapshot.seventv_count,
-            "emote cache refreshed"
-        );
         Ok(snapshot)
-    }
 }
 
 fn normalize_bearer(token: &str) -> String {
@@ -506,5 +573,40 @@ mod tests {
         let sources = TwitchEmoteSources::default();
         let out = registry.clean_message_text("baleGIGA", None, &sources, false);
         assert_eq!(out, "");
+    }
+
+    #[test]
+    fn keeps_numeric_tokens_when_emote_cache_has_same_code() {
+        let registry = EmoteRegistry::new();
+        {
+            let mut guard = registry.inner.write().unwrap();
+            insert_third_party_code(&mut guard.bttv, "100");
+            insert_third_party_code(&mut guard.bttv, "5");
+            guard.twitch.insert("kappa".into());
+        }
+        let sources = TwitchEmoteSources::default();
+        let sample = "Kappa до 100 сделать 5ю и 42";
+        let out = registry.remove_emotes_from_text(sample, &sources, true);
+        assert_eq!(out, "до 100 сделать 5ю и 42");
+    }
+
+    #[test]
+    fn strips_emotes_and_unicode_emoji_while_preserving_digits() {
+        let registry = EmoteRegistry::new();
+        {
+            let mut guard = registry.inner.write().unwrap();
+            guard.twitch.insert("kappa".into());
+            insert_third_party_code(&mut guard.bttv, "OMEGALUL");
+        }
+        let sources = TwitchEmoteSources::default();
+        let input = format!("Kappa OMEGALUL gg {} 123 ok", '\u{1F600}');
+        let out = registry.clean_message_text(&input, None, &sources, true);
+        assert_eq!(out, "gg 123 ok");
+    }
+
+    #[test]
+    fn irc_emote_strip_leaves_surrounding_digits() {
+        let out = strip_irc_emotes("5 baleGIGA 100", "25:2-9");
+        assert_eq!(out, "5  100");
     }
 }

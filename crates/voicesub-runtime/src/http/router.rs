@@ -19,6 +19,7 @@ use super::openai::{list_models, recommended_models, usable_models};
 use super::profiles::{delete_profile, list_profiles, load_profile, save_profile};
 use super::runtime::{obs_url, runtime_start, runtime_status, runtime_stop};
 use super::settings::{settings_load, settings_save};
+use super::ui_sync::ui_sync;
 use super::state::HttpState;
 use super::tts_proxy::google_tts_proxy;
 use super::tts_python::{python_tts_proxy, python_tts_status};
@@ -55,6 +56,7 @@ pub fn build_router(state: Arc<HttpState>) -> Router {
         .route("/api/updates/check", post(check_updates))
         .route("/api/settings/load", get(settings_load))
         .route("/api/settings/save", post(settings_save))
+        .route("/api/ui/sync", post(ui_sync))
         .route("/api/logs/client-event", post(logs_client_event))
         .route("/api/logs/ui-trace", post(logs_ui_trace))
         .route("/api/tts/google", get(google_tts_proxy))

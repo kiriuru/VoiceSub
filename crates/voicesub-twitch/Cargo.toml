@@ -18,3 +18,24 @@ reqwest = { workspace = true }
 emojis = "0.8"
 regex = { version = "1", default-features = false, features = ["std", "unicode"] }
 whatlang = "0.16"
+lingua = { version = "1.8", default-features = false, features = [
+    "english",
+    "chinese",
+    "russian",
+    "spanish",
+    "portuguese",
+    "german",
+    "korean",
+    "french",
+    "japanese",
+    "turkish",
+    "hindi",
+    "italian",
+    "arabic",
+    "polish",
+    "indonesian",
+    "swedish",
+    "dutch",
+    "vietnamese",
+    "thai",
+] }

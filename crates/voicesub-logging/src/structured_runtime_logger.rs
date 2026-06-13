@@ -8,12 +8,13 @@ use serde_json::Value;
 
 use crate::compact_log_line::{format_structured_runtime_line, should_write_runtime_event};
 use crate::diagnostics::is_runtime_events_verbose_enabled;
+use crate::log_rotation::{rotate_if_needed, DEFAULT_BACKUP_COUNT, DEFAULT_MAX_BYTES};
 use crate::redaction::redact_mapping;
 use crate::structured_log_compact::compact_mapping_for_runtime_log;
 
 const LOG_FILE: &str = "runtime-events.log";
-const MAX_BYTES: u64 = 5 * 1024 * 1024;
-const BACKUP_COUNT: u32 = 2;
+const MAX_BYTES: u64 = DEFAULT_MAX_BYTES;
+const BACKUP_COUNT: u32 = DEFAULT_BACKUP_COUNT;
 
 #[derive(Debug)]
 pub struct StructuredRuntimeLogger {
@@ -93,26 +94,7 @@ impl StructuredRuntimeLogger {
     }
 
     fn rotate_if_needed_locked(&self, path: &Path) {
-        let Ok(meta) = fs::metadata(path) else {
-            return;
-        };
-        if meta.len() < MAX_BYTES {
-            return;
-        }
-        for index in (1..=BACKUP_COUNT).rev() {
-            let rotated = path.with_extension(format!("log.{index}"));
-            if !rotated.exists() {
-                continue;
-            }
-            if index >= BACKUP_COUNT {
-                let _ = fs::remove_file(&rotated);
-            } else {
-                let next = path.with_extension(format!("log.{}", index + 1));
-                let _ = fs::rename(&rotated, next);
-            }
-        }
-        let first = path.with_extension("log.1");
-        let _ = fs::rename(path, first);
+        rotate_if_needed(path, MAX_BYTES, BACKUP_COUNT);
     }
 }
 

@@ -2,6 +2,7 @@
 
 mod error;
 mod playback;
+mod process_stats;
 mod sonic_speed;
 mod trace;
 
@@ -14,6 +15,9 @@ mod platform;
 pub use error::AudioError;
 pub use playback::{
     PlaybackFinished, PlaybackHub, CHANNEL_SPEECH, CHANNEL_TWITCH, resolve_output_device,
+};
+pub use process_stats::{
+    collect_resource_telemetry, ProcessResourceSnapshot, ResourceTelemetry,
 };
 #[cfg(windows)]
 pub use platform::is_per_process_routing_enabled;

@@ -54,6 +54,11 @@ function toAppTranslationLine(line: {
   };
 }
 
+export function readFullLoggingEnabled(raw: ConfigPayload): boolean {
+  const config = normalizeConfigPayload(raw);
+  return config.logging?.full_enabled === true;
+}
+
 export function buildSpeechContextFromConfig(raw: ConfigPayload): AppSpeechContext {
   const config = normalizeConfigPayload(raw);
   const translation = config.translation || {};
@@ -75,6 +80,13 @@ export function applyUiThemeFromConfig(config: ConfigPayload): void {
   if (ui.palette) {
     applyUiPaletteToDocument(ui.palette);
   }
+}
+
+/** Live dashboard theme/locale sync without touching speech/translation settings. */
+export function applyDashboardUiPresentation(raw: ConfigPayload): void {
+  const config = normalizeConfigPayload(raw);
+  applyUiThemeFromConfig(config);
+  applyUiLocaleFromConfig(config);
 }
 
 export async function fetchSettingsPayload(): Promise<ConfigPayload> {

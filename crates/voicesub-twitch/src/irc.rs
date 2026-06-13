@@ -37,17 +37,29 @@ pub async fn run_session(
         .validate_for_connect()
         .map_err(TwitchError::InvalidSettings)?;
 
-    let channel = connect_settings.normalized_channel();
+    let channels = connect_settings.normalized_channels();
+    if channels.is_empty() {
+        return Err(TwitchError::InvalidSettings(
+            "at least one channel is required".into(),
+        ));
+    }
+    let channels_label = channels.join(", ");
+    let join_arg = channels.join(",");
     let nick = connect_settings.nick.trim().to_string();
     let pass = normalize_oauth_token(&connect_settings.oauth_token);
 
-    on_status("connecting", Some(&channel));
+    on_status("connecting", Some(&channels_label));
     trace::trace(
         "irc",
         "connect_start",
-        json!({ "channel": channel, "nick": nick }),
+        json!({ "channels": channels, "nick": nick }),
     );
-    info!(target: "voicesub.twitch", %channel, nick = %nick, "connecting to twitch irc");
+    info!(
+        target: "voicesub.twitch",
+        channels = %channels_label,
+        nick = %nick,
+        "connecting to twitch irc"
+    );
 
     let tcp = TcpStream::connect((TWITCH_IRC_HOST, TWITCH_IRC_PORT))
         .await
@@ -77,9 +89,9 @@ pub async fn run_session(
     .await?;
     send_line(&mut writer, &format!("PASS {pass}")).await?;
     send_line(&mut writer, &format!("NICK {nick}")).await?;
-    send_line(&mut writer, &format!("JOIN {channel}")).await?;
+    send_line(&mut writer, &format!("JOIN {join_arg}")).await?;
 
-    trace::trace("irc", "handshake_sent", json!({ "channel": channel }));
+    trace::trace("irc", "handshake_sent", json!({ "channels": channels }));
     let mut joined = false;
 
     loop {
@@ -110,9 +122,13 @@ pub async fn run_session(
 
                 if !joined && line.contains(" JOIN ") {
                     joined = true;
-                    on_status("connected", Some(&channel));
-                    info!(target: "voicesub.twitch", %channel, "twitch irc joined channel");
-                    trace::trace("irc", "joined", json!({ "channel": channel }));
+                    on_status("connected", Some(&channels_label));
+                    info!(
+                        target: "voicesub.twitch",
+                        channels = %channels_label,
+                        "twitch irc joined channel(s)"
+                    );
+                    trace::trace("irc", "joined", json!({ "channels": channels }));
                 }
 
                 if let Some(ping_payload) = line.strip_prefix("PING") {
@@ -147,7 +163,7 @@ pub async fn run_session(
                             user: &message.login,
                             display_name: &message.display_name,
                             text: &message.text,
-                            channel: &channel,
+                            channel: &message.channel,
                             is_mod: message.is_mod,
                             is_subscriber: message.is_subscriber,
                             irc_emotes_tag: emotes_tag,
@@ -188,7 +204,7 @@ pub async fn run_session(
     }
 
     on_status("disconnected", None);
-    trace::trace("irc", "session_end", json!({ "channel": channel }));
+    trace::trace("irc", "session_end", json!({ "channels": channels }));
     Ok(())
 }
 

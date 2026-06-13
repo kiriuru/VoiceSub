@@ -5,14 +5,6 @@
   import { createAudioPlayer, isNativePlaybackMode } from "./lib/audio-player";
   import { SpeechEngine } from "./lib/speech-engine";
   import {
-    isBrowserAudioOutputSupported,
-    isSetSinkIdSupported,
-    listBrowserAudioOutputs,
-    promptBrowserAudioOutput,
-    resolveBrowserAudioLabel,
-    type BrowserAudioOutput,
-  } from "./lib/browser-audio-output";
-  import {
     bindTtsWindowAudio,
     fetchAudioRoutingMode,
     loadTtsConfig,
@@ -20,6 +12,7 @@
     planSubtitleSpeech,
     resetSubtitlePlanner,
     fetchPythonTtsStatus,
+    fetchResourceTelemetry,
     setTtsAudioDevice,
     setTtsChannelAudioDevice,
     setTtsPlaybackMode,
@@ -29,8 +22,19 @@
     updateVoiceSettings,
     type TtsAudioRoutingMode,
   } from "./lib/tts-ipc";
+  import type { AudioOutputDevice } from "./lib/types";
   import { prependActivityLog } from "./lib/activity-log";
-  import { ttsTrace, ttsTraceText } from "./lib/tts-trace";
+  import {
+    findWatchedProcess,
+    formatCompactBytes,
+    formatHandleCount,
+    isResourceTelemetryWarning,
+    type ResourceTelemetry,
+  } from "./lib/resource-telemetry";
+  import { formatSpeechVolume } from "./lib/playback-format";
+  import { warmupTtsFetch } from "./lib/google-tts";
+  import { startTtsKeepalive, stopTtsKeepalive, updateTtsKeepalive } from "./lib/tts-keepalive";
+  import { ttsTrace, ttsTraceText, setTtsFullLoggingEnabled } from "./lib/tts-trace";
   import { buildTtsAudioUrl } from "./lib/google-tts";
   import {
     loadSampleLang,
@@ -38,9 +42,11 @@
     TTS_TEST_LANG_CODES,
   } from "./lib/tts-lang";
   import {
+    applyDashboardUiPresentation,
     applyUiThemeFromConfig,
     buildSpeechContextFromConfig,
-    fetchAppSpeechContext,
+    fetchSettingsPayload,
+    readFullLoggingEnabled,
   } from "./lib/app-settings";
   import {
     getActiveTranslationLines,
@@ -52,7 +58,12 @@
   import TwitchPanel from "./components/TwitchPanel.svelte";
   import { defaultTwitchSettings } from "./lib/twitch-defaults";
   import { tryCompleteExternalOAuthCallback } from "./lib/external-oauth-callback";
-  import { subscribeUiConfigSync, subscribeUiLocaleSync } from "../src/lib/ui-config-sync";
+  import {
+    subscribeUiConfigSync,
+    subscribeUiLocaleSync,
+    UI_CONFIG_WS_EVENT,
+    uiConfigFromWsPayload,
+  } from "../src/lib/ui-config-sync";
   import { normalizeConfigPayload } from "../src/lib/config-normalize";
   import { setLocale, t, locale, getLocale } from "../src/lib/i18n";
   import type { LocaleCode } from "../src/lib/types";
@@ -88,12 +99,10 @@
     speech: defaultSpeech(),
     twitch: defaultTwitchSettings(),
   });
-  let audioOutputs = $state<BrowserAudioOutput[]>([
+  let audioOutputs = $state<AudioOutputDevice[]>([
     { id: "", label: "", is_default: true },
   ]);
   let audioRoutingMode = $state<TtsAudioRoutingMode>("browser");
-  let setSinkSupported = isSetSinkIdSupported();
-  let browserAudioSupported = isBrowserAudioOutputSupported();
   let sampleText = $state("");
   let sampleTextIsDefault = $state(true);
   let sampleLang = $state("en");
@@ -109,6 +118,10 @@
   let wsStatus = $state<WsConnectionStatus>("disconnected");
   let runtime = $state<RuntimeStatus | null>(null);
   let pythonStatus = $state<PythonTtsStatus | null>(null);
+  let resourceTelemetry = $state<ResourceTelemetry | null>(null);
+  let telemetryHelpOpen = $state(false);
+  let telemetryHelpTriggerEl = $state<HTMLButtonElement | null>(null);
+  let telemetryHelpPos = $state({ top: 0, left: 0 });
   const initialEngineConfig = (): TtsConfig => ({
     enabled: true,
     tts_provider: "browser_google",
@@ -132,13 +145,14 @@
   );
 
   function syncEnginesFromConfig(cfg: TtsConfig) {
-    const mode = cfg.playback_mode ?? "browser";
+    const mode = cfg.playback_mode ?? "native";
     speechEngine.setPlayer(createAudioPlayer("speech", mode));
     twitchEngine.setPlayer(createAudioPlayer("twitch", mode));
     speechEngine.setConfig(cfg);
     twitchEngine.setConfig(cfg);
     speechEngine.setEnabled(cfg.enabled);
     twitchEngine.setEnabled(cfg.enabled);
+    refreshKeepaliveContext();
   }
 
   function clearAllEngines() {
@@ -148,6 +162,7 @@
 
   let socket: EventsSocket | null = null;
   let runtimeTimer: ReturnType<typeof setInterval> | null = null;
+  let resourceTelemetryTimer: ReturnType<typeof setInterval> | null = null;
   let settingsTimer: ReturnType<typeof setTimeout> | null = null;
   let speechContextTimer: ReturnType<typeof setInterval> | null = null;
   let unsubscribeUiSync: (() => void) | null = null;
@@ -157,6 +172,10 @@
   let subtitlePayloadTask: Promise<void> = Promise.resolve();
 
   const activeTranslationLines = $derived(getActiveTranslationLines(appSpeech));
+  const obsResourceTelemetry = $derived(findWatchedProcess(resourceTelemetry, "obs64.exe"));
+  const shellResourceTelemetry = $derived(
+    findWatchedProcess(resourceTelemetry, "voicesub-app.exe"),
+  );
   let currentLocale = $state<LocaleCode>(getLocale());
 
   $effect(() => {
@@ -170,6 +189,26 @@
     return t(key, vars, currentLocale);
   }
 
+  function toggleTelemetryHelp(event: MouseEvent) {
+    event.stopPropagation();
+    if (telemetryHelpOpen) {
+      telemetryHelpOpen = false;
+      return;
+    }
+    if (telemetryHelpTriggerEl) {
+      const rect = telemetryHelpTriggerEl.getBoundingClientRect();
+      telemetryHelpPos = {
+        top: rect.bottom + 6,
+        left: rect.left,
+      };
+    }
+    telemetryHelpOpen = true;
+  }
+
+  function closeTelemetryHelp() {
+    telemetryHelpOpen = false;
+  }
+
   function applyDashboardLocale(next: LocaleCode) {
     if (getLocale() === next) {
       if (sampleTextIsDefault) {
@@ -181,6 +220,14 @@
     if (sampleTextIsDefault) {
       refreshDefaultSampleText();
     }
+  }
+
+  function refreshKeepaliveContext() {
+    updateTtsKeepalive({
+      runtimeActive: isRuntimeActive(runtime),
+      ttsEnabled: config.enabled,
+      enginesBusy: speechEngine.isBusy() || twitchEngine.isBusy(),
+    });
   }
 
   function handleSpeechEngineEvent(
@@ -200,6 +247,7 @@
       error = event.message;
       status = tr("tts.status.error");
     }
+    refreshKeepaliveContext();
   }
 
   function handleTwitchEngineEvent(
@@ -217,6 +265,7 @@
       error = event.message;
       status = tr("tts.status.error");
     }
+    refreshKeepaliveContext();
   }
 
   const unsubscribeSpeech = speechEngine.on(handleSpeechEngineEvent);
@@ -262,8 +311,13 @@
     }
   }
 
+  function applyDashboardUiSync(partial: ConfigPayload) {
+    applyDashboardUiPresentation(partial);
+  }
+
   function applyDashboardConfigPayload(raw: ConfigPayload) {
     const payload = normalizeConfigPayload(raw);
+    setTtsFullLoggingEnabled(readFullLoggingEnabled(payload));
     applyUiThemeFromConfig(payload);
     applyUiLocaleFromConfig(payload);
     const context = buildSpeechContextFromConfig(payload);
@@ -276,16 +330,19 @@
 
   async function refreshSpeechContext() {
     try {
-      applySpeechContext(await fetchAppSpeechContext());
+      const payload = await fetchSettingsPayload();
+      setTtsFullLoggingEnabled(readFullLoggingEnabled(payload));
+      applySpeechContext(buildSpeechContextFromConfig(payload));
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       ttsTrace("speech", "context_refresh_error", { message });
     }
   }
 
-  const nativePlayback = $derived(isNativePlaybackMode(config.playback_mode));
   const NATIVE_DEVICE_HINT_KEY = "voicesub-tts-native-hint-dismissed";
   let nativeDeviceHint = $state(false);
+
+  const nativePlayback = $derived(isNativePlaybackMode(config.playback_mode));
 
   function refreshNativeDeviceHint(cfg: TtsConfig) {
     if (!isNativePlaybackMode(cfg.playback_mode)) {
@@ -318,16 +375,12 @@
   async function refreshAudioOutputs() {
     try {
       audioRoutingMode = await fetchAudioRoutingMode();
-      if (nativePlayback || audioRoutingMode === "winapi") {
-        const rustDevices = await listRustOutputDevices();
-        audioOutputs = rustDevices.map((device) => ({
-          id: device.id,
-          label: device.label,
-          is_default: device.is_default,
-        }));
-      } else {
-        audioOutputs = await listBrowserAudioOutputs();
-      }
+      const rustDevices = await listRustOutputDevices();
+      audioOutputs = rustDevices.map((device) => ({
+        id: device.id,
+        label: device.label,
+        is_default: device.is_default,
+      }));
       const selected = audioOutputs.find(
         (device) => device.id === (config.audio_output_device_id || ""),
       );
@@ -336,10 +389,8 @@
           ...audioOutputs,
           {
             id: config.audio_output_device_id,
-            label:
-              config.audio_output_device_label ||
-              (await resolveBrowserAudioLabel(config.audio_output_device_id)) ||
-              tr("tts.module.saved_output"),
+            label: config.audio_output_device_label || tr("tts.module.saved_output"),
+            is_default: false,
           },
         ];
       }
@@ -363,6 +414,14 @@
     }
   }
 
+  async function refreshResourceTelemetry() {
+    try {
+      resourceTelemetry = await fetchResourceTelemetry();
+    } catch {
+      resourceTelemetry = null;
+    }
+  }
+
   async function refreshRuntime() {
     const wasActive = runtimeWasActive;
     try {
@@ -379,6 +438,7 @@
       if (config.enabled) status = tr("tts.status.listening");
     }
     runtimeWasActive = isActive;
+    refreshKeepaliveContext();
   }
 
   async function handleSubtitlePayload(payload: Record<string, unknown>) {
@@ -454,10 +514,7 @@
     socket?.disconnect();
     socket = new EventsSocket(
       async (message) => {
-        if (
-          message.type === "subtitle_payload_update" ||
-          message.type === "overlay_update"
-        ) {
+        if (message.type === "subtitle_payload_update") {
           const payload = (message.payload || {}) as Record<string, unknown>;
           scheduleSubtitlePayload(payload);
         }
@@ -471,6 +528,12 @@
             (message.payload || {}) as import("./lib/types").TwitchConnectionStatus,
           );
         }
+        if (message.type === UI_CONFIG_WS_EVENT) {
+          const partial = uiConfigFromWsPayload(message.payload);
+          if (partial) {
+            applyDashboardUiSync(partial);
+          }
+        }
         if (message.type === "runtime_update" || message.type === "runtime_status") {
           const wasActive = runtimeWasActive;
           runtime = { ...(runtime || {}), ...(message.payload as RuntimeStatus) };
@@ -482,6 +545,7 @@
             activity = [];
           }
           runtimeWasActive = isActive;
+          refreshKeepaliveContext();
         }
       },
       (next) => {
@@ -498,6 +562,8 @@
     }
 
     ttsTrace("app", "mount", {});
+    startTtsKeepalive();
+    warmupTtsFetch();
     status = tr("tts.status.loading");
     refreshDefaultSampleText();
     sampleLang = loadSampleLang(appSpeech.sourceLang || "en");
@@ -556,13 +622,19 @@
       await refreshSpeechContext();
       await refreshPythonStatus();
       await refreshRuntime();
+      await refreshResourceTelemetry();
       runtimeWasActive = isRuntimeActive(runtime);
       connectWs();
       runtimeTimer = setInterval(() => void refreshRuntime(), 3000);
+      refreshKeepaliveContext();
+      resourceTelemetryTimer = setInterval(() => void refreshResourceTelemetry(), 30_000);
       speechContextTimer = setInterval(() => void refreshSpeechContext(), 5000);
-      unsubscribeUiSync = subscribeUiConfigSync((payload) => {
-        applyDashboardConfigPayload(payload);
-      });
+      unsubscribeUiSync = subscribeUiConfigSync(
+        (partial) => {
+          applyDashboardUiSync(partial);
+        },
+        { enableWebSocket: false },
+      );
       unsubscribeUiLocale = subscribeUiLocaleSync((next) => {
         applyDashboardLocale(next);
       });
@@ -584,6 +656,9 @@
 
   onDestroy(() => {
     ttsTrace("app", "destroy", {});
+    stopTtsKeepalive();
+    speechEngine.dispose();
+    twitchEngine.dispose();
     unsubscribeSpeech();
     unsubscribeTwitch();
     unsubscribeUiSync?.();
@@ -593,6 +668,7 @@
     clearAllEngines();
     socket?.disconnect();
     if (runtimeTimer) clearInterval(runtimeTimer);
+    if (resourceTelemetryTimer) clearInterval(resourceTelemetryTimer);
     if (speechContextTimer) clearInterval(speechContextTimer);
     if (settingsTimer) clearTimeout(settingsTimer);
   });
@@ -613,43 +689,6 @@
       });
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);
-    }
-  }
-
-  async function handlePlaybackModeChange(event: Event) {
-    const target = event.target as HTMLSelectElement;
-    const mode = target.value === "native" ? "native" : "browser";
-    try {
-      config = await setTtsPlaybackMode(mode);
-      syncEnginesFromConfig(config);
-      refreshNativeDeviceHint(config);
-      await refreshAudioOutputs();
-      status = tr("tts.status.playback_mode_updated");
-      error = "";
-      ttsTrace("audio", "playback_mode", { mode });
-    } catch (err) {
-      error = err instanceof Error ? err.message : String(err);
-    }
-  }
-
-  async function handleBrowseAudioOutput() {
-    if (!browserAudioSupported) {
-      error = tr("tts.module.picker_unsupported");
-      return;
-    }
-    try {
-      const device = await promptBrowserAudioOutput();
-      if (!device) return;
-      config = await setTtsAudioDevice(device.deviceId, device.label);
-      syncEnginesFromConfig(config);
-      await refreshAudioOutputs();
-      status = tr("tts.status.audio_updated");
-      error = "";
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      if (!/abort|cancel/i.test(message)) {
-        error = message;
-      }
     }
   }
 
@@ -709,6 +748,22 @@
     }
   }
 
+  async function handlePlaybackModeChange(event: Event) {
+    const target = event.target as HTMLSelectElement;
+    const mode = target.value === "sonic" ? "sonic" : "native";
+    try {
+      config = await setTtsPlaybackMode(mode);
+      syncEnginesFromConfig(config);
+      refreshNativeDeviceHint(config);
+      await refreshAudioOutputs();
+      status = tr("tts.status.playback_mode_updated");
+      error = "";
+      ttsTrace("audio", "playback_mode", { mode });
+    } catch (err) {
+      error = err instanceof Error ? err.message : String(err);
+    }
+  }
+
   function handleSampleLangChange() {
     saveSampleLang(sampleLang);
   }
@@ -758,6 +813,14 @@
     const num = slotId.replace(/\D+/g, "") || "?";
     return tr("tts.speech.line_fallback", { num });
   }
+
+  function selectTab(next: TtsTab) {
+    tab = next;
+    queueMicrotask(() => {
+      const targetId = next === "twitch" ? "tts-panel-twitch" : "tts-panel-speech";
+      document.getElementById(targetId)?.scrollIntoView({ block: "start" });
+    });
+  }
 </script>
 
 {#if externalOAuthDone}
@@ -779,6 +842,59 @@
       <div>
         <div class="tts-chrome__title">{tr("tts.module.title")}</div>
         <div class="tts-chrome__subtitle">{tr("tts.module.version", { version })}</div>
+        {#if resourceTelemetry}
+          <div class="tts-chrome__telemetry" role="status">
+            <span
+              class="tts-telemetry-chip"
+              class:warn={isResourceTelemetryWarning(resourceTelemetry.self_process)}
+              title={tr("tts.telemetry.tts_title")}
+            >
+              {tr("tts.telemetry.tts_label")}:
+              {formatHandleCount(resourceTelemetry.self_process.handle_count)}
+              {tr("tts.telemetry.handles")} ·
+              {formatCompactBytes(resourceTelemetry.self_process.commit_bytes)}
+              {tr("tts.telemetry.commit")}
+            </span>
+            {#if shellResourceTelemetry}
+              <span
+                class="tts-telemetry-chip"
+                class:warn={isResourceTelemetryWarning(shellResourceTelemetry)}
+                title={tr("tts.telemetry.shell_title")}
+              >
+                {tr("tts.telemetry.shell_label")}:
+                {formatHandleCount(shellResourceTelemetry.handle_count)}
+                {tr("tts.telemetry.handles")} ·
+                {formatCompactBytes(shellResourceTelemetry.commit_bytes)}
+                {tr("tts.telemetry.commit")}
+              </span>
+            {/if}
+            {#if obsResourceTelemetry}
+              <span
+                class="tts-telemetry-chip"
+                class:warn={isResourceTelemetryWarning(obsResourceTelemetry)}
+                title={tr("tts.telemetry.obs_title")}
+              >
+                {tr("tts.telemetry.obs_label")}:
+                {formatHandleCount(obsResourceTelemetry.handle_count)}
+                {tr("tts.telemetry.handles")} ·
+                {formatCompactBytes(obsResourceTelemetry.commit_bytes)}
+                {tr("tts.telemetry.commit")}
+              </span>
+            {/if}
+            <span class="tts-telemetry-help">
+              <button
+                type="button"
+                class="tts-telemetry-help-trigger"
+                bind:this={telemetryHelpTriggerEl}
+                aria-label={tr("tts.telemetry.help_trigger")}
+                aria-expanded={telemetryHelpOpen}
+                onclick={toggleTelemetryHelp}
+              >
+                ?
+              </button>
+            </span>
+          </div>
+        {/if}
       </div>
     </div>
     <div class="tts-chrome__actions">
@@ -792,7 +908,6 @@
           class="control control-sm"
           value={config.audio_output_device_id || ""}
           onchange={(e) => void handleAudioDeviceChange(e)}
-          disabled={!nativePlayback && audioRoutingMode === "browser" && !setSinkSupported}
         >
           {#each audioOutputs as device (device.id || "default")}
             <option value={device.id}>{device.label}</option>
@@ -803,24 +918,13 @@
         <span class="sr-only">{tr("tts.module.playback_mode")}</span>
         <select
           class="control control-sm"
-          value={config.playback_mode || "browser"}
+          value={config.playback_mode === "sonic" ? "sonic" : "native"}
           onchange={(e) => void handlePlaybackModeChange(e)}
         >
           <option value="native">{tr("tts.module.playback_mode.native")}</option>
-          <option value="browser">{tr("tts.module.playback_mode.browser")}</option>
+          <option value="sonic">{tr("tts.module.playback_mode.sonic")}</option>
         </select>
       </label>
-      {#if !nativePlayback && audioRoutingMode === "browser"}
-        <button
-          type="button"
-          class="btn btn-ghost btn-sm"
-          disabled={!browserAudioSupported}
-          title={tr("tts.module.browse_audio_title")}
-          onclick={() => void handleBrowseAudioOutput()}
-        >
-          {tr("tts.module.browse_audio")}
-        </button>
-      {/if}
     </div>
   </header>
 
@@ -838,7 +942,7 @@
       type="button"
       class="tab-btn"
       class:active={tab === "speech"}
-      onclick={() => (tab = "speech")}
+      onclick={() => selectTab("speech")}
     >
       {tr("tts.tab.speech")}
     </button>
@@ -846,13 +950,14 @@
       type="button"
       class="tab-btn"
       class:active={tab === "twitch"}
-      onclick={() => (tab = "twitch")}
+      onclick={() => selectTab("twitch")}
     >
       {tr("tts.tab.twitch")}
     </button>
   </nav>
 
   <section
+    id="tts-panel-speech"
     class="glass-panel bento-tile panel-padding stack"
     hidden={tab !== "speech"}
     aria-hidden={tab !== "speech"}
@@ -966,21 +1071,35 @@
           />
         </label>
 
-        <label class="stack-field">
-          <span>{tr("tts.speech.rate")}</span>
-          <input
-            type="range"
-            min="0.5"
-            max="2"
-            step="0.05"
-            bind:value={config.speech_rate}
-            onchange={() => void persistVoiceSettings()}
-          />
-        </label>
+        {#if !nativePlayback}
+          <label class="stack-field stack-field--range">
+            <span class="stack-field__label-row">
+              <span>{tr("tts.speech.rate")}</span>
+              <output class="stack-field__value" for="tts-speech-rate">
+                {config.speech_rate.toFixed(2)}×
+              </output>
+            </span>
+            <input
+              id="tts-speech-rate"
+              type="range"
+              min="0.5"
+              max="2"
+              step="0.05"
+              bind:value={config.speech_rate}
+              onchange={() => void persistVoiceSettings()}
+            />
+          </label>
+        {/if}
 
-        <label class="stack-field">
-          <span>{tr("tts.speech.volume")}</span>
+        <label class="stack-field stack-field--range">
+          <span class="stack-field__label-row">
+            <span>{tr("tts.speech.volume")}</span>
+            <output class="stack-field__value" for="tts-speech-volume">
+              {formatSpeechVolume(config.speech_volume)}
+            </output>
+          </span>
           <input
+            id="tts-speech-volume"
             type="range"
             min="0"
             max="1"
@@ -1050,14 +1169,14 @@
       {/if}
   </section>
 
-  <div hidden={tab !== "twitch"} aria-hidden={tab !== "twitch"}>
+  <div id="tts-panel-twitch" hidden={tab !== "twitch"} aria-hidden={tab !== "twitch"}>
     <TwitchPanel
       bind:this={twitchPanel}
       bind:twitch={config.twitch}
       moduleEnabled={config.enabled}
       moduleSpeechRate={config.speech_rate}
       moduleSpeechVolume={config.speech_volume}
-      playbackMode={config.playback_mode ?? "browser"}
+      playbackMode={config.playback_mode ?? "native"}
       audioOutputs={audioOutputs}
       onTwitchConfigSaved={(next) => {
         config = { ...config, twitch: next };
@@ -1066,5 +1185,32 @@
       }}
     />
   </div>
+
+  {#if telemetryHelpOpen}
+    <button
+      type="button"
+      class="tts-telemetry-help-backdrop"
+      aria-label={tr("tts.telemetry.help_close")}
+      tabindex="-1"
+      onclick={closeTelemetryHelp}
+    ></button>
+    <div
+      class="tts-telemetry-help-popover"
+      role="dialog"
+      aria-labelledby="tts-telemetry-help-title"
+      style:top="{telemetryHelpPos.top}px"
+      style:left="{telemetryHelpPos.left}px"
+      onclick={(event) => event.stopPropagation()}
+    >
+      <p id="tts-telemetry-help-title" class="tts-telemetry-help-popover__title">
+        {tr("tts.telemetry.help_title")}
+      </p>
+      <p>{tr("tts.telemetry.help_intro")}</p>
+      <p>{tr("tts.telemetry.help_handles")}</p>
+      <p>{tr("tts.telemetry.help_commit")}</p>
+      <p>{tr("tts.telemetry.help_warn")}</p>
+      <p>{tr("tts.telemetry.help_processes")}</p>
+    </div>
+  {/if}
 </div>
 {/if}

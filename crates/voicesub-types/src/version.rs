@@ -3,7 +3,7 @@
 use serde_json::{json, Value};
 
 /// Product version — single source until crate-only policy is enforced.
-pub const PROJECT_VERSION: &str = "0.5.0";
+pub const PROJECT_VERSION: &str = "0.5.1";
 pub const RELEASE_TRACK: &str = "stable";
 pub const DEFAULT_UPDATE_PROVIDER: &str = "github_releases";
 pub const DEFAULT_RELEASE_CHANNEL: &str = "stable";
@@ -281,16 +281,78 @@ mod tests {
     }
 
     #[test]
+    fn voicesub_patch_and_minor_bumps_trigger_update() {
+        assert!(is_remote_version_newer("0.5.1", "0.5.2"));
+        assert!(is_remote_version_newer("0.5.1", "0.6.0"));
+        assert!(!is_remote_version_newer("0.5.1", "0.5.1"));
+        assert!(!is_remote_version_newer("0.5.1", "0.5.0"));
+        assert!(!is_remote_version_newer(PROJECT_VERSION, PROJECT_VERSION));
+    }
+
+    #[test]
+    fn build_version_payload_no_update_when_github_behind_local() {
+        let payload = build_version_info_payload(Some(&json!({
+            "updates": {
+                "enabled": true,
+                "provider": "github_releases",
+                "github_repo": "kiriuru/stream_sub_translator",
+                "latest_known_version": "0.5.0"
+            }
+        })));
+        assert_eq!(payload["current_version"], PROJECT_VERSION);
+        assert_eq!(payload["sync"]["update_available"], false);
+    }
+
+    #[test]
+    fn github_releases_pick_highest_0_5_x_and_trigger_update() {
+        let releases = json!([
+            {
+                "tag_name": "v0.5.0",
+                "draft": false,
+                "prerelease": false,
+                "html_url": "https://github.com/kiriuru/stream_sub_translator/releases/tag/v0.5.0"
+            },
+            {
+                "tag_name": "v0.5.2",
+                "draft": false,
+                "prerelease": false,
+                "html_url": "https://github.com/kiriuru/stream_sub_translator/releases/tag/v0.5.2"
+            }
+        ]);
+        let (latest, _, url) = extract_latest_github_release(&releases, "stable");
+        assert_eq!(latest.as_deref(), Some("0.5.2"));
+        assert_eq!(
+            url.as_deref(),
+            Some("https://github.com/kiriuru/stream_sub_translator/releases/tag/v0.5.2")
+        );
+        assert!(is_remote_version_newer(PROJECT_VERSION, latest.as_deref().unwrap()));
+
+        let payload = build_version_info_payload(Some(&json!({
+            "updates": {
+                "enabled": true,
+                "provider": "github_releases",
+                "github_repo": "kiriuru/stream_sub_translator",
+                "latest_known_version": latest
+            }
+        })));
+        assert_eq!(payload["sync"]["update_available"], true);
+        assert_eq!(
+            payload["sync"]["release_url"],
+            "https://github.com/kiriuru/stream_sub_translator/releases/tag/v0.5.2"
+        );
+    }
+
+    #[test]
     fn build_version_payload_exposes_update_available() {
         let payload = build_version_info_payload(Some(&json!({
             "updates": {
                 "enabled": true,
                 "provider": "github_releases",
                 "github_repo": "example/repo",
-                "latest_known_version": "0.5.1"
+                "latest_known_version": "0.5.2"
             }
         })));
-        assert_eq!(payload["current_version"], "0.5.0");
+        assert_eq!(payload["current_version"], "0.5.1");
         assert_eq!(payload["sync"]["update_available"], true);
     }
 

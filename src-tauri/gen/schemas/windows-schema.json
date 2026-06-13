@@ -189,6 +189,12 @@
           "markdownDescription": "Enables the open_external_https_url command without any pre-configured scope."
         },
         {
+          "description": "Enables the open_local_http_url command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-open-local-http-url",
+          "markdownDescription": "Enables the open_local_http_url command without any pre-configured scope."
+        },
+        {
           "description": "Enables the set_dashboard_layout command without any pre-configured scope.",
           "type": "string",
           "const": "allow-set-dashboard-layout",
@@ -225,6 +231,12 @@
           "markdownDescription": "Enables the tts_channel_finish command without any pre-configured scope."
         },
         {
+          "description": "Enables the tts_channel_force_idle command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-tts-channel-force-idle",
+          "markdownDescription": "Enables the tts_channel_force_idle command without any pre-configured scope."
+        },
+        {
           "description": "Enables the tts_channel_snapshot command without any pre-configured scope.",
           "type": "string",
           "const": "allow-tts-channel-snapshot",
@@ -247,6 +259,12 @@
           "type": "string",
           "const": "allow-tts-get-config",
           "markdownDescription": "Enables the tts_get_config command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the tts_get_resource_telemetry command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-tts-get-resource-telemetry",
+          "markdownDescription": "Enables the tts_get_resource_telemetry command without any pre-configured scope."
         },
         {
           "description": "Enables the tts_list_output_devices command without any pre-configured scope.",
@@ -387,6 +405,12 @@
           "markdownDescription": "Denies the open_external_https_url command without any pre-configured scope."
         },
         {
+          "description": "Denies the open_local_http_url command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-open-local-http-url",
+          "markdownDescription": "Denies the open_local_http_url command without any pre-configured scope."
+        },
+        {
           "description": "Denies the set_dashboard_layout command without any pre-configured scope.",
           "type": "string",
           "const": "deny-set-dashboard-layout",
@@ -423,6 +447,12 @@
           "markdownDescription": "Denies the tts_channel_finish command without any pre-configured scope."
         },
         {
+          "description": "Denies the tts_channel_force_idle command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-tts-channel-force-idle",
+          "markdownDescription": "Denies the tts_channel_force_idle command without any pre-configured scope."
+        },
+        {
           "description": "Denies the tts_channel_snapshot command without any pre-configured scope.",
           "type": "string",
           "const": "deny-tts-channel-snapshot",
@@ -445,6 +475,12 @@
           "type": "string",
           "const": "deny-tts-get-config",
           "markdownDescription": "Denies the tts_get_config command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the tts_get_resource_telemetry command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-tts-get-resource-telemetry",
+          "markdownDescription": "Denies the tts_get_resource_telemetry command without any pre-configured scope."
         },
         {
           "description": "Denies the tts_list_output_devices command without any pre-configured scope.",

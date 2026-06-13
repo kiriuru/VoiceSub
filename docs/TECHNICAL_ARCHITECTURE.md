@@ -1,6 +1,6 @@
-# VoiceSub 0.5.0 — Технический документ
+# VoiceSub 0.5.1 — Технический документ
 
-Актуально для линии кода, где `voicesub-types::PROJECT_VERSION = "0.5.0"`.
+Актуально для линии кода, где `voicesub-types::PROJECT_VERSION = "0.5.1"`.
 
 Этот документ описывает реальный layout проекта VoiceSub, контракт HTTP/WebSocket/Tauri IPC, схему конфигурации, поток данных через Rust runtime и поверхности frontend. Документ — **канонический полный technical reference** для активной разработки. README — короткий обзор продукта; CHANGELOG — история релизов; инженерный контракт — `docs/VOICESUB_ENGINEERING_CONTRACT.ru.md`; roadmap — `docs/plans/voicesub_roadmap.ru.md`.
 
@@ -124,7 +124,7 @@ Tauri dev: embedded HTTP на `http://127.0.0.1:8765`; main webview открыв
 - опциональный **TTS-модуль** (озвучка субтитров, Twitch chat TTS);
 - экспорт diagnostics ZIP и client-side trace logs.
 
-**Core 0.5.0 не включает:** локальный Parakeet ASR, Remote mode, experimental browser routes — код архивирован в `legacy/`, не поднимается active runtime.
+**Core 0.5.0 не включает:** локальный Parakeet ASR, experimental browser routes — код архивирован в `legacy/`, не поднимается active runtime.
 
 Жёсткие границы:
 
@@ -272,7 +272,7 @@ src-tauri (Layer 4: IPC, window, bundle only)
 | `voicesub-obs` | OBS WebSocket closed captions client |
 | `voicesub-audio` | WinAPI audio routing helpers (TTS) |
 | `voicesub-tts` | TTS service, queue, Twitch IRC, OAuth bridge |
-| `voicesub-twitch` | Twitch chat pipeline (emotes, filters, replacements) |
+| `voicesub-twitch` | Twitch IRC (до 5 каналов), emotes, links/symbols filters, Lingua lang detect, `apply_settings` hot-apply |
 | `voicesub-runtime` | `RuntimeService`, HTTP router, transcript controller, session wiring |
 
 **Правило:** бизнес-логика не живёт в `src-tauri/`; Tauri — IPC + lifecycle hooks only.
@@ -314,7 +314,7 @@ Embedded HTTP server: dedicated Tokio runtime в Tauri process; bind из `AppCo
 | --- | --- |
 | `config_version` | Schema version (migrate on load) |
 | `profile` | Active profile name |
-| `ui` | `language`, `layout`, `theme`, `palette`, `show_remote_tools`, `show_translation_results` |
+| `ui` | `language`, `layout`, `theme`, `palette`, `show_translation_results` |
 | `source_lang` | ASR source (`auto` default) |
 | `targets` | Legacy target list (import compatibility) |
 | `asr` | `mode` + `browser` tuning |
@@ -339,7 +339,7 @@ Embedded HTTP server: dedicated Tokio runtime в Tauri process; bind из `AppCo
 `ConfigStore::import_sst_json_file` / load с `config_version < 8`:
 
 1. `migrate_sst_payload` — version steps, build `translation.lines` from legacy `targets`
-2. `apply_voicesub_import_rules` — strip SST-only keys (`remote`, RNNoise, model fields, …)
+2. `apply_voicesub_import_rules` — strip SST-only keys (RNNoise, model fields, …)
 3. `repair_legacy_keep_completed_false` + `normalize_config_payload`
 
 Удалённые providers (например `mymemory`) → fallback `google_translate_v2`.
@@ -509,7 +509,7 @@ Payload enrichment: `event_sequence`, `created_at_ms`, `event_type` (`WsEventPub
 | `tts_get_config` | Load TTS config |
 | `tts_set_provider` / `tts_set_enabled` | Provider toggle |
 | `tts_set_audio_device` / `tts_set_channel_audio_device` | Speech / Twitch audio output |
-| `tts_set_playback_mode` | `native` (Rust/cpal) vs `browser` (HTMLAudioElement) |
+| `tts_set_playback_mode` | `native` (cpal @ 1.0×) или `sonic` (libsonic); legacy `browser` → `sonic` при load |
 | `tts_play_audio` / `tts_stop_channel` | Native MP3 playback per channel |
 | `tts_list_output_devices` | WASAPI enumeration (label-first for native) |
 | `tts_get_audio_routing` / `tts_bind_window_audio` | Legacy WinAPI per-process routing (single device) |
@@ -588,7 +588,13 @@ Verbose runtime-events: `VOICESUB_TRACE_RUNTIME_EVENTS_VERBOSE`.
 - Edge: `--disable-sync`, `--allow-browser-signin=false`; **never** `--disable-extensions` / `--bwsi`
 - **No** `--app`, hidden windows, in-tab worker
 - Anti-throttling Chrome flags + Windows EcoQoS opt-out (port from SST `browser_worker_launcher.py`)
-- Detached high-priority process; stop via `taskkill /T /F`
+- Detached high-priority process; stop via `taskkill /T /F` (только при реальном `pid > 0`)
+
+### Test harness (без spawn Chrome)
+
+- `voicesub-browser::browser_worker_launch_skipped()` — `cfg(test)` в unit-тестах crate + env `VOICESUB_SKIP_BROWSER_WORKER=1`
+- Integration tests (`voicesub-http/tests/`, `voicesub-runtime/tests/`) выставляют skip в `integration_lock()` — зависимости собираются **без** `cfg(test)`
+- Stub launch: `pid: 0`, `worker_pid = None`; опционально `VOICESUB_FORCE_BROWSER_WORKER=1` для ручной проверки
 
 ### Worker frontend (`src-worker/`)
 
@@ -731,18 +737,34 @@ Shipped as **module** under `bin/modules/tts/` + Svelte UI at `/tts`.
 | `speech` | `subtitle_payload` → `tts_plan_subtitle_speech` | `speechEngine` | root `audio_output_device_*` |
 | `twitch` | `twitch_chat` (WS) | `twitchEngine` | `[twitch].audio_output_device_*` |
 
-Очередь и prefetch MP3 остаются в `src-tts/lib/speech-engine.ts` + `google-tts.ts`. Rust `SpeechQueue` / `tts_enqueue` — legacy prototype, не участвуют в playback.
+Очередь и prefetch MP3 — `src-tts/lib/speech-engine.ts` + `google-tts.ts`. Воспроизведение — **только native path** (`tts_play_audio` / `PlaybackHub`); `HtmlAudioPlayer` удалён в 0.5.1.
 
 ### Playback modes (`playback_mode` in `user-data/modules/tts/config.toml`)
 
 | Mode | Механизм | Когда |
 | --- | --- | --- |
-| `browser` (default) | `HTMLAudioElement` + `setSinkId` | Fallback, регрессия |
-| `native` | `PlaybackHub` (rodio/cpal), IPC `tts_play_audio` | Production dual sink |
+| `native` (default) | `PlaybackHub` (cpal) @ 1.0×, IPC `tts_play_audio` | Минимальная задержка |
+| `sonic` | libsonic tempo stretch, pitch-preserving rate | Очередь / rate boost |
+| `browser` (legacy) | — | **Мигрирует в `sonic`** при загрузке config |
 
-Событие Tauri: `playback-finished` `{ channel, item_id, ok, error? }` — завершение клипа на native path.
+Событие Tauri: `playback-finished` `{ channel, item_id, ok, error? }`.
 
-Устройства в native mode: **label-first** (WASAPI friendly name → `cpal::Device`). Список — `tts_list_output_devices`.
+Устройства: **label-first** (WASAPI friendly name → `cpal::Device`). Список — `tts_list_output_devices`.
+
+### Twitch IRC и фильтры (`voicesub-twitch`)
+
+| Аспект | Поведение |
+| --- | --- |
+| Каналы | До **5** логинов в `TwitchTtsSettings.channels`; IRC `JOIN #a,#b,…`; legacy `channel` → `channels[0]` |
+| Hot-apply | `TwitchChatService.apply_settings()` на `tts_update_twitch_settings` — без reconnect для фильтров |
+| Emotes | Twitch IRC tag + BTTV/7TV/Twitch lexical; **чисто числовые токены** не матчатся как emote codes |
+| Emoji strip | `strip_unicode_emoji` сохраняет decimal digits (ASCII / Arabic-Indic / Fullwidth); `\p{Emoji}` не съедает `0–9` в тексте |
+| Links | `links.rs` + двойной `strip_links` в pipeline; link-only → `speakable: false` |
+| Symbols | `strip_symbols` — comma-separated токены, удаляются из текста (не «mute all symbols») |
+| Lang | Lingua 1.8 subset + Unicode heuristics + whatlang; `strip_leading_speaker_label` |
+| UI | `TwitchPanel.svelte`: connection card, save queue (`saveNow` / debounce), бейдж «Настройки применены», `?` nick help (`popover-position.ts`) |
+
+Config: `user-data/modules/tts/config.toml` → секция `[twitch]`.
 
 ### Legacy audio routing
 
@@ -892,17 +914,16 @@ Config key: `ui.language` (empty = browser default).
 
 | Path | Содержимое |
 | --- | --- |
-| `legacy/remote/` | SST remote controller/worker → future module |
 | `legacy/experimental-browser/` | Experimental worker routes |
 | `legacy/modules-source/parakeet/` | Parakeet Python until `bin/modules/parakeet` |
 
-Active HTTP server **не** поднимает `/ws/remote/*`, experimental routes, in-process Parakeet.
+Active HTTP server **не** поднимает experimental routes, in-process Parakeet.
 
 ## 25. Версионирование и проверка обновлений
 
-- **Single source (interim):** `voicesub-types::PROJECT_VERSION` = `"0.5.0"`
-- Workspace `Cargo.toml` `[workspace.package].version` = `0.5.0`
-- `package.json`, `tauri.conf.json` — aligned `0.5.0`
+- **Single source (interim):** `voicesub-types::PROJECT_VERSION` = `"0.5.1"`
+- Workspace `Cargo.toml` `[workspace.package].version` = `0.5.1`
+- `package.json`, `tauri.conf.json` — aligned `0.5.1`
 - `GET /api/version`, `POST /api/updates/check` — GitHub Releases poll (`voicesub-runtime/src/http/update_service.rs`, `voicesub-types::version`)
 - Config `updates.*` — defaults in `voicesub-config::defaults`; legacy configs merge via `normalize_updates_config`
 - Dashboard banner: `UpdateBanner.svelte`; download → Tauri `open_external_https_url` (`src-tauri/src/shell.rs`)
@@ -922,15 +943,17 @@ Active HTTP server **не** поднимает `/ws/remote/*`, experimental rout
 | Unit | `crates/*/src/**` | FSM, stale drop, normalization |
 | Golden | `tests/golden/` + crate `tests/golden_*.rs` | Payload parity |
 | Integration | `tests/integration/`, `voicesub-http/tests/` | HTTP/WS smoke |
-| Frontend | `npm run test:frontend` (Vitest) | i18n, normalizers, worker |
+| Frontend | `npm run test:frontend` (Vitest) | i18n, normalizers, worker, `popover-position`, `twitch-channels` |
 
 ### Key test files
 
 - `voicesub-subtitle/tests/golden_subtitle.rs`, `golden_ttl_lifecycle.rs`
 - `voicesub-translation/tests/golden_translation.rs`, `golden_stale_translation.rs`
-- `voicesub-http/tests/http_ws_smoke.rs`
-- `voicesub-browser/tests/worker_svelte_contract.rs`
+- `voicesub-http/tests/http_ws_smoke.rs` — runtime start **без** Chrome (`VOICESUB_SKIP_BROWSER_WORKER`)
+- `voicesub-twitch` — pipeline/links/lang/emoji digits/emotes/`apply_settings` (105+ unit tests)
+- `voicesub-browser/tests/worker_svelte_contract.rs`, `launcher.rs` launch skip
 - `voicesub-subtitle/tests/overlay_contract.rs` — overlay lifecycle + empty cleanup
+- `src-tts/lib/popover-position.test.ts`, `twitch-channels.test.ts`
 
 ## 27. Продуктовые инварианты
 
@@ -956,7 +979,6 @@ Active HTTP server **не** поднимает `/ws/remote/*`, experimental rout
 
 - `PROJECT_VERSION` scattered across Cargo/package/tauri — migrate to crate-only source of truth
 - Parakeet module not yet in `bin/modules/parakeet/`
-- Remote module not started
 
 ## 29. Security & Privacy Model
 
@@ -984,7 +1006,7 @@ Active HTTP server **не** поднимает `/ws/remote/*`, experimental rout
 
 - Changing subtitle lifecycle semantics
 - Adding Node.js to runtime
-- Reintroducing remote/experimental routes in core HTTP server
+- Reintroducing experimental routes in core HTTP server
 - Business logic in `src-tauri/`
 
 ## 31. Glossary

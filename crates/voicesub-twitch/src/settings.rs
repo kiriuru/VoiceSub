@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+pub const TWITCH_MAX_CHANNELS: usize = 5;
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TwitchReplacement {
     pub from: String,
@@ -34,12 +36,34 @@ pub enum TwitchPauseStyle {
     Ellipsis,
 }
 
+pub fn pause_separator(style: TwitchPauseStyle) -> &'static str {
+    match style {
+        TwitchPauseStyle::Comma => ", ",
+        TwitchPauseStyle::Period => ". ",
+        TwitchPauseStyle::Dash => " — ",
+        TwitchPauseStyle::Ellipsis => "… ",
+    }
+}
+
+/// Map legacy hard-coded templates to `{nick}{pause}{text}` so pause style stays authoritative.
+pub fn normalize_speak_template(template: &str) -> String {
+    match template.trim() {
+        "{nick}. {text}" | "{nick}, {text}" | "{nick} — {text}" | "{nick} - {text}"
+        | "{nick}… {text}" | "{nick}... {text}" => "{nick}{pause}{text}".to_string(),
+        other => other.to_string(),
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TwitchTtsSettings {
     #[serde(default)]
     pub enabled: bool,
+    /// Legacy single-channel field; kept in sync with the first entry in [`Self::channels`].
     #[serde(default)]
     pub channel: String,
+    /// Up to [`TWITCH_MAX_CHANNELS`] channel logins (without `#`).
+    #[serde(default)]
+    pub channels: Vec<String>,
     #[serde(default)]
     pub nick: String,
     #[serde(default)]
@@ -62,15 +86,21 @@ pub struct TwitchTtsSettings {
     pub block_commands: bool,
     #[serde(default)]
     pub ignore_users: Vec<String>,
+    /// Symbol tokens removed from spoken chat text (`@`, `&`, `$`, …). Empty = read all symbols.
+    #[serde(default = "default_strip_symbols")]
+    pub strip_symbols: Vec<String>,
     /// Remove Twitch / BTTV / 7TV emote codes from message text.
     #[serde(default = "default_true")]
     pub strip_emotes: bool,
     /// Remove Unicode emoji from message text.
     #[serde(default = "default_true")]
     pub strip_emoji: bool,
+    /// Remove URL-like tokens so TTS does not read hyperlinks aloud.
+    #[serde(default = "default_true")]
+    pub strip_links: bool,
     #[serde(default)]
     pub emote_sources: TwitchEmoteSources,
-    /// Detect message language (whatlang) for TTS voice selection and filtering.
+    /// Detect message language (Unicode heuristics + Lingua + whatlang fallback) for TTS voice selection and filtering.
     #[serde(default = "default_true")]
     pub detect_language: bool,
     /// Minimum cleaned message length for language detection (chars).
@@ -86,7 +116,7 @@ pub struct TwitchTtsSettings {
     pub include_builtin_profanity: bool,
     #[serde(default)]
     pub pause_style: TwitchPauseStyle,
-    /// TTS template when `include_username` is true. Placeholders: `{nick}`, `{text}`.
+    /// TTS template when `include_username` is true. Placeholders: `{nick}`, `{text}`, `{pause}`.
     #[serde(default = "default_speak_template")]
     pub speak_template: String,
     /// WASAPI / cpal output label for Twitch chat TTS (empty = system default).
@@ -129,6 +159,10 @@ fn default_block_commands() -> bool {
     true
 }
 
+fn default_strip_symbols() -> Vec<String> {
+    vec!["@".into(), "&".into(), "$".into()]
+}
+
 fn default_true() -> bool {
     true
 }
@@ -138,7 +172,7 @@ fn default_lang_min_chars() -> u32 {
 }
 
 fn default_speak_template() -> String {
-    "{nick}. {text}".to_string()
+    "{nick}{pause}{text}".to_string()
 }
 
 fn default_inherit_volume() -> f32 {
@@ -150,6 +184,7 @@ impl Default for TwitchTtsSettings {
         Self {
             enabled: false,
             channel: String::new(),
+            channels: Vec::new(),
             nick: String::new(),
             oauth_token: String::new(),
             oauth_client_id: String::new(),
@@ -160,8 +195,10 @@ impl Default for TwitchTtsSettings {
             max_chars: default_max_chars(),
             block_commands: default_block_commands(),
             ignore_users: Vec::new(),
+            strip_symbols: default_strip_symbols(),
             strip_emotes: true,
             strip_emoji: true,
+            strip_links: true,
             emote_sources: TwitchEmoteSources::default(),
             detect_language: true,
             lang_min_chars: default_lang_min_chars(),
@@ -204,16 +241,54 @@ impl TwitchTtsSettings {
         }
     }
 
-    pub fn normalized_channel(&self) -> String {
-        let trimmed = self.channel.trim().trim_start_matches('#').to_lowercase();
-        if trimmed.is_empty() {
-            return String::new();
+    pub fn resolved_channel_logins(&self) -> Vec<String> {
+        let mut out = Vec::new();
+        for raw in &self.channels {
+            let login = normalize_channel_login(raw);
+            if login.is_empty() || out.contains(&login) {
+                continue;
+            }
+            out.push(login);
+            if out.len() >= TWITCH_MAX_CHANNELS {
+                break;
+            }
         }
-        format!("#{trimmed}")
+        if out.is_empty() {
+            let legacy = normalize_channel_login(&self.channel);
+            if !legacy.is_empty() {
+                out.push(legacy);
+            }
+        }
+        out
+    }
+
+    pub fn normalized_channels(&self) -> Vec<String> {
+        self.resolved_channel_logins()
+            .into_iter()
+            .map(|login| format!("#{login}"))
+            .collect()
+    }
+
+    pub fn normalized_channels_label(&self) -> String {
+        self.normalized_channels().join(", ")
+    }
+
+    pub fn normalized_channel(&self) -> String {
+        self.normalized_channels()
+            .into_iter()
+            .next()
+            .unwrap_or_default()
     }
 
     pub fn channel_login(&self) -> String {
-        self.channel.trim().trim_start_matches('#').to_lowercase()
+        self.resolved_channel_logins()
+            .into_iter()
+            .next()
+            .unwrap_or_default()
+    }
+
+    pub fn channel_logins(&self) -> Vec<String> {
+        self.resolved_channel_logins()
     }
 
     pub fn resolve_client_id(&self) -> String {
@@ -225,8 +300,14 @@ impl TwitchTtsSettings {
     }
 
     pub fn validate_for_connect(&self) -> Result<(), String> {
-        if self.normalized_channel().is_empty() {
-            return Err("channel is required".into());
+        let logins = self.resolved_channel_logins();
+        if logins.is_empty() {
+            return Err("at least one channel is required".into());
+        }
+        if logins.len() > TWITCH_MAX_CHANNELS {
+            return Err(format!(
+                "at most {TWITCH_MAX_CHANNELS} channels are allowed"
+            ));
         }
         if self.nick.trim().is_empty() {
             return Err("nick is required".into());
@@ -238,6 +319,69 @@ impl TwitchTtsSettings {
             );
         }
         Ok(())
+    }
+}
+
+fn normalize_channel_login(raw: &str) -> String {
+    raw.trim().trim_start_matches('#').to_lowercase()
+}
+
+#[cfg(test)]
+mod speak_template_tests {
+    use super::*;
+
+    #[test]
+    fn resolves_channels_from_list_and_legacy_field() {
+        let mut settings = TwitchTtsSettings::default();
+        settings.channel = "LegacyChan".into();
+        assert_eq!(
+            settings.resolved_channel_logins(),
+            vec!["legacychan".to_string()]
+        );
+
+        settings.channels = vec![
+            "#Alpha".into(),
+            "beta".into(),
+            "ALPHA".into(),
+            "  ".into(),
+        ];
+        assert_eq!(
+            settings.resolved_channel_logins(),
+            vec!["alpha".to_string(), "beta".to_string()]
+        );
+    }
+
+    #[test]
+    fn caps_channel_list_at_five() {
+        let mut settings = TwitchTtsSettings::default();
+        settings.channels = (1..=7)
+            .map(|index| format!("chan{index}"))
+            .collect();
+        assert_eq!(settings.resolved_channel_logins().len(), TWITCH_MAX_CHANNELS);
+    }
+
+    #[test]
+    fn normalized_channels_label_joins_hash_prefixed_names() {
+        let mut settings = TwitchTtsSettings::default();
+        settings.channels = vec!["foo".into(), "bar".into()];
+        assert_eq!(
+            settings.normalized_channels_label(),
+            "#foo, #bar"
+        );
+    }
+
+    #[test]
+    fn pause_separator_maps_styles() {
+        assert_eq!(pause_separator(TwitchPauseStyle::Period), ". ");
+        assert_eq!(pause_separator(TwitchPauseStyle::Comma), ", ");
+    }
+
+    #[test]
+    fn normalize_legacy_templates_to_pause_token() {
+        assert_eq!(
+            normalize_speak_template("{nick}. {text}"),
+            "{nick}{pause}{text}"
+        );
     }
 }
 

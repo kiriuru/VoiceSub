@@ -1,10 +1,142 @@
 # Журнал изменений VoiceSub / SST Desktop
 
-Единая история изменений desktop-линии: **VoiceSub** `0.5.0` (первый релиз новой линии, baseline — SST `0.4.4`) и **SST Desktop** `0.4.4` и ниже (frozen reference в `F:\AI\stream-sub-translator`).
+Единая история изменений desktop-линии: **VoiceSub** `0.5.1` (текущая линия), **VoiceSub** `0.5.0` (первый релиз новой линии, baseline — SST `0.4.4`) и **SST Desktop** `0.4.4` и ниже (frozen reference в `F:\AI\stream-sub-translator`).
 
 Этот файл — канонический changelog. Installer delta SST `0.4.1`: [DESKTOP_RELEASE_CHANGELOG_0.4.1.md](./DESKTOP_RELEASE_CHANGELOG_0.4.1.md). Старые per-version delta (`0.3.x`, `0.4.0`) удалены — история только здесь.
 
 **Формат записей (как [GitHub Release v0.2.9.2](https://github.com/kiriuru/stream_sub_translator/releases/tag/v0.2.9.2)):** одно предложение о версии; буллеты «что вошло» — только факты изменений; для desktop-exe / installer — блок «формат release» (структура поставки, без перечисления старых профилей как новинки).
+
+## 0.5.1
+
+Patch release. `PROJECT_VERSION` в `voicesub-types::version.rs` — **0.5.1**; `config_version` **8** (без изменений). Относительно [v0.5.0](https://github.com/kiriuru/stream_sub_translator/releases/tag/v0.5.0): нативный dual-sink TTS (Rust/cpal), режим Sonic вместо browser HTMLAudio, Twitch multi-channel (до 5 IRC) + hot-apply фильтров, сохранение цифр в чате, стабилизация длинных сессий (ротация логов, WebView2 power/memory, telemetry), умная очередь TTS. HTTP/WebSocket контракты subtitle/translation **не менялись**.
+
+### TTS — нативный dual-sink и воспроизведение
+
+- **Два независимых канала** — `speech` (субтитры) и `twitch` (чат) с отдельными `SpeechEngine`, Rust-очередями и WASAPI-устройствами; параллельное воспроизведение без `HTMLAudio` / `setSinkId`.
+- **Режимы воспроизведения:** `native` (MP3 → cpal @ 1.0×, минимальная задержка) и **`sonic`** (libsonic tempo stretch, pitch-preserving rate). Legacy `playback_mode: "browser"` **мигрирует в `sonic`** при загрузке `config.toml`.
+- **`HtmlAudioPlayer` удалён** — весь playback через IPC `tts_play_audio` + событие `playback-finished`.
+- **UI:** селектор Native / Sonic в шапке модуля; кнопка «Browse audio output» (`selectAudioOutput`) убрана; слайдер rate скрыт в native (фиксированный 1.0×); live-форматирование volume/rate (`playback-format.ts`).
+- **Twitch panel:** отдельный WASAPI device; rate override только в sonic; убраны сообщения про неподдерживаемый `setSinkId`.
+- **Баннер native device hint** — напоминание перепривязать speech/Twitch устройства после перехода на native routing.
+- **Resource telemetry bar** — handle count + private commit для TTS-процесса, `voicesub-app.exe` и `obs64.exe`; refresh 30 s; warning при ≥10k handles или ≥3 GB commit; help popover (en/ru/ja/ko/zh).
+- **Progressive Google TTS prefetch** — chunk 0 первым, остальные параллельно; prefetch ahead 2 → 4; HTTP pool (8 idle/host) + TCP keepalive 30 s.
+- **Playback rate boost** (`speech-playback-policy.ts`) — ускорение при backlog > 2 (до +0.7); отложенный boost для текущего audible clip.
+- **60 s speaking watchdog** — stop player → `mark_finished` → `tts_channel_force_idle` → resume pump.
+- **Screen Wake Lock** (`tts-keepalive.ts`) пока engines busy; activity IPC `tts_report_webview_activity`.
+- **TTS fetch warmup** на mount модуля; native playback timeout 45 s на chunk.
+
+### TTS — очередь и planner (Rust)
+
+- **Adaptive queue drop** при переполнении — сначала lowest-priority (`subtitle_source` < translation < other), до половины ёмкости; не только FIFO drop oldest.
+- **`dedupe_key`** на queue items; dropped/cleared speech items освобождают planner dedupe keys.
+- **`ChannelEnqueueResult`** — IPC возвращает `{ queue_len, dropped_ids }`; JS сбрасывает stale prefetches.
+- **`force_idle`** — новый IPC + service method сбрасывает stuck `Speaking` без очистки waiting items.
+- **`mark_finished` hardening** — ID mismatch → warn + force idle (не wedge queue).
+- **Device validation** — `tts_set_audio_device` / `tts_set_channel_audio_device` отклоняют неизвестные device ID.
+
+### Audio (`voicesub-audio`)
+
+- **Reusable `OutputStream` cache** per channel worker; инвалидация при смене device или ошибке playback.
+- **Sonic streaming** — incremental `SonicProcessor` drain-to-sink (не batch PCM upfront).
+- **Poll interval** 50 ms → 10 ms для responsive stop/device-change.
+- **При rate 1.0×** — MP3 decode напрямую без sonic pass.
+- **`process_stats.rs` (new)** — Windows telemetry: PID, name, handle count, private commit, working set для `voicesub-app.exe` и `obs64.exe`.
+
+### WebView2 power и memory
+
+- **`webview_power.rs` + `webview2_memory.rs` (new)** — policy: main shell → Normal при focus, LowMemory при unfocused; TTS → Normal при busy/visible, LowMemory при listening+hidden, **Suspend** при полном idle.
+- **`webview_memory.rs` (new, Tauri)** — focus/visibility/runtime/tts/busy flags; refresh на focus/visibility events.
+- **IPC `tts_report_webview_activity`** — TTS module сообщает activity для suspend/low-memory.
+
+### Логирование
+
+- **`log_rotation.rs` + `rotating_log_file.rs` (new)** — size-based rotation (5 MB, 2 backups) для `core.log`, `runtime-events.log`, JSONL deep traces.
+- **Compact client log filter** — по умолчанию в `session-latest.jsonl` только overlay/browser_worker/dashboard client logs; TTS-window logs — только при `logging.full_enabled`.
+- **TTS UI trace gating** — `tts-trace.ts` не шлёт `/api/logs/ui-trace` без full logging.
+- **Diagnostics ZIP export** — включает deep JSONL traces при `logging.full_enabled`; manifest перечисляет файлы.
+
+### Subtitle lifecycle
+
+- **Record map pruning** — cap 512 in-memory `records`; drop oldest non-protected sequences (сохраняет completed, pending, latest final, active partial).
+
+### Dashboard / OBS / overlay
+
+- **`open_local_http_url` Tauri command** — loopback HTTP URLs через системный браузер (`shell.rs` validation).
+- **OBS panel «Open overlay»** — `openLocalUrl()` IPC вместо `window.open` (fallback вне Tauri).
+- **Overlay** — убран per-payload `visual_state` UI trace post на каждый WS update (меньше overhead в OBS Browser Source).
+- **i18n:** `subtitles.overlay_preset.compact` во всех 5 dashboard locales + NSIS i18n source.
+- **Remote mode cleanup:** удалены i18n/UI-строки LAN remote tools, `show_remote_tools` из defaults; SST `remote` секция по-прежнему strip при import.
+
+### Browser worker / ASR
+
+- **`recognition.abort()`** перед clear handlers — чистое освобождение Web Speech instances.
+- **Mic monitor leak guard** — release stale stream перед re-acquire; leak counter.
+- **Worker relaunch** — runtime terminate previous Chrome PID перед новым launch (без orphan processes).
+- **Client log throttle map** bounded (max 256 entries).
+
+### IPC / Tauri (новые endpoints)
+
+- `tts_channel_force_idle`, `tts_get_resource_telemetry`, `tts_report_webview_activity`, `open_local_http_url`.
+- ACL / `build.rs` / autogenerated permissions для новых команд.
+
+### Dev / logging defaults
+
+- **`start-voicesub.bat`** — subtitle/UI deep tracing и verbose `RUST_LOG` **выключены по умолчанию** (REM); соответствует release compact logging baseline.
+- **Новые тесты:** Vitest (`playback-format`, `resource-telemetry`, `speech-playback-policy`, `tts-keepalive`, `tts-trace`, expanded `google-tts`, `constants`, `obs-status-i18n`, `tts-locale`, `twitch-channels`, `popover-position`); Rust (`voicesub-twitch` 105+ unit: lang/Lingua/links/pipeline/symbols/emoji digits/emotes/service apply_settings, `voicesub-obs` error_codes, audio/sonic, queue adaptive drop, config migration, webview power, log rotation, process stats, lifecycle prune, shell URL validation, session compact filter, `voicesub-browser` launch skip).
+
+### TTS — IPC и Twitch
+
+- **Enqueue IPC** — `ChannelEnqueueResult.dropped_ids` всегда сериализуется как `[]` (Rust); нормализация и `?? []` в `speech-engine.ts` / `tts-ipc.ts` — устранён сбой TTS на пустом `dropped_ids`.
+- **Детекция языка Twitch** — гибрид Unicode-эвристик + **Lingua 1.8** (subset top-20) + whatlang fallback; порог confidence; удалены хрупкие Dutch word-hints; украинский — эвристики; `TWITCH_TOP_LANGUAGE_CODES` экспортирован из `voicesub-twitch`.
+- **Resource telemetry** — кнопка `?` + popover справки в шапке TTS-модуля (`App.svelte`, `tts-module.css`).
+
+### Twitch — multi-channel, фильтры чата и hot-apply
+
+- **До 5 каналов на одно OAuth-подключение** — `TwitchTtsSettings.channels` (+ миграция legacy `channel`); IRC `JOIN #a,#b,…`; статус `channels: Vec<String>` и comma-separated label; UI-карточка «Подключение» со списком каналов; бейдж `3/5 каналов` / `#shee0n` (`twitch-channels.ts`, Vitest).
+- **Фильтр символов** — поле `strip_symbols` (comma-separated токены, удаляются перед TTS); модуль `symbols.rs`; пустой список = озвучивать все символы; дефолт `@, &, $`.
+- **Ссылки в чате** — `links.rs`: inline `http(s)://`, `www.`, `watch?v=`, YouTube/Twitch/Discord и др.; `pipeline.rs` — двойной `strip_links` (до/после `strip_symbols`, чтобы `&` не ломал URL); сообщения «только ссылка» / без осмысленного текста → `speakable: false`.
+- **Язык для link-only / speaker-label** — `strip_leading_speaker_label`, `has_meaningful_linguistic_content`; пропуск statistical detection для одиночных ASCII-токенов; исправлены ложные `[nl]`/`[id]` на строках вида `Name: https://youtube.com/…`.
+- **Настройки применяются без переподключения IRC** — `TwitchChatService.apply_settings()` обновляет `live.chat` на каждом `tts_update_twitch_settings`; UI: очередь сохранений (без гонок параллельных `persistSettings`), чекбоксы/числа — `saveNow()`, текст — debounce 400 ms; бейдж «Сохранение…» / «Настройки применены» (`tts.twitch.settings_*` в 5 tts-locales).
+- **Справка «?» у поля «Ник бота»** — пояснение, что это IRC-логин слушающего аккаунта (`tts.twitch.nick_help_*`).
+- **Светлая тема TTS** — метрики telemetry (handles / commit) на семантических CSS-токенах, читаемы на light background (`tts-module.css`).
+- **Сохранение цифр в чате** — `strip_unicode_emoji` не удаляет ASCII / Arabic-Indic / Fullwidth цифры (Unicode `\p{Emoji}` помечает `0–9` как emoji-компоненты); чисто числовые токены не считаются BTTV/7TV-эмоутами; keycap `5️⃣` → `5`; тесты pipeline + `emoji.rs` + `emotes.rs`.
+- **Подсказка «?» у «Ник бота»** — `clampPopoverPosition()` (`src-tts/lib/popover-position.ts`): измерение popover после mount, сдвиг в viewport (правый край у кнопки `?`), flip вверх при нехватке места; Vitest `popover-position.test.ts`.
+
+### Dev / integration tests — browser worker
+
+- **Chrome не открывается в `cargo test`** — `browser_worker_launch_skipped()` (`cfg(test)` + `VOICESUB_SKIP_BROWSER_WORKER`); `cfg(test)` **не** распространяется на зависимости integration-тестов → `integration_lock()` в `voicesub-http/tests/common.rs` и `voicesub-runtime/tests/common.rs` выставляет `VOICESUB_SKIP_BROWSER_WORKER=1`; stub launch (`pid: 0`) без spawn Chrome; relaunch/stop не вызывает `taskkill` на несуществующий worker.
+
+### Языки перевода и Web Speech (top-20)
+
+- **Модуль перевода** — `LANGUAGES` в `constants.ts`: 20 целей локализации (en, zh-cn/zh-tw, ru, es, pt, de, ko, fr, ja, tr, hi, it, ar, pl, id, sv, nl, vi, th); коды в `TRANSLATION_LANGUAGE_CODES`.
+- **Web Speech** — `BROWSER_RECOGNITION_LANGUAGES`: top-20 + региональные варианты (en-US/GB/**AU**, zh-CN/TW, es-ES/MX, …); `uk-UA` сохранён для существующих конфигов.
+- **Vitest** — `constants.test.ts` (полнота списков и i18n-ключей целей перевода).
+
+### OBS Closed Captions — диагностика
+
+- **`voicesub-obs/error_codes.rs`** — стабильные коды ошибок и native-status (`connection_refused`, `stream_active`, …) в API вместо English+OS-текста в `last_error` / `native_caption_status`.
+- **`obs-status-i18n.ts`** — перевод кодов в UI, разбор legacy-сообщений backend (в т.ч. Windows IO 10061 + русский текст ОС); `formatObsCcRuntimeStatus`, `formatObsConnectionState`.
+- **Панели** — `ObsPanel.svelte`, `ToolsPanel.svelte`, `diagnostics.ts`: локализованный статус OBS без смешения языков.
+
+### Исправление локализации (en / ru / ja / ko / zh)
+
+- Единый проход i18n: **OBS CC** (ошибки `obs.cc.error.*`, native `obs.cc.native.*`, состояния `obs.cc.connection_state.*`, строка Tools `tools.runtime.obs_cc_status`; исправлен `tr()` с подстановкой `{vars}` в Tools); **перевод** (метки 20 целей `translation.target_lang.*` в `TranslationPanel`); **TTS** (`tts.twitch.max_chars_hint` для ja/ko/zh; `strip_symbols`, `nick_help_*`, `channels_badge`, `settings_saved`/`settings_saving` в 5 tts-locales); **Tools** (`tools.profiles.name_label`); **ko** — плейсхолдер `{error}` вместо `{오류}` в `obs.cc.status.error`. Источник новых ключей — `scripts/voicesub-locale-overrides.mjs` + `npm run i18n:export`. Тесты: `obs-status-i18n.test.ts`, `tts-locale.test.ts`.
+
+### Breaking / migration notes
+
+- **`playback_mode: "browser"`** больше не user-facing; автоматически → **`sonic`**.
+- **Browser HTMLAudio path удалён** — только Native или Sonic + WASAPI device selection.
+- **TTS client logs / UI traces** не попадают в `session-latest.jsonl` по умолчанию (нужен full logging).
+- **Overlay** больше не эмитит `visual_state` UI trace на каждое subtitle update.
+- **Twitch `channel` → `channels`** — при загрузке TTS `config.toml` legacy поле `channel` переносится в `channels[0]`; до 5 логинов без `#`; переподключение не требуется для смены фильтров (только для смены каналов/OAuth).
+
+### Тесты
+
+```powershell
+cargo test --workspace
+npm run build
+npm run test:frontend
+```
 
 ## 0.5.0
 
@@ -33,7 +165,7 @@ Major release. Преемник frozen SST `0.4.4`. Все пункты ниже
 ### Удалено из active core (архив `legacy/`)
 
 - Local Parakeet / `local` ASR → `legacy/modules-source/parakeet/` (модуль Phase 4).
-- Remote controller/worker → `legacy/remote/`.
+- Remote controller/worker **удалены** (не входят в VoiceSub).
 - Experimental browser (`/google-asr-experimental*`) → `legacy/experimental-browser/`.
 - FastAPI + pywebview + PyInstaller bootstrap SST.
 - Splash-профили, `Stream Subtitle Translator Only Web.exe`, `desktop_profile_lock` для Parakeet unlock.
@@ -65,7 +197,7 @@ Major release. Преемник frozen SST `0.4.4`. Все пункты ниже
 - UI: `src-tts/` → `bin/tts/`, маршрут `/tts`; manifest `bin/modules/tts/module.toml`.
 - Rust: `voicesub-tts`, `voicesub-twitch` — queue, subtitle speech planner, IRC, OAuth bridge.
 - Tauri IPC: `tts_*` commands (`src-tauri/src/tts.rs`); embedded `google_tts_fetch.exe` в `bin/modules/tts/runtime/` (Python-исходники fetcher вне git).
-- **`TwitchPanel.svelte`:** sync `ignore_users` из config; `flushPendingSave` на blur/unmount.
+- **`TwitchPanel.svelte`:** до 5 каналов, hot-apply фильтров (`apply_settings`), save queue, nick help popover (`popover-position.ts`); см. CHANGELOG §0.5.1.
 - **cpal:** enum output devices на отдельном thread (`list_output_devices_on_thread`).
 - API: `/api/tts/google`, `/api/tts/python`, `/api/tts/twitch/oauth-*`.
 
@@ -100,7 +232,7 @@ Major release. Преемник frozen SST `0.4.4`. Все пункты ниже
 
 ### Документация
 
-- `docs/TECHNICAL_ARCHITECTURE.md`, `docs/TECHNICAL_ARCHITECTURE.en.md` — полная перезапись под VoiceSub 0.5.0.
+- `docs/TECHNICAL_ARCHITECTURE.md`, `docs/TECHNICAL_ARCHITECTURE.en.md` — VoiceSub **0.5.1** (TTS native/Sonic, Twitch pipeline, test harness).
 - `README.md`, `README.ru.md`, `docs/WIKI.en.md`, `docs/WIKI.ru.md` — актуализированы под новый стек.
 - Инженерный контракт: `docs/VOICESUB_ENGINEERING_CONTRACT.ru.md`; roadmap: `docs/plans/voicesub_roadmap.ru.md`.
 - **2026-06-10 sync:** MSI → NSIS; overlay TTL cleanup; update check (не stub); баннер обновлений; `AGENTS.md`; roadmap §12.
@@ -119,7 +251,7 @@ npm run test:frontend
 
 ## 0.4.4
 
-> **Frozen line.** SST `0.4.4` — read-only reference (`F:\AI\stream-sub-translator`). Активная разработка — VoiceSub `0.5.0`.
+> **Frozen line.** SST `0.4.4` — read-only reference (`F:\AI\stream-sub-translator`). Активная разработка — VoiceSub `0.5.1`.
 
 Patch release. `PROJECT_VERSION` в `backend/versioning.py` — **0.4.4**; `config_version` **7**. Публичные HTTP/WebSocket route contracts и subtitle/translation lifecycle **не менялись**.
 

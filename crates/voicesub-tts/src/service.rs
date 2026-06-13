@@ -23,7 +23,7 @@ use crate::config::{
 use crate::oauth_bridge::TwitchOAuthBridge;
 
 use crate::channel_queue::{DualChannelSpeechQueue, CHANNEL_SPEECH, CHANNEL_TWITCH};
-use crate::queue::{SpeechQueueItem};
+use crate::queue::{ChannelEnqueueResult, MarkFinishedOutcome, SpeechQueueItem};
 
 use crate::subtitle_speech::{SubtitleSpeechPlanner, TtsSpeechSettings};
 
@@ -245,6 +245,8 @@ impl TtsModuleService {
         rate: f32,
         volume: f32,
     ) -> Result<TtsConfig, TtsServiceError> {
+        let rate = rate.clamp(0.5, 2.0);
+        let volume = volume.clamp(0.0, 1.0);
         info!(
             target: "voicesub.tts",
             speech_rate = rate,
@@ -256,7 +258,11 @@ impl TtsModuleService {
             "speech_volume": volume,
         }));
         Ok(self.config_store.update(|cfg| {
-            cfg.speech_rate = rate;
+            if cfg.playback_mode == PLAYBACK_MODE_NATIVE {
+                cfg.speech_rate = 1.0;
+            } else {
+                cfg.speech_rate = rate;
+            }
             cfg.speech_volume = volume;
         })?)
     }
@@ -264,8 +270,22 @@ impl TtsModuleService {
 
 
     pub fn plan_subtitle_speech(&self, payload: &Value) -> Vec<SpeechQueueItem> {
-
-        let config = self.load_config().unwrap_or_default();
+        let config = match self.load_config() {
+            Ok(config) => config,
+            Err(err) => {
+                warn!(
+                    target: "voicesub.tts",
+                    error = %err,
+                    "subtitle speech skipped: config load failed"
+                );
+                trace::trace(
+                    "planner",
+                    "config_load_failed",
+                    json!({ "error": err.to_string() }),
+                );
+                return Vec::new();
+            }
+        };
 
         let sequence = payload
 
@@ -481,11 +501,19 @@ impl TtsModuleService {
     }
 
     pub fn set_playback_mode(&self, mode: &str) -> Result<TtsConfig, TtsServiceError> {
-        let mode = normalize_playback_mode(mode)
+        let normalized = normalize_playback_mode(mode)
             .ok_or_else(|| TtsServiceError::InvalidProvider(mode.to_string()))?;
-        info!(target: "voicesub.tts", playback_mode = %mode, "playback mode updated");
-        trace::trace("service", "set_playback_mode", json!({ "mode": mode }));
-        Ok(self.config_store.update(|cfg| cfg.playback_mode = mode)?)
+        info!(target: "voicesub.tts", playback_mode = %normalized, "playback mode updated");
+        trace::trace("service", "set_playback_mode", json!({ "mode": normalized }));
+        Ok(self.config_store.update(|cfg| {
+            cfg.playback_mode = normalized.clone();
+            if normalized == PLAYBACK_MODE_NATIVE {
+                cfg.speech_rate = 1.0;
+                if cfg.twitch.speech_rate > 0.0 {
+                    cfg.twitch.speech_rate = 0.0;
+                }
+            }
+        })?)
     }
 
     pub fn playback_mode_is_native(config: &TtsConfig) -> bool {
@@ -596,18 +624,32 @@ impl TtsModuleService {
         &self,
         channel: &str,
         item: SpeechQueueItem,
-    ) -> Result<usize, TtsServiceError> {
+    ) -> Result<ChannelEnqueueResult, TtsServiceError> {
         let max_items = self.max_queue_items_for_channel(channel);
-        let len = self
+        let (len, dropped) = self
             .queues
             .enqueue(channel, item.clone(), max_items)
             .map_err(|e| TtsServiceError::InvalidProvider(e.to_string()))?;
+
+        if channel == CHANNEL_SPEECH && !dropped.is_empty() {
+            self.release_speech_dedupe_keys(&dropped);
+            trace::trace(
+                "queue",
+                "adaptive_drop",
+                json!({
+                    "channel": channel,
+                    "dropped_count": dropped.len(),
+                    "dropped_ids": dropped.iter().map(|entry| &entry.id).collect::<Vec<_>>(),
+                }),
+            );
+        }
 
         info!(
             target: "voicesub.tts",
             channel,
             id = %item.id,
             queue_len = len,
+            dropped_count = dropped.len(),
             source = %item.source,
             "channel speech item enqueued"
         );
@@ -624,12 +666,16 @@ impl TtsModuleService {
             }),
         );
 
-        Ok(len)
+        Ok(ChannelEnqueueResult {
+            queue_len: len,
+            dropped_ids: dropped.into_iter().map(|entry| entry.id).collect(),
+        })
     }
 
     /// Deprecated: use [`Self::enqueue_channel`] with `speech`.
     pub fn enqueue_speech(&self, item: SpeechQueueItem) -> usize {
         self.enqueue_channel(CHANNEL_SPEECH, item)
+            .map(|result| result.queue_len)
             .unwrap_or(0)
     }
 
@@ -667,12 +713,46 @@ impl TtsModuleService {
     ) -> Result<(), TtsServiceError> {
         debug!(target: "voicesub.tts", channel, item_id, "queue mark finished");
         trace::trace("queue", "mark_finished", json!({ "channel": channel, "id": item_id }));
-        self.queues
+        let outcome = self
+            .queues
             .mark_finished(channel, item_id)
-            .map_err(|e| TtsServiceError::InvalidProvider(e.to_string()))
+            .map_err(|e| TtsServiceError::InvalidProvider(e.to_string()))?;
+        if outcome == MarkFinishedOutcome::MismatchForcedIdle {
+            warn!(
+                target: "voicesub.tts",
+                channel,
+                item_id,
+                "queue recovered from mark_finished id mismatch"
+            );
+            trace::trace(
+                "queue",
+                "mark_finished_mismatch",
+                json!({ "channel": channel, "id": item_id }),
+            );
+        }
+        Ok(())
+    }
+
+    fn release_speech_dedupe_keys(&self, items: &[SpeechQueueItem]) {
+        let keys: Vec<String> = items
+            .iter()
+            .filter_map(|entry| entry.dedupe_key.clone())
+            .collect();
+        if keys.is_empty() {
+            return;
+        }
+        self.subtitle_planner
+            .lock()
+            .expect("tts subtitle planner lock")
+            .release_dedupe_keys(keys);
     }
 
     pub fn queue_clear_channel(&self, channel: &str) -> Result<(), TtsServiceError> {
+        if channel == CHANNEL_SPEECH {
+            if let Ok(waiting) = self.queues.snapshot(channel) {
+                self.release_speech_dedupe_keys(&waiting);
+            }
+        }
         info!(target: "voicesub.tts", channel, "channel queue cleared");
         trace::trace("queue", "clear", json!({ "channel": channel }));
         self.queues
@@ -681,6 +761,9 @@ impl TtsModuleService {
     }
 
     pub fn queue_clear_all(&self) {
+        if let Ok(waiting) = self.queues.snapshot(CHANNEL_SPEECH) {
+            self.release_speech_dedupe_keys(&waiting);
+        }
         info!(target: "voicesub.tts", "all channel queues cleared");
         trace::trace("queue", "clear_all", json!({}));
         self.queues.clear_all();
@@ -692,6 +775,14 @@ impl TtsModuleService {
     ) -> Result<Vec<SpeechQueueItem>, TtsServiceError> {
         self.queues
             .snapshot(channel)
+            .map_err(|e| TtsServiceError::InvalidProvider(e.to_string()))
+    }
+
+    pub fn queue_force_idle(&self, channel: &str) -> Result<(), TtsServiceError> {
+        debug!(target: "voicesub.tts", channel, "queue force idle");
+        trace::trace("queue", "force_idle", json!({ "channel": channel }));
+        self.queues
+            .force_idle(channel)
             .map_err(|e| TtsServiceError::InvalidProvider(e.to_string()))
     }
 
@@ -758,7 +849,7 @@ impl TtsModuleService {
             "twitch",
             "connect",
             json!({
-                "channel": settings.normalized_channel(),
+                "channels": settings.normalized_channels(),
                 "enabled": settings.enabled,
                 "lang": settings.language,
             }),
@@ -779,7 +870,7 @@ impl TtsModuleService {
     ) -> Result<TtsConfig, TtsServiceError> {
         info!(
             target: "voicesub.tts",
-            channel = %twitch.normalized_channel(),
+            channels = %twitch.normalized_channels_label(),
             enabled = twitch.enabled,
             "twitch settings updated"
         );
@@ -787,7 +878,7 @@ impl TtsModuleService {
             "twitch",
             "settings_updated",
             json!({
-                "channel": twitch.normalized_channel(),
+                "channels": twitch.normalized_channels(),
                 "enabled": twitch.enabled,
                 "nick": twitch.nick.trim(),
                 "lang": twitch.language,

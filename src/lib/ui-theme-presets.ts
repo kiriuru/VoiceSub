@@ -37,4 +37,10 @@ export const UI_THEME_PRESETS: UiThemePreset[] = [
     theme: "dark",
     palette: { accent: "#7C6AFF", accent_secondary: "#FF6B9D", accent_tertiary: "#5EC4A0" },
   },
+  {
+    id: "anime",
+    labelKey: "style.ui_theme.anime",
+    theme: "dark",
+    palette: { accent: "#FF4FB4", accent_secondary: "#1FD6FF", accent_tertiary: "#FFC95E" },
+  },
 ];

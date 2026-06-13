@@ -31,7 +31,6 @@
 | Убрано из active VoiceSub | Куда | Почему |
 | --- | --- | --- |
 | Parakeet / `local` ASR | `legacy/modules-source/parakeet/` → модуль | по продуктовому решению |
-| Remote controller/worker | `legacy/remote/` → модуль | по продуктовому решению |
 | Experimental browser | `legacy/experimental-browser/` | по продуктовому решению |
 | pywebview / PyInstaller / FastAPI runtime | замена на Rust/Tauri | смена стека, не смена продукта |
 
@@ -104,7 +103,7 @@ F:\AI\VoiceSub\
 ├── src/                            # Svelte dashboard
 ├── src-worker/                     # Svelte worker sources
 │
-├── legacy/                         # read-only archive (remote, experimental, parakeet)
+├── legacy/                         # read-only archive (experimental, parakeet)
 ├── docs/
 ├── logs/                           # runtime (gitignored)
 └── user-data/                      # runtime (gitignored)
@@ -186,8 +185,8 @@ flowchart BT
 | **Нет кода без теста** | Новый модуль/алгоритм в `crates/*` → unit tests в том же crate в той же задаче |
 | **Golden-first port** | Сначала экспорт fixture из SST `tests/test_*.py`, потом Rust impl до green |
 | **Regression parity** | Subtitle + translation: **100%** критических tests из SST (см. список в roadmap) |
-| **Integration** | `tests/integration/` для HTTP/WS end-to-end на localhost |
-| **CI local** | `cargo test --workspace` must pass перед «done» |
+| **Integration** | `tests/integration/`, `voicesub-http/tests/` — HTTP/WS smoke; `integration_lock()` выставляет `VOICESUB_SKIP_BROWSER_WORKER=1` (Chrome не spawn) |
+| **CI local** | `cargo test --workspace` must pass перед «done»; integration harness выставляет `VOICESUB_SKIP_BROWSER_WORKER=1` — Chrome worker не spawn в тестах |
 
 ### 3.2 Уровни тестов
 

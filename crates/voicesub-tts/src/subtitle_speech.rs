@@ -85,6 +85,24 @@ impl SubtitleSpeechPlanner {
         trace!(target: "voicesub.tts", keys, "planner spoken keys cleared");
     }
 
+    /// Allow re-planning lines dropped from the speech queue before playback.
+    pub fn release_dedupe_keys(&mut self, keys: impl IntoIterator<Item = String>) {
+        let mut released = 0usize;
+        for key in keys {
+            if self.spoken_keys.remove(&key) {
+                released += 1;
+            }
+        }
+        if released > 0 {
+            trace!(
+                target: "voicesub.tts",
+                released,
+                remaining = self.spoken_keys.len(),
+                "planner dedupe keys released after queue drop"
+            );
+        }
+    }
+
     pub fn plan(&mut self, payload: &Value, settings: &TtsSpeechSettings) -> Vec<SpeechQueueItem> {
         let lifecycle = payload
             .get("lifecycle_state")
@@ -173,7 +191,7 @@ impl SubtitleSpeechPlanner {
                 continue;
             }
             let key = speech_key(sequence, kind, slot_id, &text);
-            if !self.spoken_keys.insert(key) {
+            if !self.spoken_keys.insert(key.clone()) {
                 tts_trace::trace(
                     "planner",
                     "skip_dedupe",
@@ -193,6 +211,7 @@ impl SubtitleSpeechPlanner {
                     format!("subtitle_{slot_id}")
                 },
                 lang,
+                dedupe_key: Some(key),
             });
 
             if out.len() >= settings.max_queue_items as usize {
@@ -435,6 +454,20 @@ mod tests {
             vec![json!({"kind": "source", "text": "line 500"})],
         );
         assert!(planner.plan(&repeat, &settings).is_empty());
+    }
+
+    #[test]
+    fn release_dedupe_key_allows_replan() {
+        let mut planner = SubtitleSpeechPlanner::new();
+        let settings = TtsSpeechSettings::default();
+        let payload = completed_payload(7, vec![json!({"kind": "source", "text": "Again"})]);
+        let first = planner.plan(&payload, &settings);
+        assert_eq!(first.len(), 1);
+        let key = first[0].dedupe_key.clone().expect("dedupe key");
+        assert!(planner.plan(&payload, &settings).is_empty());
+        planner.release_dedupe_keys([key]);
+        let second = planner.plan(&payload, &settings);
+        assert_eq!(second.len(), 1);
     }
 
     #[test]

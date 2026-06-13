@@ -17,6 +17,7 @@ tokio = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55"
+webview2-com = "0.38"
 windows = { version = "0.61", features = [
     "Win32_Foundation",
     "Win32_System_Threading",

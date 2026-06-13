@@ -12,7 +12,6 @@ pub fn default_config_payload() -> Value {
         "ui": {
             "language": "",
             "layout": "standard",
-            "show_remote_tools": false,
             "show_translation_results": true,
             "theme": "dark",
             "palette": {

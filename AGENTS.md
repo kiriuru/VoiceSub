@@ -9,7 +9,7 @@ Every task must follow these three pillars:
 ### 1. Full fidelity port — do not break behavior
 
 - Port **all** SST `0.4.4` functionality **as-is**: same logic, algorithms, contracts, side-effect order.
-- **Only allowed removals:** Parakeet/local ASR, Remote mode, experimental browser (archived in `legacy/`).
+- **Only allowed removals:** Parakeet/local ASR, experimental browser (archived in `legacy/`).
 - **Forbidden:** simplifying translation providers, subtitle lifecycle, browser FSM, overlay payload, or config semantics.
 - Acceptance: SST golden tests green on Rust; browser worker soak passes.
 
@@ -29,7 +29,7 @@ Every task must follow these three pillars:
 ---
 
 ## Product Scope
-**VoiceSub** (`0.5.0+`) — Windows-first local real-time subtitle translator for streamers.
+**VoiceSub** (`0.5.1+`, patch line active) — Windows-first local real-time subtitle translator for streamers.
 
 Predecessor: SST `0.4.4` at `F:\AI\stream-sub-translator`. **Active development: `F:\AI\VoiceSub` only.**
 
@@ -41,7 +41,7 @@ Chrome browser speech worker (`/google-asr`) -> ASR -> optional translation -> O
 Roadmap: `docs/plans/voicesub_roadmap.ru.md`.  
 Engineering contract: `docs/VOICESUB_ENGINEERING_CONTRACT.ru.md`.
 
-**Phase status (2026-06-10):** Phase 0 closed (manual soak done). **NSIS installer pipeline works** (`build-release.ps1` → `VoiceSub_0.5.0_x64-setup.exe`). Golden full parity, Phase 1 formal DoD, and public GitHub release **deferred**. SST dashboard field parity and worker default pick **not gates** — see roadmap §12.
+**Phase status (2026-06-13):** Phase 0 closed (manual soak done). **NSIS installer pipeline works** (`build-release.ps1` → `VoiceSub_0.5.1_x64-setup.exe`). Patch **0.5.1**: native/Sonic TTS, Twitch multi-channel + hot-apply filters, digit-safe emoji strip. Golden full parity, Phase 1 formal DoD, and public GitHub release **deferred**. SST dashboard field parity and worker default pick **not gates** — see roadmap §12.
 
 ## Current Active Development Scope
 
@@ -56,7 +56,7 @@ Engineering contract: `docs/VOICESUB_ENGINEERING_CONTRACT.ru.md`.
 
 **Removed from active project (archived in `legacy/`):**
 
-- Remote controller/worker (future **remote module**)
+- Remote controller/worker (removed; not part of VoiceSub)
 - `browser_google_experimental` and all experimental worker routes
 - in-process Parakeet / `local` ASR / torch / NeMo
 - Core Audio in Rust core (Parakeet module only, Phase 4)
@@ -83,7 +83,7 @@ Legacy SST Python tree is **port reference** until Rust parity; do not add featu
 
 ## Runtime Modes (core 0.5.0)
 - **`browser_google` only** — `/google-asr` (Edge: `/google-asr-edge`)
-- No `local`, no `browser_google_experimental`, no remote roles in core
+- No `local`, no `browser_google_experimental` in core
 
 ### Browser worker invariants
 - Separate Chrome/Edge window with **visible address bar**
@@ -148,14 +148,13 @@ All five locales: en, ru, ja, ko, zh — port SST catalogs into Svelte i18n laye
 
 ## Data and Versioning
 - `user-data/`, `logs/` local
-- `PROJECT_VERSION = "0.5.0"` until crate-only source of truth
+- `PROJECT_VERSION = "0.5.1"` (`voicesub-types::version.rs`)
 - Parakeet models: `bin/modules/parakeet/models/` when module exists
 
 ## Directory Guidance
 
 | Path | Role |
 | --- | --- |
-| `legacy/remote/` | archived SST remote for future module |
 | `legacy/experimental-browser/` | archived experimental worker |
 | `legacy/modules-source/parakeet/` | Parakeet Python until `bin/modules/parakeet` |
 | `bin/overlay/` | active OBS surface |
@@ -163,7 +162,7 @@ All five locales: en, ru, ja, ko, zh — port SST catalogs into Svelte i18n laye
 | `bin/modules/tts/` | TTS module shipped runtime |
 | `docs/plans/tts_dual_sink_native_playback.ru.md` | TTS dual sink + native playback — **reference plan** (verify against code + web; not strict spec) |
 
-Do not reintroduce remote/experimental routes into active Rust HTTP server.
+Do not reintroduce experimental routes into active Rust HTTP server.
 
 ## Done Means (VoiceSub)
 - Engineering contract §6 checklist satisfied

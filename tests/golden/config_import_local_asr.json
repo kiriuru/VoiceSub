@@ -20,9 +20,6 @@
       "target_languages": [
         "en"
       ]
-    },
-    "ui": {
-      "show_remote_tools": false
     }
   },
   "input": {

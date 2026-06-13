@@ -1,10 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import {
-  playPreparedGoogleTts,
+  GOOGLE_TTS_PLAYBACK_TIMEOUT_MS,
+  waitForPreparedChunk,
   type GoogleTtsPlaybackOptions,
   type PreparedGoogleTts,
+  type PreparedGoogleTtsChunk,
 } from "./google-tts";
+import type { TtsPlaybackMode } from "./types";
 import { ttsTrace } from "./tts-trace";
 
 export type SpeechChannel = "speech" | "twitch";
@@ -15,39 +18,6 @@ export interface AudioPlayer {
     options: GoogleTtsPlaybackOptions & { itemId: string },
   ): Promise<void>;
   stop(): Promise<void>;
-}
-
-export class HtmlAudioPlayer implements AudioPlayer {
-  private readonly activeAudios = new Set<HTMLAudioElement>();
-
-  async playPrepared(
-    prepared: PreparedGoogleTts,
-    options: GoogleTtsPlaybackOptions & { itemId: string },
-  ): Promise<void> {
-    await playPreparedGoogleTts(prepared, {
-      ...options,
-      onAudio: (audio) => {
-        this.activeAudios.add(audio);
-        audio.addEventListener(
-          "ended",
-          () => {
-            this.activeAudios.delete(audio);
-          },
-          { once: true },
-        );
-        options.onAudio?.(audio);
-      },
-    });
-  }
-
-  async stop(): Promise<void> {
-    for (const audio of this.activeAudios) {
-      audio.pause();
-      audio.removeAttribute("src");
-      audio.load();
-    }
-    this.activeAudios.clear();
-  }
 }
 
 type PlaybackFinishedPayload = {
@@ -96,10 +66,26 @@ function rejectPendingWaits(channel: SpeechChannel, message: string) {
   }
 }
 
+export function isNativePlaybackMode(
+  playbackMode: string | undefined | null,
+): boolean {
+  return String(playbackMode || "").trim().toLowerCase() === "native";
+}
+
+export function isSonicPlaybackMode(
+  playbackMode: string | undefined | null,
+): boolean {
+  const mode = String(playbackMode || "").trim().toLowerCase();
+  return mode === "sonic" || mode === "browser";
+}
+
 export class NativeAudioPlayer implements AudioPlayer {
   private stopped = false;
 
-  constructor(private readonly channel: SpeechChannel) {}
+  constructor(
+    private readonly channel: SpeechChannel,
+    private readonly playbackMode: TtsPlaybackMode = "native",
+  ) {}
 
   async playPrepared(
     prepared: PreparedGoogleTts,
@@ -108,21 +94,31 @@ export class NativeAudioPlayer implements AudioPlayer {
     this.stopped = false;
     await ensurePlaybackListener();
     const volume = options.volume ?? 1;
-    const rate = options.rate ?? 1;
-    let chunkIndex = 0;
-    for (const chunk of prepared.chunks) {
+    const rate = isNativePlaybackMode(this.playbackMode) ? 1 : (options.rate ?? 1);
+    const total = prepared.expectedChunkCount || prepared.chunks.length;
+    let nextChunkPromise: Promise<PreparedGoogleTtsChunk> | null = null;
+    for (let chunkIndex = 0; chunkIndex < total; chunkIndex += 1) {
       if (this.stopped) {
         throw new Error("playback stopped");
       }
       const chunkItemId = `${options.itemId}#${chunkIndex}`;
-      chunkIndex += 1;
-      const bytes = new Uint8Array(await chunk.blob.arrayBuffer());
+      const chunk = nextChunkPromise
+        ? await nextChunkPromise
+        : await waitForPreparedChunk(prepared, chunkIndex);
+      nextChunkPromise = null;
+      if (chunkIndex + 1 < total) {
+        nextChunkPromise = waitForPreparedChunk(prepared, chunkIndex + 1);
+      }
+      const bytes = chunk.data;
       ttsTrace("native_audio", "play_enqueue", {
         channel: this.channel,
         item_id: chunkItemId,
         bytes: bytes.length,
         volume,
         rate,
+        playback_mode: this.playbackMode,
+        chunk_index: chunkIndex,
+        chunk_total: total,
       });
       await new Promise<void>((resolve, reject) => {
         if (this.stopped) {
@@ -130,17 +126,41 @@ export class NativeAudioPlayer implements AudioPlayer {
           return;
         }
         const key = waitKey(this.channel, chunkItemId);
-        pendingWaits.set(key, { resolve, reject });
+        let settled = false;
+        const finish = (ok: boolean, message: string) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timeoutId);
+          pendingWaits.delete(key);
+          if (ok) {
+            resolve();
+            return;
+          }
+          reject(new Error(message));
+        };
+        const timeoutId = setTimeout(() => {
+          finish(
+            false,
+            `Native TTS playback timeout after ${GOOGLE_TTS_PLAYBACK_TIMEOUT_MS}ms`,
+          );
+        }, GOOGLE_TTS_PLAYBACK_TIMEOUT_MS);
+        pendingWaits.set(key, {
+          resolve: () => finish(true, ""),
+          reject: (error: Error) => finish(false, error.message),
+        });
         invoke("tts_play_audio", {
           channel: this.channel,
           itemId: chunkItemId,
           audioBytes: bytes,
           volume,
           rate,
-        }).catch((err: unknown) => {
-          pendingWaits.delete(key);
-          reject(err instanceof Error ? err : new Error(String(err)));
-        });
+        })
+          .then(() => {
+            prepared.chunks[chunkIndex] = undefined;
+          })
+          .catch((err: unknown) => {
+            finish(false, err instanceof Error ? err.message : String(err));
+          });
       });
     }
   }
@@ -157,18 +177,14 @@ export class NativeAudioPlayer implements AudioPlayer {
   }
 }
 
-export function isNativePlaybackMode(
-  playbackMode: string | undefined | null,
-): boolean {
-  return String(playbackMode || "").trim().toLowerCase() === "native";
-}
-
 export function createAudioPlayer(
   channel: SpeechChannel,
-  playbackMode: string | undefined | null,
+  playbackMode: TtsPlaybackMode | string | undefined | null,
 ): AudioPlayer {
-  if (isNativePlaybackMode(playbackMode)) {
-    return new NativeAudioPlayer(channel);
-  }
-  return new HtmlAudioPlayer();
+  const mode = isNativePlaybackMode(playbackMode)
+    ? "native"
+    : isSonicPlaybackMode(playbackMode)
+      ? "sonic"
+      : "native";
+  return new NativeAudioPlayer(channel, mode);
 }

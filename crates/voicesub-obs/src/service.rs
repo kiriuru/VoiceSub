@@ -14,6 +14,7 @@ use crate::client::{ObsClientError, ObsClientHandle, ObsWsClient};
 #[cfg(test)]
 use crate::client::MockObsClient;
 use crate::diagnostics::{ConnectionState, ObsCaptionDiagnostics};
+use crate::error_codes::{self, native_status};
 use crate::settings::{ObsCaptionSettings, CONNECTABLE_OUTPUT_MODES, SOURCE_EVENT_OUTPUT_MODES};
 use crate::text::{
     normalize_text, select_first_visible_text, select_payload_text, should_throttle_partial_update,
@@ -356,14 +357,15 @@ async fn connection_loop(inner: Arc<Inner>) {
             let mut client_guard = inner.client.lock().await;
             if let Some(client) = client_guard.as_mut() {
                 if let Err(err) = client.ping().await {
-                    let message = format!("OBS websocket connection lost: {err}");
+                    let code = error_codes::error::CONNECTION_LOST;
+                    let detail = err.to_string();
                     {
                         let mut diag = inner.diagnostics.lock().await;
-                        diag.last_error = Some(message.clone());
+                        diag.last_error = Some(code.into());
                         diag.connected = false;
                     }
-                    inner.log.connection_lost(&message);
-                    set_connection_state(&inner, ConnectionState::Error, Some(&message)).await;
+                    inner.log.connection_lost(&detail);
+                    set_connection_state(&inner, ConnectionState::Error, Some(code)).await;
                     drop(client_guard);
                     if let Some(client) = inner.client.lock().await.take() {
                         client.close().await;
@@ -401,36 +403,37 @@ async fn connection_loop(inner: Arc<Inner>) {
                 }
             }
             Err(ObsClientError::PasswordRequired) => {
-                let message = "OBS websocket requires a password, but none is configured.";
+                let code = error_codes::error::PASSWORD_REQUIRED;
                 {
                     let mut diag = inner.diagnostics.lock().await;
                     diag.reconnect_attempt_count += 1;
-                    diag.last_error = Some(message.into());
+                    diag.last_error = Some(code.into());
                     diag.connected = false;
                 }
-                set_connection_state(&inner, ConnectionState::AuthFailed, Some(message)).await;
+                set_connection_state(&inner, ConnectionState::AuthFailed, Some(code)).await;
                 tokio::time::sleep(Duration::from_secs(5)).await;
             }
             Err(ObsClientError::AuthFailed) => {
-                let message = "OBS websocket authentication failed.";
+                let code = error_codes::error::AUTH_FAILED;
                 {
                     let mut diag = inner.diagnostics.lock().await;
                     diag.reconnect_attempt_count += 1;
-                    diag.last_error = Some(message.into());
+                    diag.last_error = Some(code.into());
                     diag.connected = false;
                 }
-                set_connection_state(&inner, ConnectionState::AuthFailed, Some(message)).await;
+                set_connection_state(&inner, ConnectionState::AuthFailed, Some(code)).await;
                 tokio::time::sleep(Duration::from_secs(5)).await;
             }
             Err(err) => {
-                let message = format!("OBS captions unavailable: {err}");
+                let code = error_codes::obs_client_error_code(&err);
                 {
                     let mut diag = inner.diagnostics.lock().await;
                     diag.reconnect_attempt_count += 1;
-                    diag.last_error = Some(message.clone());
+                    diag.last_error = Some(code.into());
                     diag.connected = false;
                 }
-                set_connection_state(&inner, ConnectionState::Error, Some(&message)).await;
+                debug!(error = %err, code, "obs websocket connect failed");
+                set_connection_state(&inner, ConnectionState::Error, Some(code)).await;
                 tokio::time::sleep(backoff).await;
                 backoff = (backoff * 2).min(Duration::from_secs(10));
             }
@@ -463,13 +466,12 @@ async fn refresh_stream_status(
     diag.stream_output_reconnecting = Some(output_reconnecting);
     diag.native_caption_status = Some(if output_active {
         if output_reconnecting {
-            "OBS stream output is active but reconnecting. Native captions may be unstable.".into()
+            native_status::STREAM_ACTIVE_RECONNECTING.into()
         } else {
-            "OBS stream output is active. Native SendStreamCaption captions can be delivered."
-                .into()
+            native_status::STREAM_ACTIVE.into()
         }
     } else {
-        "OBS stream output is not active. Native SendStreamCaption only works while OBS is actively streaming.".into()
+        native_status::STREAM_INACTIVE.into()
     });
     Ok(())
 }
@@ -686,7 +688,7 @@ async fn send_text(
             diag.last_send_used_active_connection = false;
             diag.last_send_waited_for_connection = true;
             if diag.last_error.is_none() {
-                diag.last_error = Some("OBS websocket is not connected.".into());
+                diag.last_error = Some(error_codes::error::NOT_CONNECTED.into());
             }
         }
         inner.log.send_skipped(
@@ -770,10 +772,7 @@ async fn send_text(
                     diag.last_caption_sent_at_utc = Some(utc_now_iso());
                     diag.stream_output_active = Some(true);
                     diag.stream_output_reconnecting = Some(false);
-                    diag.native_caption_status = Some(
-                        "OBS accepted SendStreamCaption while the stream output was active."
-                            .into(),
-                    );
+                    diag.native_caption_status = Some(native_status::STREAM_DELIVERED.into());
                     diag.last_error = None;
                 }
                 inner.log.caption_sent(
@@ -791,14 +790,8 @@ async fn send_text(
                 let mut diag = inner.diagnostics.lock().await;
                 diag.stream_output_active = Some(false);
                 diag.stream_output_reconnecting = Some(false);
-                diag.native_caption_status = Some(
-                    "OBS stream output is not running. Native SendStreamCaption only works during an active stream."
-                        .into(),
-                );
-                diag.last_error = Some(
-                    "OBS stream output is not running. SendStreamCaption only works while OBS is actively streaming."
-                        .into(),
-                );
+                diag.native_caption_status = Some(native_status::STREAM_NOT_RUNNING.into());
+                diag.last_error = Some(error_codes::error::STREAM_NOT_RUNNING.into());
                 drop(diag);
                 inner.log.stream_output_inactive();
                 set_connection_state(&inner, ConnectionState::Connected, None).await;
@@ -806,19 +799,20 @@ async fn send_text(
                 return Ok(());
             }
             Err(err) => {
-                let message = format!("OBS caption send failed: {err}");
+                let code = error_codes::error::SEND_FAILED;
+                let detail = err.to_string();
                 {
                     let mut diag = inner.diagnostics.lock().await;
-                    diag.last_error = Some(message.clone());
+                    diag.last_error = Some(code.into());
                 }
-                inner.log.caption_send_failed(&message);
-                set_connection_state(&inner, ConnectionState::Error, Some(&message)).await;
+                inner.log.caption_send_failed(&detail);
+                set_connection_state(&inner, ConnectionState::Error, Some(code)).await;
                 drop(client_guard);
                 if let Some(client) = inner.client.lock().await.take() {
                     client.close().await;
                 }
                 ensure_connection_task(inner.clone()).await;
-                return Err(format!("OBS caption send failed: {err}"));
+                return Err(code.into());
             }
         }
     }

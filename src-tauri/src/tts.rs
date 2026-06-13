@@ -12,10 +12,12 @@ use voicesub_twitch::{SourceTextReplacementSettings, TwitchTtsSettings};
 use voicesub_audio::{PlaybackHub, CHANNEL_SPEECH, CHANNEL_TWITCH};
 use voicesub_tts::{
     bind_window_process, build_tts_module_url, speech_queue_item_id, tts_webview_data_dir,
-    validate_twitch_oauth_url, SpeechQueueItem, TtsConfig, TtsModuleService, TtsSpeechSettings,
-    TTS_WINDOW_LABEL,
+    validate_twitch_oauth_url, ChannelEnqueueResult, SpeechQueueItem, TtsConfig, TtsModuleService,
+    TtsSpeechSettings, TTS_WINDOW_LABEL,
 };
 use voicesub_twitch::TwitchConnectionStatus;
+
+use crate::webview_memory::{self, SharedWebviewMemoryManager};
 
 /// Close the module window when the desktop shell shuts down (same lifecycle as browser worker).
 pub fn close_tts_window(app: &AppHandle) {
@@ -135,6 +137,16 @@ pub fn tts_set_channel_audio_device(
         device_label = device_label.as_deref().unwrap_or(""),
         "tts_set_channel_audio_device"
     );
+    if !state.service.validate_device_id(&device_id) {
+        warn!(
+            target: "voicesub.tts.ipc",
+            channel = %channel,
+            device_id = %device_id,
+            "unknown audio device rejected"
+        );
+        return Err(format!("unknown audio device: {device_id}"));
+    }
+
     let config = state
         .service
         .set_channel_audio_device(&channel, &device_id, device_label.as_deref())
@@ -349,7 +361,7 @@ pub fn tts_channel_enqueue(
     id: String,
     text: String,
     lang: String,
-) -> Result<usize, String> {
+) -> Result<ChannelEnqueueResult, String> {
     info!(
         target: "voicesub.tts.ipc",
         channel = %channel,
@@ -367,6 +379,7 @@ pub fn tts_channel_enqueue(
                 text,
                 source: channel.clone(),
                 lang,
+                dedupe_key: None,
             },
         )
         .map_err(|e| e.to_string())
@@ -405,6 +418,23 @@ pub fn tts_channel_clear(state: State<'_, TtsState>, channel: String) -> Result<
 }
 
 #[tauri::command]
+pub fn tts_get_resource_telemetry() -> voicesub_audio::ResourceTelemetry {
+    voicesub_audio::collect_resource_telemetry()
+}
+
+#[tauri::command]
+pub fn tts_channel_force_idle(
+    state: State<'_, TtsState>,
+    channel: String,
+) -> Result<(), String> {
+    info!(target: "voicesub.tts.ipc", channel = %channel, "tts_channel_force_idle");
+    state
+        .service
+        .queue_force_idle(&channel)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub fn tts_channel_snapshot(
     state: State<'_, TtsState>,
     channel: String,
@@ -437,8 +467,10 @@ pub fn tts_enqueue(
                 text,
                 source: source.unwrap_or_default(),
                 lang: "en".to_string(),
+                dedupe_key: None,
             },
         )
+        .map(|result| result.queue_len)
         .map_err(|e| e.to_string())
 }
 
@@ -523,6 +555,29 @@ pub fn tts_sync_source_text_replacement(
 }
 
 #[tauri::command]
+pub fn tts_report_webview_activity(
+    app: AppHandle,
+    memory: State<'_, SharedWebviewMemoryManager>,
+    runtime_active: bool,
+    tts_enabled: bool,
+    engines_busy: bool,
+) -> Result<(), String> {
+    debug!(
+        target: "voicesub.tts.ipc",
+        runtime_active,
+        tts_enabled,
+        engines_busy,
+        "tts_report_webview_activity"
+    );
+    if let Ok(mut guard) = memory.lock() {
+        guard.set_tts_activity(runtime_active, tts_enabled, engines_busy);
+    }
+    webview_memory::sync_tts_window_visibility(&app, memory.inner());
+    webview_memory::refresh_from_state(&app, memory.inner());
+    Ok(())
+}
+
+#[tauri::command]
 pub fn tts_open_system_url(url: String) -> Result<(), String> {
     validate_twitch_oauth_url(&url)?;
     let trimmed = url.trim();
@@ -532,7 +587,11 @@ pub fn tts_open_system_url(url: String) -> Result<(), String> {
 
 #[tauri::command]
 
-pub async fn tts_open_window(app: AppHandle, state: State<'_, TtsState>) -> Result<(), String> {
+pub async fn tts_open_window(
+    app: AppHandle,
+    state: State<'_, TtsState>,
+    memory: State<'_, SharedWebviewMemoryManager>,
+) -> Result<(), String> {
 
     if let Some(window) = app.get_webview_window(TTS_WINDOW_LABEL) {
 
@@ -545,6 +604,12 @@ pub async fn tts_open_window(app: AppHandle, state: State<'_, TtsState>) -> Resu
         if voicesub_audio::is_per_process_routing_enabled() {
             let _ = bind_tts_window_audio(&state.service, &window);
         }
+
+        if let Ok(mut guard) = memory.lock() {
+            guard.set_tts_visible(true);
+            guard.set_tts_focused(true);
+        }
+        webview_memory::refresh_from_state(&app, memory.inner());
 
         return Ok(());
 
@@ -586,6 +651,12 @@ pub async fn tts_open_window(app: AppHandle, state: State<'_, TtsState>) -> Resu
     if voicesub_audio::is_per_process_routing_enabled() {
         let _ = bind_tts_window_audio(&state.service, &window);
     }
+
+    if let Ok(mut guard) = memory.lock() {
+        guard.set_tts_visible(true);
+        guard.set_tts_focused(true);
+    }
+    webview_memory::refresh_from_state(&app, memory.inner());
 
     info!(target: "voicesub.tts.ipc", "tts module window opened");
 

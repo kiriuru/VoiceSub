@@ -3,6 +3,7 @@ mod tts;
 
 #[cfg(windows)]
 mod webview2_gate;
+mod webview_memory;
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -25,6 +26,7 @@ use voicesub_runtime::{RuntimeHandle, RuntimeService};
 use voicesub_tts::{TtsModuleService, TwitchOAuthBridge};
 
 use crate::tts::TtsState;
+use crate::webview_memory::{SharedWebviewMemoryManager, WebviewMemoryManager};
 
 struct AppState {
     runtime: Arc<RuntimeService>,
@@ -165,6 +167,7 @@ pub fn run() {
 
     let (playback_hub, completion_rx) = PlaybackHub::spawn();
     let playback_hub = Arc::new(playback_hub);
+    let webview_memory = Mutex::new(WebviewMemoryManager::default());
 
     tauri::Builder::default()
         .manage(AppState {
@@ -179,6 +182,7 @@ pub fn run() {
             bind_addr,
             playback: playback_hub.clone(),
         })
+        .manage(webview_memory)
         .invoke_handler(tauri::generate_handler![
             voicesub_version,
             launch_browser_worker,
@@ -203,6 +207,8 @@ pub fn run() {
             tts::tts_channel_finish,
             tts::tts_channel_clear,
             tts::tts_channel_snapshot,
+            tts::tts_channel_force_idle,
+            tts::tts_get_resource_telemetry,
             tts::tts_enqueue,
             tts::tts_twitch_get_status,
             tts::tts_twitch_connect,
@@ -211,12 +217,22 @@ pub fn run() {
             tts::tts_sync_source_text_replacement,
             tts::tts_open_window,
             tts::tts_open_system_url,
+            tts::tts_report_webview_activity,
             shell::open_external_https_url,
+            shell::open_local_http_url,
         ])
         .setup(move |app| {
             let url = format!("http://{}:{}/", bind_addr.ip(), bind_addr.port());
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.eval(format!("window.location.replace('{url}');"));
+                if let Ok(mut guard) = app.state::<SharedWebviewMemoryManager>().lock() {
+                    guard.set_main_focused(true);
+                    guard.set_tts_visible(false);
+                }
+                crate::webview_memory::refresh_from_state(
+                    &app.handle(),
+                    app.state::<SharedWebviewMemoryManager>().inner(),
+                );
             }
             let tts_state = app.state::<TtsState>();
             tts::sync_playback_devices(&tts_state);
@@ -232,41 +248,61 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            let WindowEvent::CloseRequested { api, .. } = event else {
-                return;
-            };
-            if window.label() != "main" {
-                return;
-            }
-            api.prevent_close();
-            let bind_addr = window.state::<AppState>().bind_addr;
-            let app = window.app_handle().clone();
-            let window = window.clone();
-            let tts_service = app.state::<TtsState>().service.clone();
-            tauri::async_runtime::spawn(async move {
-                let project_root = window.state::<AppState>().project_root.clone();
-                log_shutdown_begin("user_close");
-                log_shutdown_step("tts_shutdown", json!({}));
-                tts_service.shutdown();
-                log_shutdown_step("tts_window_close", json!({}));
-                tts::close_tts_window(&app);
-                log_shutdown_step("runtime_stop_request", json!({ "bind_addr": bind_addr.to_string() }));
-                stop_runtime_session(bind_addr).await;
-                let shutdown_handle = window
-                    .state::<AppState>()
-                    .handle
-                    .lock()
-                    .ok()
-                    .and_then(|mut guard| guard.take());
-                if let Some(handle) = shutdown_handle {
-                    log_shutdown_step("runtime_shutdown", json!({}));
-                    handle.shutdown().await;
-                } else {
-                    log_shutdown_step("runtime_shutdown_skipped", json!({ "reason": "handle_missing" }));
+            match event {
+                WindowEvent::Focused(focused) => {
+                    let memory = window.state::<SharedWebviewMemoryManager>();
+                    if let Ok(mut guard) = memory.lock() {
+                        match window.label() {
+                            "main" => guard.set_main_focused(*focused),
+                            "tts" => guard.set_tts_focused(*focused),
+                            _ => {}
+                        }
+                    }
+                    if window.label() == "tts" {
+                        crate::webview_memory::sync_tts_window_visibility(
+                            &window.app_handle(),
+                            memory.inner(),
+                        );
+                    } else {
+                        crate::webview_memory::refresh_from_state(
+                            &window.app_handle(),
+                            memory.inner(),
+                        );
+                    }
                 }
-                complete_graceful_shutdown(&project_root, "user_close");
-                let _ = window.destroy();
-            });
+                WindowEvent::CloseRequested { api, .. } if window.label() == "main" => {
+                    api.prevent_close();
+                    let bind_addr = window.state::<AppState>().bind_addr;
+                    let app = window.app_handle().clone();
+                    let window = window.clone();
+                    let tts_service = app.state::<TtsState>().service.clone();
+                    tauri::async_runtime::spawn(async move {
+                        let project_root = window.state::<AppState>().project_root.clone();
+                        log_shutdown_begin("user_close");
+                        log_shutdown_step("tts_shutdown", json!({}));
+                        tts_service.shutdown();
+                        log_shutdown_step("tts_window_close", json!({}));
+                        tts::close_tts_window(&app);
+                        log_shutdown_step("runtime_stop_request", json!({ "bind_addr": bind_addr.to_string() }));
+                        stop_runtime_session(bind_addr).await;
+                        let shutdown_handle = window
+                            .state::<AppState>()
+                            .handle
+                            .lock()
+                            .ok()
+                            .and_then(|mut guard| guard.take());
+                        if let Some(handle) = shutdown_handle {
+                            log_shutdown_step("runtime_shutdown", json!({}));
+                            handle.shutdown().await;
+                        } else {
+                            log_shutdown_step("runtime_shutdown_skipped", json!({ "reason": "handle_missing" }));
+                        }
+                        complete_graceful_shutdown(&project_root, "user_close");
+                        let _ = window.destroy();
+                    });
+                }
+                _ => {}
+            }
         })
         .run(tauri::generate_context!())
         .expect("error while running VoiceSub");

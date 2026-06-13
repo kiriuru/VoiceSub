@@ -1,6 +1,8 @@
 <script lang="ts">
+  import { openLocalUrl } from "../api";
   import { locale, t } from "../i18n";
   import { obsStatusMessage } from "../diagnostics";
+  import { formatObsNativeCaptionStatus } from "../obs-status-i18n";
   import type { ConfigPayload } from "../types";
 
   export let overlayUrl: string;
@@ -74,8 +76,8 @@
     }
   }
 
-  function openOverlay() {
-    if (overlayUrl) window.open(overlayUrl, "_blank", "noopener");
+  async function openOverlay() {
+    if (overlayUrl) await openLocalUrl(overlayUrl);
   }
 </script>
 
@@ -276,13 +278,17 @@
         </p>
       {/if}
       {#if obsDiagnostics?.native_caption_status}
-        <p class="muted panel-note">{String(obsDiagnostics.native_caption_status)}</p>
+        <p class="muted panel-note">
+          {formatObsNativeCaptionStatus(String(obsDiagnostics.native_caption_status), tr)}
+        </p>
       {/if}
       {#if obsDiagnostics?.stream_output_active !== undefined && obsDiagnostics?.stream_output_active !== null}
         <p class="muted panel-note">
-          stream: {obsDiagnostics.stream_output_active ? tr("common.on") : tr("common.off")}
+          {tr("obs.stream.status", {
+            state: obsDiagnostics.stream_output_active ? tr("common.on") : tr("common.off"),
+          })}
           {#if obsDiagnostics.stream_output_reconnecting}
-            · reconnecting
+            · {tr("obs.stream.reconnecting")}
           {/if}
         </p>
       {/if}

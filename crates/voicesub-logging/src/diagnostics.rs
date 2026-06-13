@@ -115,6 +115,22 @@ pub fn is_runtime_events_verbose_enabled() -> bool {
         || is_truthy("SST_TRACE_RUNTIME_EVENTS_VERBOSE")
 }
 
+/// Compact backbone client log: overlay/worker lifecycle only; TTS and other verbose surfaces need full mode.
+pub fn should_persist_client_log(channel: &str, source: Option<&str>) -> bool {
+    if is_deep_diagnostics_enabled() {
+        return true;
+    }
+    let normalized_channel = channel.trim().to_ascii_lowercase();
+    let normalized_source = source.unwrap_or("").trim().to_ascii_lowercase();
+    if normalized_channel == "tts" || normalized_source == "tts-window" {
+        return false;
+    }
+    matches!(
+        normalized_channel.as_str(),
+        "overlay" | "browser_worker" | "dashboard"
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::{Mutex, MutexGuard};
@@ -199,6 +215,20 @@ mod tests {
         assert!(!is_runtime_events_verbose_enabled());
         set_config_full_logging_enabled(true);
         assert!(is_runtime_events_verbose_enabled());
+        reset_config_flag();
+    }
+
+    #[test]
+    fn client_log_compact_allows_overlay_and_worker_only() {
+        let _guard = env_test_lock();
+        reset_config_flag();
+        clear(&["VOICESUB_DEEP_DIAGNOSTICS"]);
+        assert!(should_persist_client_log("overlay", Some("overlay")));
+        assert!(should_persist_client_log("browser_worker", Some("browser-worker")));
+        assert!(!should_persist_client_log("tts", Some("tts-window")));
+        assert!(!should_persist_client_log("dashboard", Some("tts-window")));
+        set_config_full_logging_enabled(true);
+        assert!(should_persist_client_log("tts", Some("tts-window")));
         reset_config_flag();
     }
 }

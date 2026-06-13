@@ -1,6 +1,6 @@
 # VoiceSub Phase 0 — PoC report
 
-**Date:** 2026-06-09 (updated)  
+**Date:** 2026-06-13 (updated)  
 **Status:** Phase 0 **closed** — automated checklist green; manual 30 min soak (Svelte worker, OBS overlap) **operator sign-off received**
 
 ## Delivered (roadmap §5 Phase 0)
@@ -15,6 +15,7 @@
 | `external_asr_update` ingest (`partial`/`final`/`is_final`) | done |
 | Translation smoke stub → overlay broadcast | done |
 | IPC `launch_browser_worker`, `voicesub_version` | done |
+| `browser_worker_launch_skipped` + integration test harness (`VOICESUB_SKIP_BROWSER_WORKER`) | done (0.5.1) |
 | Svelte dashboard (Phase 2 panels) | done |
 | Overlay vanilla `/overlay` | done |
 
@@ -67,4 +68,4 @@ cargo test -p voicesub-http phase0_soak_checklist_automated -- --nocapture
 
 - Golden expansion for full browser FSM replay sequences — deferred with Phase 1 formal DoD.
 - NSIS installer pipeline — **done** (`build-release.ps1`); public GitHub release — deferred (roadmap §12).
-- Parakeet / Remote / Experimental browser — removed from core; archived under `legacy/`.
+- Parakeet / Experimental browser — removed from core; archived under `legacy/`.

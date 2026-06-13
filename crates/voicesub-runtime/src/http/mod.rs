@@ -16,6 +16,7 @@ mod state;
 mod tts_proxy;
 mod tts_python;
 mod twitch_oauth;
+mod ui_sync;
 mod update_service;
 mod updates;
 

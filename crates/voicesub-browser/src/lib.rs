@@ -9,14 +9,16 @@ mod operational_fsm;
 mod service;
 mod trace;
 mod webview2_messages;
+mod webview2_memory;
 mod webview2_runtime;
+mod webview_power;
 
 pub use chrome_flags::{
     default_chrome_launch_value, disabled_chrome_features_csv, BrowserChromeLaunchConfig,
     CHROME_ANTI_THROTTLE_FLAGS,
 };
 pub use launch_config::chrome_launch_from_config;
-pub use launcher::{BrowserLaunchError, BrowserWorkerLauncher, LaunchResult};
+pub use launcher::{browser_worker_launch_skipped, BrowserLaunchError, BrowserWorkerLauncher, LaunchResult};
 pub use gateway::{BrowserAsrGateway, GatewayDiagnostics};
 pub use operational_fsm::{BrowserAsrOperationalFsm, BrowserOperationalPhase};
 pub use trace::{structured_log_from_runtime_logger, BrowserAsrLog, StructuredLogFn};
@@ -31,3 +33,9 @@ pub use webview2_messages::{
 pub use webview2_runtime::{
     installed_webview2_version, WEBVIEW2_APP_GUID, WEBVIEW2_DOWNLOAD_URL,
 };
+pub use webview_power::{
+    resolve_power_action, WebviewActivity, WebviewPowerAction, WebviewRole,
+};
+
+#[cfg(windows)]
+pub use webview2_memory::apply_from_controller;

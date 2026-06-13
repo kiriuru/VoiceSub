@@ -12,8 +12,8 @@ mod subtitle_speech;
 mod trace;
 
 pub use config::{
-    normalize_playback_mode, normalize_tts_provider, TtsConfig, TtsConfigStore,
-    PLAYBACK_MODE_BROWSER, PLAYBACK_MODE_NATIVE, TTS_PROVIDER_BROWSER_GOOGLE,
+    normalize_playback_mode, normalize_tts_config, normalize_tts_provider, TtsConfig,
+    TtsConfigStore, PLAYBACK_MODE_BROWSER, PLAYBACK_MODE_NATIVE, PLAYBACK_MODE_SONIC, TTS_PROVIDER_BROWSER_GOOGLE,
     TTS_PROVIDER_PYTHON_STDLIB,
 };
 pub use python_runtime::{
@@ -24,7 +24,7 @@ pub use oauth_bridge::TwitchOAuthBridge;
 pub use channel_queue::{
     DualChannelSpeechQueue, ChannelQueueError, CHANNEL_SPEECH, CHANNEL_TWITCH,
 };
-pub use queue::{SpeechQueue, SpeechQueueItem, SpeechQueueState};
+pub use queue::{ChannelEnqueueResult, SpeechQueue, SpeechQueueItem, SpeechQueueState};
 pub use ipc::{
     bind_window_process, build_tts_module_url, speech_queue_item_id, tts_webview_data_dir,
     validate_twitch_oauth_url, TTS_WINDOW_LABEL,

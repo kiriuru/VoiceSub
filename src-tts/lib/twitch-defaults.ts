@@ -3,6 +3,7 @@ import type { TwitchTtsSettings } from "./types";
 export const defaultTwitchSettings = (): TwitchTtsSettings => ({
   enabled: false,
   channel: "",
+  channels: [],
   nick: "",
   oauth_token: "",
   oauth_client_id: "",
@@ -13,8 +14,10 @@ export const defaultTwitchSettings = (): TwitchTtsSettings => ({
   max_chars: 200,
   block_commands: true,
   ignore_users: [],
+  strip_symbols: ["@", "&", "$"],
   strip_emotes: true,
   strip_emoji: true,
+  strip_links: true,
   emote_sources: { twitch: true, bttv: true, seventv: true },
   detect_language: true,
   lang_min_chars: 2,
@@ -22,5 +25,5 @@ export const defaultTwitchSettings = (): TwitchTtsSettings => ({
   nick_replacements: [],
   include_builtin_profanity: true,
   pause_style: "period",
-  speak_template: "{nick}. {text}",
+  speak_template: "{nick}{pause}{text}",
 });

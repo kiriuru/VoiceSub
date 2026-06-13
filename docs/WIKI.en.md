@@ -1,6 +1,6 @@
 # VoiceSub — WIKI
 
-Operational guide for the VoiceSub `0.5.0` UI. Each element is described as: **what it is**, **why it exists**, **how it works**, **what it affects**, and **common mistakes**.
+Operational guide for the VoiceSub `0.5.1` UI. Each element is described as: **what it is**, **why it exists**, **how it works**, **what it affects**, and **common mistakes**.
 
 Technical architecture: `docs/TECHNICAL_ARCHITECTURE.en.md`. SST `0.4.4` is a frozen predecessor; core behavior in this document is VoiceSub-specific.
 
@@ -9,8 +9,8 @@ Technical architecture: `docs/TECHNICAL_ARCHITECTURE.en.md`. SST `0.4.4` is a fr
 ## 0. About the product
 
 ### Element: VoiceSub vs SST
-- **VoiceSub** — active `0.5.0` line (Rust + Tauri + Svelte).
-- **SST** `0.4.4` — frozen reference; settings import works, but Parakeet/Remote/Experimental modes are not started in core.
+- **VoiceSub** — active `0.5.1` line (Rust + Tauri + Svelte); first release baseline is `0.5.0`.
+- **SST** `0.4.4` — frozen reference; settings import works, but Parakeet/Experimental modes are not started in core.
 - **New overlay URL:** `http://127.0.0.1:8765/overlay` — update OBS Browser Source manually.
 
 ### Element: system requirements
@@ -20,7 +20,7 @@ Technical architecture: `docs/TECHNICAL_ARCHITECTURE.en.md`. SST `0.4.4` is a fr
 - Microphone in the Chrome worker; internet for external translation providers (optional).
 
 ### Element: install and update (NSIS)
-- **What it does:** `VoiceSub_0.5.0_x64-setup.exe` installs `VoiceSub.exe` and bundled static assets (dashboard, overlay, worker, tts).
+- **What it does:** `VoiceSub_0.5.1_x64-setup.exe` installs `VoiceSub.exe` and bundled static assets (dashboard, overlay, worker, tts).
 - **Why:** single installer without Python/Node in runtime; downloads WebView2 via bootstrapper when missing (`downloadBootstrapper` in Tauri).
 - **Update:** close app → run new `setup.exe` over existing → `user-data/` and `logs/` persist next to install/project root.
 - **Developers:** `build-release-msi.bat` → `build-release.ps1` → `F:\AI\VoiceSub - release\v{version}\`.
@@ -137,7 +137,7 @@ Technical architecture: `docs/TECHNICAL_ARCHITECTURE.en.md`. SST `0.4.4` is a fr
 - Network preflight → terminal `recognition_network_unreachable` after repeated network errors.
 - Force-finalization for stuck partials.
 
-**Not in core:** local Parakeet, experimental `/google-asr-experimental`, remote ingest.
+**Not in core:** local Parakeet, experimental `/google-asr-experimental`.
 
 ---
 
@@ -249,13 +249,17 @@ Technical architecture: `docs/TECHNICAL_ARCHITECTURE.en.md`. SST `0.4.4` is a fr
 
 ### Element: Speech
 - TTS provider, voice, rate/pitch/volume.
-- Audio routing: browser element or WinAPI per-process (`VOICESUB_TTS_PER_PROCESS_ROUTING`).
-- Subtitle-driven planner (`tts_plan_subtitle_speech`).
+- **Playback:** **Native** mode (cpal @ 1.0×) or **Sonic** (libsonic tempo stretch); separate WASAPI devices for speech and Twitch.
+- Subtitle-driven planner (`tts_plan_subtitle_speech`); playback via IPC `tts_play_audio` (no browser HTMLAudio).
 
 ### Element: Twitch
-- OAuth via system browser.
-- IRC chat → speech queue.
-- Filters, emotes, replacements (`voicesub-twitch` crate).
+- OAuth via system browser; implicit grant + token poll.
+- **Up to 5 channels** per connection (channel logins without `#`); status badge `IRC: connected #channel` or `3/5 channels`.
+- IRC chat → speech queue (`twitch` channel); emote/link/symbol/lang filters apply **live** without IRC reconnect.
+- **Symbols not spoken** field — comma-separated tokens removed from text (empty = all symbols may be read).
+- Digits in messages (`5`, `100`, ordinals like `5ю`) are preserved during emoji/emote stripping.
+- **?** help on **Bot nick** — IRC login used for `JOIN` (not a viewer display name); popover clamped to viewport (`popover-position.ts`).
+- Crate `voicesub-twitch`; UI `TwitchPanel.svelte`; config `user-data/modules/tts/config.toml`.
 
 ### Element: Python sidecar
 - `bin/modules/tts/runtime/` — embedded fetcher for Google TTS proxy.
@@ -294,8 +298,7 @@ Technical architecture: `docs/TECHNICAL_ARCHITECTURE.en.md`. SST `0.4.4` is a fr
 
 ### Element: SST config.json import
 - Migrates to `config.toml`, `config_version` → 8.
-- `local` / `remote` / experimental → `browser_google` + import hint.
-- `ui.show_remote_tools` → false.
+- `local` / experimental → `browser_google` + import hint.
 
 ### Element: layout
 - `standard` vs `compact` — affects Tauri window size.
@@ -304,7 +307,7 @@ Technical architecture: `docs/TECHNICAL_ARCHITECTURE.en.md`. SST `0.4.4` is a fr
 
 ## 14. Help
 
-Built-in topics: overview, recognition, translation, subtitles/style, OBS, tools. No remote mode section (removed from core).
+Built-in topics: overview, recognition, translation, subtitles/style, OBS, tools.
 
 ---
 
@@ -336,7 +339,6 @@ Built-in topics: overview, recognition, translation, subtitles/style, OBS, tools
 | SST feature | VoiceSub status |
 | --- | --- |
 | Local Parakeet | `legacy/modules-source/parakeet/` → Phase 4 module |
-| Remote controller/worker | `legacy/remote/` → future module |
 | Experimental browser | `legacy/experimental-browser/` — routes removed |
 | PyInstaller bootstrap | Replaced by Tauri NSIS installer |
 | Splash startup profiles | None — single `VoiceSub.exe` |

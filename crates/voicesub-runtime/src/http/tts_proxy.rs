@@ -1,4 +1,5 @@
 use std::sync::OnceLock;
+use std::time::Duration;
 
 use axum::{
     extract::Query,
@@ -85,6 +86,8 @@ fn google_tts_http_client() -> &'static reqwest::Client {
             .user_agent(
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             )
+            .pool_max_idle_per_host(8)
+            .tcp_keepalive(Duration::from_secs(30))
             .build()
             .expect("google tts reqwest client")
     })
@@ -194,4 +197,43 @@ pub async fn google_tts_proxy(Query(params): Query<GoogleTtsQuery>) -> impl Into
     );
 
     audio_mpeg_response(bytes.to_vec())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validate_rejects_empty_query() {
+        let params = GoogleTtsQuery {
+            q: "   ".into(),
+            tl: "en".into(),
+        };
+        assert_eq!(validate_tts_query(&params), Err(StatusCode::BAD_REQUEST));
+    }
+
+    #[test]
+    fn validate_rejects_too_long_text_by_unicode_scalar_count() {
+        let params = GoogleTtsQuery {
+            q: "😀".repeat(GOOGLE_TTS_MAX_CHARS + 1),
+            tl: "en".into(),
+        };
+        assert_eq!(params.q.chars().count(), GOOGLE_TTS_MAX_CHARS + 1);
+        assert_eq!(validate_tts_query(&params), Err(StatusCode::BAD_REQUEST));
+    }
+
+    #[test]
+    fn validate_accepts_text_at_limit() {
+        let params = GoogleTtsQuery {
+            q: "a".repeat(GOOGLE_TTS_MAX_CHARS),
+            tl: "ru".into(),
+        };
+        assert_eq!(validate_tts_query(&params), Ok(params.q.as_str()));
+    }
+
+    #[test]
+    fn normalize_lang_strips_region() {
+        assert_eq!(normalize_lang("ru-RU"), "ru");
+        assert_eq!(normalize_lang(""), "en");
+    }
 }

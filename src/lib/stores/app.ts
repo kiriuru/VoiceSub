@@ -56,7 +56,7 @@ export const appStore = writable<AppSnapshot>({
   wsConnected: false,
   activeTab: "translation",
   saveStatus: { tone: "default" },
-  version: "0.5.0",
+  version: "0.5.1",
   versionInfo: null,
   updateBannerDismissed: false,
   busy: false,

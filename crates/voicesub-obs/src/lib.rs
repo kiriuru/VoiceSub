@@ -3,6 +3,7 @@
 mod auth;
 mod client;
 mod diagnostics;
+mod error_codes;
 mod service;
 mod settings;
 mod text;

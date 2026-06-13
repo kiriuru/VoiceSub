@@ -4,7 +4,9 @@ mod compact_log_line;
 mod diagnostics;
 mod jsonl_trace;
 mod lifecycle;
+mod log_rotation;
 mod redaction;
+mod rotating_log_file;
 mod session;
 mod structured_log_compact;
 mod structured_runtime_logger;
@@ -20,7 +22,7 @@ pub use diagnostics::{
     is_config_full_logging_enabled, is_deep_diagnostics_enabled, is_runtime_events_verbose_enabled,
     is_browser_trace_enabled, is_obs_trace_enabled, is_pipeline_trace_enabled,
     is_subtitle_trace_enabled, is_tts_trace_enabled, is_ui_trace_enabled, is_ws_trace_enabled,
-    set_config_full_logging_enabled,
+    set_config_full_logging_enabled, should_persist_client_log,
 };
 pub use lifecycle::{
     complete_graceful_shutdown, install_lifecycle_hooks, log_shutdown_begin, log_shutdown_step,
@@ -39,12 +41,13 @@ pub use subtitle_trace::{configure_subtitle_trace_log, subtitle_trace, subtitle_
 pub use tts_trace::{configure_tts_trace_log, tts_trace};
 pub use ui_trace::{configure_ui_trace_log, ui_trace, ui_trace_mapping};
 
-use std::fs::{self, OpenOptions};
+use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
 use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+
+use crate::rotating_log_file::default_core_log_writer;
 
 /// Initialize global tracing to stderr only (tests / early bootstrap).
 pub fn init_tracing() {
@@ -70,20 +73,7 @@ pub fn init_tracing_backbone(project_root: &Path) {
     rotate_to_old_log(&paths.core);
     rotate_to_old_log(&paths.runtime_events);
 
-    let file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&paths.core)
-        .unwrap_or_else(|err| {
-            eprintln!("voicesub-logging: failed to open core.log: {err}");
-            OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(std::env::temp_dir().join("voicesub-core.log"))
-                .expect("fallback log file")
-        });
-
-    let file = Arc::new(file);
+    let core_writer = default_core_log_writer(&paths.core);
     let default_filter = if is_deep_diagnostics_enabled() {
         let mut parts = vec!["info".to_string()];
         if is_subtitle_trace_enabled() {
@@ -116,7 +106,7 @@ pub fn init_tracing_backbone(project_root: &Path) {
     let _ = tracing_subscriber::registry()
         .with(filter)
         .with(fmt::layer().with_target(true))
-        .with(fmt::layer().with_writer(file).with_ansi(false))
+        .with(fmt::layer().with_writer(core_writer).with_ansi(false))
         .try_init();
 }
 
@@ -131,6 +121,24 @@ pub fn backbone_log_paths(project_root: &Path) -> BackboneLogs {
         runtime_events: dir.join("runtime-events.log"),
         session_latest: dir.join("session-latest.jsonl"),
     }
+}
+
+/// Opt-in JSONL trace files written when deep diagnostics are enabled.
+pub const DEEP_TRACE_LOG_FILES: &[&str] = &[
+    "subtitle-trace.jsonl",
+    "tts-trace.jsonl",
+    "browser-trace.jsonl",
+    "obs-trace.jsonl",
+    "ui-trace.jsonl",
+    "ws-trace.jsonl",
+    "pipeline-trace.jsonl",
+];
+
+pub fn deep_trace_log_paths(logs_dir: &Path) -> Vec<PathBuf> {
+    DEEP_TRACE_LOG_FILES
+        .iter()
+        .map(|name| logs_dir.join(name))
+        .collect()
 }
 
 #[derive(Debug, Clone)]

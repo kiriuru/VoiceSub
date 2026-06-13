@@ -7,6 +7,11 @@ export async function ensureMicrophonePermission(state: BrowserAsrState, appendL
   if (existingStream && existingTrack && existingTrack.readyState === "live") {
     return existingStream;
   }
+  if (state.microphoneMonitor) {
+    state.mediaTrackLeakGuardCount = Number(state.mediaTrackLeakGuardCount || 0) + 1;
+    appendLog("releasing stale microphone monitor before getUserMedia re-acquire");
+    releaseMicrophoneMonitor(state);
+  }
   appendLog("requesting microphone permission via getUserMedia");
   state.getUserMediaCount = Number(state.getUserMediaCount || 0) + 1;
   let stream: MediaStream;

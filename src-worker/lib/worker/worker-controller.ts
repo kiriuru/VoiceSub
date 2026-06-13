@@ -4,6 +4,7 @@ import { createBrowserAsrStateSeed } from "../asr/session-state";
 import { BrowserAsrSessionManager } from "../asr/session-manager";
 import type { BrowserAsrState } from "../asr/types";
 import { autoLoadAndApplyUiTheme } from "../ui-theme";
+import { subscribeUiConfigSync } from "../../../src/lib/ui-config-sync";
 import type { WorkerUiStore } from "../stores/worker-ui.svelte";
 import { appendWorkerLog } from "./client-log";
 import { ensureMicrophonePermission, releaseMicrophoneMonitor } from "./mic-monitor";
@@ -235,6 +236,11 @@ export function createWorkerController(ui: WorkerUiStore): WorkerController {
 
   void autoLoadAndApplyUiTheme();
 
+  const unsubscribeUiConfigSync = subscribeUiConfigSync((payload) => {
+    applyDashboardPresentationFromConfig(payload as Record<string, unknown>, ui.setLocale, ui.tr);
+    appendLog("ui theme synced from dashboard");
+  });
+
   const onStart = async () => {
     await sessionManager.start();
   };
@@ -260,6 +266,7 @@ export function createWorkerController(ui: WorkerUiStore): WorkerController {
       return;
     }
     destroyed = true;
+    unsubscribeUiConfigSync();
     sessionManager.destroy();
     releaseMicrophoneMonitor(state);
   };

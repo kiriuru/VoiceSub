@@ -217,7 +217,7 @@ pub fn apply_voicesub_import_rules(payload: Value) -> Value {
     root.remove("remote");
 
     let mut ui = as_object(root.get("ui").unwrap_or(&Value::Null));
-    ui.insert("show_remote_tools".into(), json!(false));
+    ui.remove("show_remote_tools");
     root.insert("ui".into(), Value::Object(ui));
 
     root.insert("config_version".into(), json!(CURRENT_CONFIG_VERSION));

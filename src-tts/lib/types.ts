@@ -46,11 +46,14 @@ export interface TwitchEmoteSources {
   seventv: boolean;
 }
 
-export type TtsPlaybackMode = "native" | "browser";
+export type TtsPlaybackMode = "native" | "sonic";
 
 export interface TwitchTtsSettings {
   enabled: boolean;
+  /** Legacy first-channel field; kept in sync with `channels[0]`. */
   channel: string;
+  /** Up to 5 channel logins (without `#`). */
+  channels?: string[];
   nick: string;
   oauth_token: string;
   /** Twitch app Client ID for built-in OAuth (implicit grant, localhost redirect). */
@@ -63,8 +66,11 @@ export interface TwitchTtsSettings {
   max_chars: number;
   block_commands: boolean;
   ignore_users: string[];
+  /** Symbol tokens not spoken in chat TTS. Empty = read all symbols. */
+  strip_symbols?: string[];
   strip_emotes?: boolean;
   strip_emoji?: boolean;
+  strip_links?: boolean;
   emote_sources?: TwitchEmoteSources;
   detect_language?: boolean;
   lang_min_chars?: number;
@@ -87,7 +93,9 @@ export interface TwitchTtsSettings {
 
 export interface TwitchConnectionStatus {
   state: TwitchConnectionState;
+  /** Comma-separated `#channel` labels. */
   channel: string;
+  channels?: string[];
   message: string;
 }
 

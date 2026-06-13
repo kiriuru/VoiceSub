@@ -67,6 +67,11 @@ export function cleanupRecognitionInstance(manager: AsrManagerHost, generationId
     return;
   }
   collectRecognitionInstances(manager).forEach((recognition) => {
+    try {
+      recognition.abort();
+    } catch {
+      // best effort
+    }
     recognition.onstart = null;
     recognition.onend = null;
     recognition.onerror = null;

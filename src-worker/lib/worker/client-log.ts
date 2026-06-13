@@ -1,6 +1,19 @@
 import { CLIENT_LOG_THROTTLE_MS } from "./worker-defaults";
 
+const CLIENT_LOG_STATE_MAX = 256;
+
 const clientLogState = new Map<string, { at: number; muted: boolean }>();
+
+function trimClientLogState(): void {
+  if (clientLogState.size <= CLIENT_LOG_STATE_MAX) {
+    return;
+  }
+  const entries = [...clientLogState.entries()].sort((a, b) => a[1].at - b[1].at);
+  const removeCount = clientLogState.size - CLIENT_LOG_STATE_MAX;
+  for (let index = 0; index < removeCount; index += 1) {
+    clientLogState.delete(entries[index][0]);
+  }
+}
 
 async function sendClientLogPayload(payload: Record<string, unknown>): Promise<void> {
   const body = JSON.stringify(payload);
@@ -77,6 +90,7 @@ export function postClientLog(message: string, details?: Record<string, unknown>
     return;
   }
   clientLogState.set(key, { at: Date.now(), muted: false });
+  trimClientLogState();
   void sendClientLogPayload(payload);
 }
 

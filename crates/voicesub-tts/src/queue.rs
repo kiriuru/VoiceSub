@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 
 use serde::{Deserialize, Serialize};
-use tracing::debug;
+use tracing::{debug, warn};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SpeechQueueItem {
@@ -12,6 +12,24 @@ pub struct SpeechQueueItem {
     /// BCP-47 / ISO language code for browser TTS (e.g. `ru`, `en`).
     #[serde(default = "default_speech_lang")]
     pub lang: String,
+    /// Subtitle planner dedupe key; released when this item is dropped before playback.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dedupe_key: Option<String>,
+}
+
+/// Result of enqueueing into a speech channel (includes adaptive-drop ids for JS prefetch cleanup).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChannelEnqueueResult {
+    pub queue_len: usize,
+    #[serde(default)]
+    pub dropped_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MarkFinishedOutcome {
+    Matched,
+    NotSpeaking,
+    MismatchForcedIdle,
 }
 
 fn default_speech_lang() -> String {
@@ -70,26 +88,30 @@ impl SpeechQueue {
         self.items.iter().cloned().collect()
     }
 
-    pub fn enqueue(&mut self, item: SpeechQueueItem) {
-        self.enqueue_with_cap(item, 8);
+    pub fn enqueue(&mut self, item: SpeechQueueItem) -> Vec<SpeechQueueItem> {
+        self.enqueue_with_cap(item, 8)
     }
 
-    pub fn enqueue_with_cap(&mut self, item: SpeechQueueItem, max_items: u32) {
+    /// Returns items removed by adaptive drop before enqueueing `item`.
+    pub fn enqueue_with_cap(&mut self, item: SpeechQueueItem, max_items: u32) -> Vec<SpeechQueueItem> {
         let cap = max_items.max(1) as usize;
-        let dropped = if self.items.len() >= cap {
-            self.items.pop_front().map(|dropped| dropped.id)
-        } else {
-            None
-        };
+        let dropped = adaptive_drop_for_enqueue(&mut self.items, cap);
         debug!(
             target: "voicesub.tts",
             id = %item.id,
             queue_len = self.items.len() + 1,
-            dropped_id = dropped.as_deref().unwrap_or(""),
+            dropped_count = dropped.len(),
+            dropped_ids = %dropped
+                .iter()
+                .map(|entry| entry.id.as_str())
+                .collect::<Vec<_>>()
+                .join(","),
             cap,
+            low_water = adaptive_low_water(cap),
             "queue push"
         );
         self.items.push_back(item);
+        dropped
     }
 
     pub fn clear(&mut self) {
@@ -110,11 +132,24 @@ impl SpeechQueue {
         Some(next)
     }
 
-    pub fn mark_finished(&mut self, item_id: &str) {
+    pub fn mark_finished(&mut self, item_id: &str) -> MarkFinishedOutcome {
+        if self.state != SpeechQueueState::Speaking {
+            return MarkFinishedOutcome::NotSpeaking;
+        }
         if self.current_id.as_deref() == Some(item_id) {
             self.current_id = None;
             self.state = SpeechQueueState::Idle;
+            return MarkFinishedOutcome::Matched;
         }
+        let expected = self.current_id.clone().unwrap_or_default();
+        warn!(
+            target: "voicesub.tts",
+            expected = %expected,
+            got = %item_id,
+            "queue mark_finished id mismatch; forcing idle"
+        );
+        self.force_idle();
+        MarkFinishedOutcome::MismatchForcedIdle
     }
 
     pub fn pause(&mut self) {
@@ -128,6 +163,60 @@ impl SpeechQueue {
             self.state = SpeechQueueState::Speaking;
         }
     }
+
+    /// Reset a stuck `Speaking` state without dropping queued items.
+    pub fn force_idle(&mut self) {
+        self.current_id = None;
+        self.state = SpeechQueueState::Idle;
+    }
+}
+
+fn adaptive_low_water(cap: usize) -> usize {
+    (cap / 2).max(1)
+}
+
+/// Lower value = dropped first when the queue is saturated.
+fn enqueue_drop_priority(source: &str) -> u8 {
+    if source == "subtitle_source" {
+        0
+    } else if source.starts_with("subtitle_") {
+        1
+    } else {
+        2
+    }
+}
+
+fn pick_adaptive_drop_index(items: &VecDeque<SpeechQueueItem>) -> usize {
+    let mut best = 0usize;
+    let mut best_priority = enqueue_drop_priority(&items[0].source);
+    for (index, item) in items.iter().enumerate().skip(1) {
+        let priority = enqueue_drop_priority(&item.source);
+        if priority < best_priority {
+            best_priority = priority;
+            best = index;
+        }
+    }
+    best
+}
+
+fn adaptive_drop_for_enqueue(
+    items: &mut VecDeque<SpeechQueueItem>,
+    cap: usize,
+) -> Vec<SpeechQueueItem> {
+    let low_water = adaptive_low_water(cap);
+    let mut dropped = Vec::new();
+    if items.len() < cap {
+        return dropped;
+    }
+    while items.len() > low_water {
+        let index = pick_adaptive_drop_index(items);
+        if let Some(removed) = items.remove(index) {
+            dropped.push(removed);
+        } else {
+            break;
+        }
+    }
+    dropped
 }
 
 #[cfg(test)]
@@ -135,11 +224,16 @@ mod tests {
     use super::*;
 
     fn item(id: &str, text: &str) -> SpeechQueueItem {
+        item_with_source(id, text, "")
+    }
+
+    fn item_with_source(id: &str, text: &str, source: &str) -> SpeechQueueItem {
         SpeechQueueItem {
             id: id.to_string(),
             text: text.to_string(),
-            source: String::new(),
+            source: source.to_string(),
             lang: "en".to_string(),
+            dedupe_key: None,
         }
     }
 
@@ -149,18 +243,42 @@ mod tests {
         q.enqueue(item("a", "one"));
         q.enqueue(item("b", "two"));
         assert_eq!(q.begin_next().unwrap().id, "a");
-        q.mark_finished("a");
+        assert_eq!(q.mark_finished("a"), MarkFinishedOutcome::Matched);
         assert_eq!(q.begin_next().unwrap().id, "b");
     }
 
     #[test]
-    fn enqueue_with_cap_drops_oldest() {
+    fn enqueue_with_cap_trims_to_low_water_when_saturated() {
         let mut q = SpeechQueue::new();
         for index in 0..10 {
             q.enqueue_with_cap(item(&format!("id-{index}"), "x"), 8);
         }
-        assert_eq!(q.len(), 8);
-        assert_eq!(q.begin_next().unwrap().id, "id-2");
+        assert_eq!(q.len(), 6);
+        assert_eq!(q.begin_next().unwrap().id, "id-4");
+    }
+
+    #[test]
+    fn adaptive_drop_prefers_subtitle_source_over_translation() {
+        let mut items = VecDeque::new();
+        for index in 0..4 {
+            items.push_back(item_with_source(
+                &format!("src-{index}"),
+                "source",
+                "subtitle_source",
+            ));
+        }
+        for index in 0..4 {
+            items.push_back(item_with_source(
+                &format!("tl-{index}"),
+                "translation",
+                "subtitle_line1",
+            ));
+        }
+        let dropped = adaptive_drop_for_enqueue(&mut items, 8);
+        assert_eq!(dropped.len(), 4);
+        assert!(dropped.iter().all(|item| item.id.starts_with("src-")));
+        assert_eq!(items.len(), 4);
+        assert!(items.iter().all(|item| item.source.starts_with("subtitle_") && item.source != "subtitle_source"));
     }
 
     #[test]
@@ -171,5 +289,41 @@ mod tests {
         q.clear();
         assert!(q.is_empty());
         assert_eq!(q.state(), SpeechQueueState::Idle);
+    }
+
+    #[test]
+    fn mark_finished_mismatch_forces_idle() {
+        let mut q = SpeechQueue::new();
+        q.enqueue(item("a", "one"));
+        q.enqueue(item("b", "two"));
+        let _ = q.begin_next();
+        assert_eq!(q.mark_finished("wrong"), MarkFinishedOutcome::MismatchForcedIdle);
+        assert_eq!(q.state(), SpeechQueueState::Idle);
+        assert_eq!(q.begin_next().unwrap().id, "b");
+    }
+
+    #[test]
+    fn force_idle_unblocks_stuck_speaking_state() {
+        let mut q = SpeechQueue::new();
+        q.enqueue(item("a", "one"));
+        q.enqueue(item("b", "two"));
+        let _ = q.begin_next();
+        assert_eq!(q.state(), SpeechQueueState::Speaking);
+        q.force_idle();
+        assert_eq!(q.state(), SpeechQueueState::Idle);
+        assert_eq!(q.begin_next().unwrap().id, "b");
+    }
+
+    #[test]
+    fn channel_enqueue_result_serializes_empty_dropped_ids() {
+        let json = serde_json::to_string(&ChannelEnqueueResult {
+            queue_len: 3,
+            dropped_ids: vec![],
+        })
+        .expect("serialize");
+        assert!(json.contains("\"dropped_ids\""));
+        let parsed: ChannelEnqueueResult = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(parsed.queue_len, 3);
+        assert!(parsed.dropped_ids.is_empty());
     }
 }

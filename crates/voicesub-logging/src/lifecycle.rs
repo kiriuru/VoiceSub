@@ -222,7 +222,7 @@ mod tests {
         cleanup(&root);
         let record = SessionLifecycleRecord {
             pid: 4242,
-            version: "0.5.0".into(),
+            version: "0.5.1".into(),
             started_utc_secs: 100,
             ended_utc_secs: None,
             state: SessionExitState::Running,
@@ -238,7 +238,7 @@ mod tests {
     fn complete_graceful_shutdown_marks_record() {
         let root = temp_root("graceful");
         cleanup(&root);
-        mark_session_running(&root, "0.5.0-test");
+        mark_session_running(&root, "0.5.1-test");
         complete_graceful_shutdown(&root, "user_close");
         let saved = read_session_lifecycle_record(&root).expect("record");
         assert_eq!(saved.state, SessionExitState::Graceful);

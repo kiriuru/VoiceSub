@@ -23,6 +23,9 @@ pub enum TtsConfigError {
 pub const TTS_PROVIDER_BROWSER_GOOGLE: &str = "browser_google";
 pub const TTS_PROVIDER_PYTHON_STDLIB: &str = "python_stdlib";
 pub const PLAYBACK_MODE_NATIVE: &str = "native";
+/// Pitch-preserving tempo via libsonic (replaces legacy browser HTMLAudio playback).
+pub const PLAYBACK_MODE_SONIC: &str = "sonic";
+/// Legacy config value; migrated to [`PLAYBACK_MODE_SONIC`] on load.
 pub const PLAYBACK_MODE_BROWSER: &str = "browser";
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -37,7 +40,7 @@ pub struct TtsConfig {
     pub audio_output_device_id: String,
     #[serde(default)]
     pub audio_output_device_label: String,
-    /// `native` (Rust/cpal) or `browser` (`HTMLAudioElement` fallback).
+    /// `native` (Rust/cpal @ 1.0×) or `sonic` (Rust/cpal + libsonic tempo).
     #[serde(default = "default_playback_mode")]
     pub playback_mode: String,
     #[serde(default = "default_rate")]
@@ -73,8 +76,23 @@ fn default_playback_mode() -> String {
 pub fn normalize_playback_mode(mode: &str) -> Option<String> {
     match mode.trim().to_ascii_lowercase().as_str() {
         PLAYBACK_MODE_NATIVE => Some(PLAYBACK_MODE_NATIVE.to_string()),
-        PLAYBACK_MODE_BROWSER => Some(PLAYBACK_MODE_BROWSER.to_string()),
+        PLAYBACK_MODE_SONIC | PLAYBACK_MODE_BROWSER => Some(PLAYBACK_MODE_SONIC.to_string()),
         _ => None,
+    }
+}
+
+/// Migrate legacy modes and clamp native playback to 1.0×.
+pub fn normalize_tts_config(config: &mut TtsConfig) {
+    if let Some(mode) = normalize_playback_mode(&config.playback_mode) {
+        config.playback_mode = mode;
+    } else {
+        config.playback_mode = PLAYBACK_MODE_NATIVE.to_string();
+    }
+    if config.playback_mode == PLAYBACK_MODE_NATIVE {
+        config.speech_rate = 1.0;
+        if config.twitch.speech_rate > 0.0 {
+            config.twitch.speech_rate = 0.0;
+        }
     }
 }
 
@@ -129,7 +147,17 @@ impl TtsConfigStore {
             return Ok(config);
         }
         let text = fs::read_to_string(&self.path)?;
-        let config: TtsConfig = toml::from_str(&text)?;
+        let mut config: TtsConfig = toml::from_str(&text)?;
+        let before = config.clone();
+        normalize_tts_config(&mut config);
+        if config != before {
+            info!(
+                target: "voicesub.tts",
+                path = %self.path.display(),
+                "tts config migrated (playback mode / native rate)"
+            );
+            self.save(&config)?;
+        }
         debug!(
             target: "voicesub.tts",
             path = %self.path.display(),
@@ -158,6 +186,7 @@ impl TtsConfigStore {
             TtsConfig::default()
         });
         mutate(&mut config);
+        normalize_tts_config(&mut config);
         self.save(&config)?;
         Ok(config)
     }
@@ -188,6 +217,54 @@ mod tests {
     }
 
     #[test]
+    fn migrates_legacy_browser_to_sonic() {
+        let dir = std::env::temp_dir().join(format!(
+            "voicesub-tts-migrate-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        let store = TtsConfigStore::new(&dir);
+        let mut twitch = TwitchTtsSettings::default();
+        twitch.speech_rate = 1.5;
+        let config = TtsConfig {
+            playback_mode: PLAYBACK_MODE_BROWSER.to_string(),
+            speech_rate: 1.25,
+            twitch,
+            ..TtsConfig::default()
+        };
+        store.save(&config).expect("save");
+        let loaded = store.load().expect("load");
+        assert_eq!(loaded.playback_mode, PLAYBACK_MODE_SONIC);
+        assert_eq!(loaded.speech_rate, 1.25);
+        assert_eq!(loaded.twitch.speech_rate, 1.5);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn native_mode_clamps_rate_on_load() {
+        let dir = std::env::temp_dir().join(format!(
+            "voicesub-tts-native-clamp-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        let store = TtsConfigStore::new(&dir);
+        let mut twitch = TwitchTtsSettings::default();
+        twitch.speech_rate = 1.5;
+        let config = TtsConfig {
+            playback_mode: PLAYBACK_MODE_NATIVE.to_string(),
+            speech_rate: 1.25,
+            twitch,
+            ..TtsConfig::default()
+        };
+        store.save(&config).expect("save");
+        let loaded = store.load().expect("load");
+        assert_eq!(loaded.playback_mode, PLAYBACK_MODE_NATIVE);
+        assert_eq!(loaded.speech_rate, 1.0);
+        assert_eq!(loaded.twitch.speech_rate, 0.0);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn roundtrip_config() {
         let dir = std::env::temp_dir().join(format!("voicesub-tts-test-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
@@ -198,7 +275,7 @@ mod tests {
             playback_mode: PLAYBACK_MODE_NATIVE.to_string(),
             audio_output_device_id: "{test-device}".to_string(),
             audio_output_device_label: "Speakers".to_string(),
-            speech_rate: 1.1,
+            speech_rate: 1.0,
             speech_volume: 0.8,
             speech: TtsSpeechSettings {
                 speak_source: true,

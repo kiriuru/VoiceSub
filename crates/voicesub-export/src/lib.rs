@@ -8,7 +8,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde::Serialize;
 use serde_json::Value;
 use voicesub_config::ProjectPaths;
-use voicesub_logging::{backbone_log_paths, redact_data, BackboneLogs};
+use voicesub_logging::{backbone_log_paths, deep_trace_log_paths, redact_data, BackboneLogs, DEEP_TRACE_LOG_FILES};
 use zip::write::SimpleFileOptions;
 use zip::ZipWriter;
 
@@ -93,6 +93,7 @@ impl ExportService {
         config_payload: Value,
         paths: &ProjectPaths,
         base_url: &str,
+        include_deep_traces: bool,
     ) -> io::Result<PathBuf> {
         fs::create_dir_all(&self.export_dir)?;
         let bundle_name = format!("diagnostics-{}.zip", utc_stamp());
@@ -113,7 +114,7 @@ impl ExportService {
         write_json_entry(
             &mut zip,
             "diagnostics-manifest.json",
-            &self.build_manifest(),
+            &self.build_manifest(include_deep_traces),
             options,
         )?;
         zip.start_file("environment.txt", options)?;
@@ -133,22 +134,42 @@ impl ExportService {
             options,
         )?;
 
+        if include_deep_traces {
+            for path in deep_trace_log_paths(&paths.logs_dir) {
+                let Some(name) = path.file_name().and_then(|value| value.to_str()) else {
+                    continue;
+                };
+                write_file_if_present(&mut zip, &path, name, options)?;
+            }
+        }
+
         zip.finish()?;
         Ok(bundle_path)
     }
 
-    fn build_manifest(&self) -> Value {
+    fn build_manifest(&self, include_deep_traces: bool) -> Value {
+        let mut files = serde_json::json!({
+            "runtime_status.json": "runtime status snapshot at export time",
+            "config_redacted.json": "redacted config payload",
+            "environment.txt": "paths, bind URL, platform",
+            "diagnostics-manifest.json": "this file",
+            "latest_session.jsonl": "client event session log",
+            "core.log": "backbone application log",
+            "runtime-events.log": "runtime events log"
+        });
+        if include_deep_traces {
+            if let Some(map) = files.as_object_mut() {
+                for name in DEEP_TRACE_LOG_FILES {
+                    map.insert(
+                        (*name).into(),
+                        Value::String(format!("deep diagnostic JSONL trace ({name})")),
+                    );
+                }
+            }
+        }
         serde_json::json!({
             "app_version": self.version,
-            "files": {
-                "runtime_status.json": "runtime status snapshot at export time",
-                "config_redacted.json": "redacted config payload",
-                "environment.txt": "paths, bind URL, platform",
-                "diagnostics-manifest.json": "this file",
-                "latest_session.jsonl": "client event session log",
-                "core.log": "backbone application log",
-                "runtime-events.log": "runtime events log"
-            }
+            "files": files,
         })
     }
 
@@ -210,7 +231,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("vs-exports-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
-        let service = ExportService::new(dir.join("exports"), &dir, "0.5.0");
+        let service = ExportService::new(dir.join("exports"), &dir, "0.5.1");
         let list = service.list_exports().unwrap();
         assert!(list.exports.is_empty());
         let _ = fs::remove_dir_all(dir);

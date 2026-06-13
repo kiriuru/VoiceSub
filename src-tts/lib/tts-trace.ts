@@ -1,11 +1,28 @@
 type TraceFields = Record<string, unknown>;
 
+let fullLoggingEnabled = false;
+
+export function setTtsFullLoggingEnabled(enabled: boolean): void {
+  fullLoggingEnabled = enabled;
+}
+
+export function isTtsFullLoggingEnabled(): boolean {
+  return fullLoggingEnabled;
+}
+
 function textFields(text: string): TraceFields {
   const preview = text.length > 80 ? `${text.slice(0, 80)}…` : text;
   return { text_len: text.length, preview };
 }
 
 export function ttsTrace(phase: string, event: string, fields: TraceFields = {}): void {
+  if (!fullLoggingEnabled) {
+    if (import.meta.env.DEV) {
+      console.debug(`[tts] ${phase}.${event}`, fields);
+    }
+    return;
+  }
+
   void fetch("/api/logs/ui-trace", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
