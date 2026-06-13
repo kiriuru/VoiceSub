@@ -28,6 +28,7 @@ use crate::defaults::CURRENT_CONFIG_VERSION;
 use crate::logging_preferences::normalize_logging_config;
 use crate::defaults::default_config_payload;
 use crate::obs_normalize::normalize_obs_closed_captions;
+use voicesub_types::{DEFAULT_GITHUB_REPO, LEGACY_GITHUB_REPO};
 use crate::translation_normalize::normalize_translation_config;
 
 fn as_object_mut(value: &mut Value) -> &mut Map<String, Value> {
@@ -459,6 +460,11 @@ fn normalize_updates_config(root: &mut Map<String, Value>) {
                     .trim();
                 if current.is_empty() {
                     updates.insert("github_repo".into(), default_value.clone());
+                } else if current == LEGACY_GITHUB_REPO {
+                    updates.insert(
+                        "github_repo".into(),
+                        Value::String(DEFAULT_GITHUB_REPO.to_string()),
+                    );
                 }
             }
             _ => {
@@ -603,9 +609,18 @@ mod tests {
         assert_eq!(out["updates"]["enabled"], true);
         assert_eq!(
             out["updates"]["github_repo"],
-            "kiriuru/stream_sub_translator"
+            DEFAULT_GITHUB_REPO
         );
         assert_eq!(out["updates"]["provider"], "github_releases");
+    }
+
+    #[test]
+    fn migrates_legacy_github_repo_slug() {
+        let out = normalize_config_payload(json!({
+            "config_version": CURRENT_CONFIG_VERSION,
+            "updates": { "github_repo": LEGACY_GITHUB_REPO }
+        }));
+        assert_eq!(out["updates"]["github_repo"], DEFAULT_GITHUB_REPO);
     }
 
     #[test]

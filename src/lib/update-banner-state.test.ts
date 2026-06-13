@@ -12,7 +12,7 @@ describe("update-banner-state", () => {
       sync: {
         update_available: true,
         latest_known_version: "0.5.2",
-        github_repo: "kiriuru/stream_sub_translator",
+        github_repo: "kiriuru/voicesub",
       },
     };
     expect(shouldShowUpdateBanner(info, false)).toBe(true);

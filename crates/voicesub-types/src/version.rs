@@ -7,6 +7,10 @@ pub const PROJECT_VERSION: &str = "0.5.1";
 pub const RELEASE_TRACK: &str = "stable";
 pub const DEFAULT_UPDATE_PROVIDER: &str = "github_releases";
 pub const DEFAULT_RELEASE_CHANNEL: &str = "stable";
+/// Canonical GitHub repo for update checks and release download links.
+pub const DEFAULT_GITHUB_REPO: &str = "kiriuru/voicesub";
+/// Legacy SST repo slug — migrated on config load.
+pub const LEGACY_GITHUB_REPO: &str = "kiriuru/stream_sub_translator";
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct SemVer {
@@ -295,7 +299,7 @@ mod tests {
             "updates": {
                 "enabled": true,
                 "provider": "github_releases",
-                "github_repo": "kiriuru/stream_sub_translator",
+                "github_repo": DEFAULT_GITHUB_REPO,
                 "latest_known_version": "0.5.0"
             }
         })));
@@ -310,20 +314,20 @@ mod tests {
                 "tag_name": "v0.5.0",
                 "draft": false,
                 "prerelease": false,
-                "html_url": "https://github.com/kiriuru/stream_sub_translator/releases/tag/v0.5.0"
+                "html_url": "https://github.com/kiriuru/voicesub/releases/tag/v0.5.0"
             },
             {
                 "tag_name": "v0.5.2",
                 "draft": false,
                 "prerelease": false,
-                "html_url": "https://github.com/kiriuru/stream_sub_translator/releases/tag/v0.5.2"
+                "html_url": "https://github.com/kiriuru/voicesub/releases/tag/v0.5.2"
             }
         ]);
         let (latest, _, url) = extract_latest_github_release(&releases, "stable");
         assert_eq!(latest.as_deref(), Some("0.5.2"));
         assert_eq!(
             url.as_deref(),
-            Some("https://github.com/kiriuru/stream_sub_translator/releases/tag/v0.5.2")
+            Some("https://github.com/kiriuru/voicesub/releases/tag/v0.5.2")
         );
         assert!(is_remote_version_newer(PROJECT_VERSION, latest.as_deref().unwrap()));
 
@@ -331,14 +335,14 @@ mod tests {
             "updates": {
                 "enabled": true,
                 "provider": "github_releases",
-                "github_repo": "kiriuru/stream_sub_translator",
+                "github_repo": DEFAULT_GITHUB_REPO,
                 "latest_known_version": latest
             }
         })));
         assert_eq!(payload["sync"]["update_available"], true);
         assert_eq!(
             payload["sync"]["release_url"],
-            "https://github.com/kiriuru/stream_sub_translator/releases/tag/v0.5.2"
+            "https://github.com/kiriuru/voicesub/releases/tag/v0.5.2"
         );
     }
 

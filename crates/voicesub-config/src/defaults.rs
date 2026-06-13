@@ -1,4 +1,5 @@
 use serde_json::{json, Value};
+use voicesub_types::DEFAULT_GITHUB_REPO;
 
 use crate::translation_normalize::default_translation_provider_settings;
 
@@ -144,7 +145,7 @@ pub fn default_config_payload() -> Value {
         "updates": {
             "enabled": true,
             "provider": "github_releases",
-            "github_repo": "kiriuru/stream_sub_translator",
+            "github_repo": DEFAULT_GITHUB_REPO,
             "release_channel": "stable",
             "check_interval_hours": 12,
             "last_checked_utc": "",
