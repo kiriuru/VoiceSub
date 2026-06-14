@@ -80,6 +80,15 @@ pub struct GatewayDiagnostics {
     pub stopping_since_ms: Option<u64>,
     pub last_seen_at_ms: Option<u64>,
     pub stale_worker_events_ignored: u64,
+    pub overlap_mode_desired: bool,
+    pub overlap_active: bool,
+    pub overlap_active_slot: Option<u64>,
+    pub overlap_buddy_slot: Option<u64>,
+    pub overlap_prestarted: bool,
+    pub overlap_active_listening: bool,
+    pub overlap_buddy_listening: bool,
+    pub overlap_speech_prestart_done: bool,
+    pub overlap_prestart_timer_armed: bool,
 }
 
 pub struct BrowserAsrGateway {
@@ -453,6 +462,26 @@ fn apply_status_payload(state: &mut GatewayDiagnostics, payload: &serde_json::Ma
         state.mic_rms = Some(value.max(0.0));
     }
 
+    apply_bool(state, payload, "overlap_mode_desired", |s, v| s.overlap_mode_desired = v);
+    apply_bool(state, payload, "overlap_active", |s, v| s.overlap_active = v);
+    apply_bool(state, payload, "overlap_prestarted", |s, v| s.overlap_prestarted = v);
+    apply_bool(state, payload, "overlap_active_listening", |s, v| s.overlap_active_listening = v);
+    apply_bool(state, payload, "overlap_buddy_listening", |s, v| s.overlap_buddy_listening = v);
+    apply_bool(
+        state,
+        payload,
+        "overlap_speech_prestart_done",
+        |s, v| s.overlap_speech_prestart_done = v,
+    );
+    apply_bool(
+        state,
+        payload,
+        "overlap_prestart_timer_armed",
+        |s, v| s.overlap_prestart_timer_armed = v,
+    );
+    apply_opt_u64(state, payload, "overlap_active_slot", |s, v| s.overlap_active_slot = v);
+    apply_opt_u64(state, payload, "overlap_buddy_slot", |s, v| s.overlap_buddy_slot = v);
+
     if let Some(mode) = state.browser_mode.as_deref() {
         if mode == "browser_google" {
             state.provider_name.get_or_insert_with(|| "browser_google".into());
@@ -506,11 +535,37 @@ where
     }
 }
 
+fn apply_opt_u64<F>(
+    state: &mut GatewayDiagnostics,
+    payload: &serde_json::Map<String, Value>,
+    key: &str,
+    set: F,
+) where
+    F: FnOnce(&mut GatewayDiagnostics, Option<u64>),
+{
+    if !payload.contains_key(key) {
+        return;
+    }
+    let parsed = payload.get(key).and_then(|value| {
+        if value.is_null() {
+            return None;
+        }
+        value
+            .as_u64()
+            .or_else(|| value.as_i64().map(|n| n.max(0) as u64))
+    });
+    set(state, parsed);
+}
+
 fn map_reason_to_event(reason: Option<&str>) -> Option<&'static str> {
     match reason.unwrap_or("").trim().to_ascii_lowercase().as_str() {
         "start-requested" => Some("browser_recognition_start_requested"),
         "recognition-started" => Some("browser_recognition_started"),
         "recognition-ended" => Some("browser_onend"),
+        "overlap-handoff" => Some("browser_overlap_handoff"),
+        "overlap-buddy-ended" => Some("browser_overlap_buddy_ended"),
+        "overlap-buddy-error" => Some("browser_overlap_buddy_error"),
+        "overlap-buddy-ghost-recovered" => Some("browser_overlap_buddy_ghost_recovered"),
         "recognition-error" => Some("browser_onerror"),
         "restart-scheduled" => Some("browser_rearm_scheduled"),
         "restart-executed" => Some("browser_rearm_executed"),
@@ -573,6 +628,15 @@ struct CoreStatusSnapshot {
     restart_count: u64,
     watchdog_rearm_count: u64,
     stopping_since_ms: Option<u64>,
+    overlap_mode_desired: bool,
+    overlap_active: bool,
+    overlap_active_slot: Option<u64>,
+    overlap_buddy_slot: Option<u64>,
+    overlap_prestarted: bool,
+    overlap_active_listening: bool,
+    overlap_buddy_listening: bool,
+    overlap_speech_prestart_done: bool,
+    overlap_prestart_timer_armed: bool,
 }
 
 #[derive(Debug, PartialEq)]
@@ -662,6 +726,15 @@ fn core_status_snapshot(state: &GatewayDiagnostics) -> CoreStatusSnapshot {
         restart_count: state.restart_count,
         watchdog_rearm_count: state.watchdog_rearm_count,
         stopping_since_ms: state.stopping_since_ms,
+        overlap_mode_desired: state.overlap_mode_desired,
+        overlap_active: state.overlap_active,
+        overlap_active_slot: state.overlap_active_slot,
+        overlap_buddy_slot: state.overlap_buddy_slot,
+        overlap_prestarted: state.overlap_prestarted,
+        overlap_active_listening: state.overlap_active_listening,
+        overlap_buddy_listening: state.overlap_buddy_listening,
+        overlap_speech_prestart_done: state.overlap_speech_prestart_done,
+        overlap_prestart_timer_armed: state.overlap_prestart_timer_armed,
     }
 }
 
@@ -682,8 +755,22 @@ fn material_status_snapshot(state: &GatewayDiagnostics) -> MaterialStatusSnapsho
     }
 }
 
-fn structured_status_log_summary(state: &GatewayDiagnostics, reason: Option<&str>) -> Value {
+fn overlap_status_fields(state: &GatewayDiagnostics) -> Value {
     json!({
+        "overlap_mode_desired": state.overlap_mode_desired,
+        "overlap_active": state.overlap_active,
+        "overlap_active_slot": state.overlap_active_slot,
+        "overlap_buddy_slot": state.overlap_buddy_slot,
+        "overlap_prestarted": state.overlap_prestarted,
+        "overlap_active_listening": state.overlap_active_listening,
+        "overlap_buddy_listening": state.overlap_buddy_listening,
+        "overlap_speech_prestart_done": state.overlap_speech_prestart_done,
+        "overlap_prestart_timer_armed": state.overlap_prestart_timer_armed,
+    })
+}
+
+fn structured_status_log_summary(state: &GatewayDiagnostics, reason: Option<&str>) -> Value {
+    let mut summary = json!({
         "reason": reason,
         "worker_connected": state.worker_connected,
         "browser_mode": state.browser_mode,
@@ -703,11 +790,17 @@ fn structured_status_log_summary(state: &GatewayDiagnostics, reason: Option<&str
         "error_type": state.error_type,
         "last_error": state.last_error,
         "degraded_reason": state.degraded_reason,
-    })
+    });
+    if let Some(obj) = summary.as_object_mut() {
+        if let Some(overlap) = overlap_status_fields(state).as_object() {
+            obj.extend(overlap.clone());
+        }
+    }
+    summary
 }
 
 fn structured_mapped_event_log_summary(state: &GatewayDiagnostics) -> Value {
-    json!({
+    let mut summary = json!({
         "recognition_state": state.recognition_state,
         "supervisor_state": state.supervisor_state,
         "generation_id": state.generation_id,
@@ -716,7 +809,13 @@ fn structured_mapped_event_log_summary(state: &GatewayDiagnostics) -> Value {
         "rearm_count": state.rearm_count,
         "error_type": state.error_type,
         "visibility_state": state.visibility_state,
-    })
+    });
+    if let Some(obj) = summary.as_object_mut() {
+        if let Some(overlap) = overlap_status_fields(state).as_object() {
+            obj.extend(overlap.clone());
+        }
+    }
+    summary
 }
 
 fn heartbeat_payload(state: &GatewayDiagnostics, baseline: &CounterSnapshot) -> Value {
@@ -778,6 +877,9 @@ fn heartbeat_payload(state: &GatewayDiagnostics, baseline: &CounterSnapshot) -> 
             .unwrap_or_else(|| "idle".into()),
         "generation_id": state.generation_id,
         "last_result_age_ms": last_result_age_ms(state),
+        "overlap_active": state.overlap_active,
+        "overlap_buddy_listening": state.overlap_buddy_listening,
+        "overlap_prestarted": state.overlap_prestarted,
         "counters_delta": counters_delta,
     })
 }

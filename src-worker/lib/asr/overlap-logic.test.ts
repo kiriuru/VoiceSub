@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createBrowserAsrStateSeed } from "./session-state";
 import {
+  buildOverlapTelemetrySnapshot,
   evaluateOverlapBuddyGhost,
   handleInactiveOverlapBuddyEnded,
   handleOverlapRecognitionEnded,
+  overlapResultAllowed,
   overlapSlotInactive,
   recognitionOverlapActive,
   recoverGhostOverlapBuddy,
@@ -99,10 +101,18 @@ describe("overlap-logic", () => {
     const manager = mockManager(state, 0);
     scheduleOverlapTimeBasedPrestart(manager);
     expect(state.recognitionOverlapPrestartTimer).not.toBeNull();
-    vi.advanceTimersByTime(7999);
+    vi.advanceTimersByTime(3999);
     expect(state.recognitionOverlapSlots![1].start).not.toHaveBeenCalled();
     vi.advanceTimersByTime(1);
     expect(state.recognitionOverlapSlots![1].start).toHaveBeenCalled();
+  });
+
+  it("allows buddy results when prestarted (SST parity)", () => {
+    const state = overlapState(0);
+    expect(overlapResultAllowed(state, 0)).toBe(true);
+    expect(overlapResultAllowed(state, 1)).toBe(true);
+    state.recognitionOverlapPrestarted = false;
+    expect(overlapResultAllowed(state, 1)).toBe(false);
   });
 
   it("does not treat silent buddy as ghost while active slot is transcribing", () => {
@@ -138,11 +148,29 @@ describe("overlap-logic", () => {
     const state = overlapState(0);
     state.pendingRestartReason = "no_speech";
     state.recognitionOverlapSlotListening = [true, true];
-    const manager = mockManager(state);
+    const manager = mockManager(state, 10_000);
     expect(handleOverlapRecognitionEnded(manager, 0)).toBe(true);
     expect(state.recognitionOverlapActiveSlot).toBe(1);
     expect(state.pendingRestartReason).toBeNull();
     expect(state.recognitionOverlapSlotListening).toEqual([false, true]);
+    expect(manager.emitWorkerStatus).toHaveBeenCalledWith("recognition-ended");
+  });
+
+  it("builds overlap telemetry snapshot for browser trace", () => {
+    const state = overlapState(0);
+    state.effectiveContinuousMode = "segmented_restart";
+    state.recognitionOverlapPrestartTimer = 1 as unknown as ReturnType<typeof setTimeout>;
+    expect(buildOverlapTelemetrySnapshot(state)).toEqual({
+      overlap_mode_desired: true,
+      overlap_active: true,
+      overlap_active_slot: 0,
+      overlap_buddy_slot: 1,
+      overlap_prestarted: true,
+      overlap_active_listening: true,
+      overlap_buddy_listening: true,
+      overlap_speech_prestart_done: false,
+      overlap_prestart_timer_armed: true,
+    });
   });
 
   it("recovers ghost buddy when both slots appear idle", () => {

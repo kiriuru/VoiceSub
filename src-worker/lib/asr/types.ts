@@ -87,6 +87,7 @@ export interface BrowserAsrState {
   recognitionOverlapActiveListenSinceMs: number | null;
   recognitionOverlapSlotListenSinceMs: [number | null, number | null] | null;
   recognitionOverlapSlotActivityAtMs: [number | null, number | null] | null;
+  recognitionOverlapActiveSpeechPrestartDone: boolean;
   webSpeechPhraseHintsSuppressed: boolean;
   webSpeechLanguageSoftFallbackUsed: boolean;
   recognitionGenerationId: number;

@@ -200,6 +200,73 @@ fn detail_only_worker_status_respects_interval() {
 }
 
 #[test]
+fn maps_overlap_telemetry_events() {
+    let logger = RecordingStructuredLog::new();
+    let mut gateway = BrowserAsrGateway::new(Some(logger.structured_log_fn()));
+    gateway.worker_connected();
+    logger.records.lock().unwrap().clear();
+
+    for (reason, expected) in [
+        ("overlap-handoff", "browser_overlap_handoff"),
+        ("overlap-buddy-ended", "browser_overlap_buddy_ended"),
+        ("overlap-buddy-error", "browser_overlap_buddy_error"),
+        (
+            "overlap-buddy-ghost-recovered",
+            "browser_overlap_buddy_ghost_recovered",
+        ),
+    ] {
+        logger.records.lock().unwrap().clear();
+        gateway.update_status(&json!({
+            "reason": reason,
+            "desired_running": true,
+            "recognition_running": true,
+            "recognition_state": "running",
+            "overlap_active": true,
+            "overlap_active_slot": 1,
+            "overlap_buddy_slot": 0,
+            "overlap_buddy_listening": true,
+            "overlap_prestarted": true,
+        }));
+        assert!(
+            logger.events().contains(&expected.to_string()),
+            "reason={reason} expected {expected}"
+        );
+    }
+}
+
+#[test]
+fn stores_overlap_fields_in_diagnostics() {
+    let logger = RecordingStructuredLog::new();
+    let mut gateway = BrowserAsrGateway::new(Some(logger.structured_log_fn()));
+    gateway.worker_connected();
+    gateway.update_status(&json!({
+        "reason": "result",
+        "desired_running": true,
+        "recognition_running": true,
+        "overlap_mode_desired": true,
+        "overlap_active": true,
+        "overlap_active_slot": 0,
+        "overlap_buddy_slot": 1,
+        "overlap_prestarted": true,
+        "overlap_active_listening": true,
+        "overlap_buddy_listening": false,
+        "overlap_speech_prestart_done": true,
+        "overlap_prestart_timer_armed": false,
+    }));
+
+    let diagnostics = gateway.diagnostics();
+    assert!(diagnostics.overlap_mode_desired);
+    assert!(diagnostics.overlap_active);
+    assert_eq!(diagnostics.overlap_active_slot, Some(0));
+    assert_eq!(diagnostics.overlap_buddy_slot, Some(1));
+    assert!(diagnostics.overlap_prestarted);
+    assert!(diagnostics.overlap_active_listening);
+    assert!(!diagnostics.overlap_buddy_listening);
+    assert!(diagnostics.overlap_speech_prestart_done);
+    assert!(!diagnostics.overlap_prestart_timer_armed);
+}
+
+#[test]
 fn structured_log_from_runtime_logger_writes_browser_channel() {
     let dir = std::env::temp_dir().join(format!(
         "voicesub-browser-gateway-{}",

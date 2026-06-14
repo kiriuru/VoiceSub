@@ -6,7 +6,7 @@ import { webSpeechRecognitionPolicy } from "./web-speech-policy";
 
 
 
-export const DEFAULT_OVERLAP_TIME_PRESTART_MS = 8000;
+export const DEFAULT_OVERLAP_TIME_PRESTART_MS = 4000;
 
 export const DEFAULT_OVERLAP_BUDDY_GHOST_TIMEOUT_MS = 6000;
 
@@ -45,6 +45,42 @@ export function recognitionOverlapActive(state: BrowserAsrState): boolean {
 export function overlapActiveSlotIndex(state: BrowserAsrState): number {
 
   return Number(state.recognitionOverlapActiveSlot || 0) % 2;
+
+}
+
+
+
+export function buildOverlapTelemetrySnapshot(state: BrowserAsrState): Record<string, unknown> {
+
+  const active = recognitionOverlapActive(state);
+
+  const activeSlot = active ? overlapActiveSlotIndex(state) : null;
+
+  const buddySlot = active && activeSlot != null ? (activeSlot + 1) % 2 : null;
+
+  const listening = state.recognitionOverlapSlotListening;
+
+  return {
+
+    overlap_mode_desired: state.effectiveContinuousMode === "segmented_restart",
+
+    overlap_active: active,
+
+    overlap_active_slot: activeSlot,
+
+    overlap_buddy_slot: buddySlot,
+
+    overlap_prestarted: Boolean(state.recognitionOverlapPrestarted),
+
+    overlap_active_listening: active && activeSlot != null ? Boolean(listening?.[activeSlot]) : false,
+
+    overlap_buddy_listening: active && buddySlot != null ? Boolean(listening?.[buddySlot]) : false,
+
+    overlap_speech_prestart_done: Boolean(state.recognitionOverlapActiveSpeechPrestartDone),
+
+    overlap_prestart_timer_armed: Boolean(state.recognitionOverlapPrestartTimer),
+
+  };
 
 }
 
@@ -147,6 +183,8 @@ export function resetOverlapSlotTracking(state: BrowserAsrState): void {
   state.recognitionOverlapSlotListenSinceMs = null;
 
   state.recognitionOverlapSlotActivityAtMs = null;
+
+  state.recognitionOverlapActiveSpeechPrestartDone = false;
 
 }
 
@@ -256,7 +294,81 @@ export function onOverlapActiveSlotReady(manager: AsrManagerHost, overlapSlotInd
 
   }
 
+}
+
+
+
+/**
+
+ * Promote a pre-warmed buddy slot to active after handoff without resetting its listen window.
+
+ */
+
+export function onOverlapSlotPromotedToActive(manager: AsrManagerHost, overlapSlotIndex: number): void {
+
+  if (!recognitionOverlapActive(manager.state)) {
+
+    return;
+
+  }
+
+  ensureOverlapSlotTrackingArrays(manager.state);
+
+  const listenSince = manager.state.recognitionOverlapSlotListenSinceMs![overlapSlotIndex];
+
+  if (listenSince != null) {
+
+    manager.state.recognitionOverlapActiveListenSinceMs = listenSince;
+
+  } else {
+
+    markOverlapSlotListenStarted(manager.state, overlapSlotIndex, manager.now());
+
+  }
+
+  manager.state.recognitionOverlapActiveSpeechPrestartDone = false;
+
   scheduleOverlapTimeBasedPrestart(manager);
+
+}
+
+
+
+/**
+
+ * Pre-start buddy as soon as the active slot detects speech — shrinks the handoff audio gap.
+
+ */
+
+export function maybePrestartOverlapBuddyOnActiveSpeech(
+
+  manager: AsrManagerHost,
+
+  overlapSlotIndex: number | null
+
+): void {
+
+  if (overlapSlotIndex == null || !recognitionOverlapActive(manager.state)) {
+
+    return;
+
+  }
+
+  if (overlapSlotInactive(manager.state, overlapSlotIndex)) {
+
+    return;
+
+  }
+
+  if (manager.state.recognitionOverlapActiveSpeechPrestartDone) {
+
+    return;
+
+  }
+
+  manager.state.recognitionOverlapActiveSpeechPrestartDone = true;
+
+  prestartOverlapBuddyIfNeeded(manager, overlapActiveSlotIndex(manager.state));
 
 }
 
@@ -350,6 +462,8 @@ export function handleInactiveOverlapBuddyEnded(
 
   manager.state.recognitionOverlapSlotActivityAtMs![overlapSlotIndex] = null;
 
+  manager.state.recognitionOverlapActiveSpeechPrestartDone = false;
+
   const active = overlapActiveSlotIndex(manager.state);
 
   if (manager.state.recognitionOverlapSlotListening[active]) {
@@ -389,6 +503,12 @@ export function overlapResultAllowed(state: BrowserAsrState, overlapSlotIndex: n
   }
 
   const buddy = (active + 1) % 2;
+
+  if (overlapSlotIndex !== buddy) {
+
+    return false;
+
+  }
 
   return overlapSlotIndex === buddy && Boolean(state.recognitionOverlapPrestarted);
 
@@ -490,8 +610,6 @@ export function prestartOverlapBuddyIfNeeded(manager: AsrManagerHost, overlapSlo
 
     manager.appendLogInternal(`overlap: buddy pre-start failed: ${message}`);
 
-    scheduleOverlapTimeBasedPrestart(manager);
-
   }
 
 }
@@ -541,8 +659,6 @@ export function handleOverlapRecognitionEnded(manager: AsrManagerHost, overlapSl
       manager.state.recognitionOverlapPrestarted = false;
 
       manager.state.pendingRestartReason = null;
-
-      onOverlapActiveSlotReady(manager, buddy);
 
       manager.setSupervisorStateInternal("running");
 

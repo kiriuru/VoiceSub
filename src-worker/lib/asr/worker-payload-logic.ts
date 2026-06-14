@@ -1,3 +1,4 @@
+import { buildOverlapTelemetrySnapshot } from "./overlap-logic";
 import type { BrowserAsrState } from "./types";
 
 export function buildLastError(state: BrowserAsrState): string | null {
@@ -70,6 +71,7 @@ export function buildWorkerPayload(ctx: {
     network_preflight_last_at_ms: Number(state.lastNetworkPreflightAtMs || 0) || null,
     network_preflight_last_ok: state.lastNetworkPreflightOk == null ? null : Boolean(state.lastNetworkPreflightOk),
     last_seen_at_ms: ctx.nowMs,
+    ...buildOverlapTelemetrySnapshot(state),
     ...extra,
   };
 }

@@ -29,6 +29,19 @@ function applyRecognitionError(
   const policy = manager.webSpeechPolicy();
   const classified = classifyRecognitionError(event, policy, manager.state);
   const { errorKind, errorMessage } = classified;
+
+  if (classified.kind === "aborted" && recognitionOverlapActive(manager.state) && overlapSlotIndex != null) {
+    const active = Number(manager.state.recognitionOverlapActiveSlot || 0) % 2;
+    const buddy = (active + 1) % 2;
+    if (
+      overlapSlotIndex === active &&
+      manager.state.recognitionOverlapSlotListening &&
+      manager.state.recognitionOverlapSlotListening[buddy]
+    ) {
+      return;
+    }
+  }
+
   manager.setLastErrorInternal(errorKind, errorMessage);
   manager.markActivityInternal("error");
 
@@ -89,7 +102,6 @@ function applyRecognitionError(
           manager.state.recognitionOverlapSlotListening &&
           manager.state.recognitionOverlapSlotListening[buddy]
         ) {
-          manager.emitWorkerStatus("recognition-error");
           return;
         }
       }
@@ -194,9 +206,7 @@ function handleRecognitionResult(
     });
     manager.consumeCompletedSegmentInternal();
     manager.setStatusInternal("final");
-    if (overlapSlotIndex == null || overlapSlotIndex === overlapActiveSlotIndex(manager.state)) {
-      prestartOverlapBuddyIfNeeded(manager, overlapActiveSlotIndex(manager.state));
-    }
+    prestartOverlapBuddyIfNeeded(manager, overlapSlotIndex);
   }
 
   manager.emitWorkerStatus("result");

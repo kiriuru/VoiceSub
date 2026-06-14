@@ -28,6 +28,8 @@ pub fn structured_event_level(event: &str) -> &'static str {
         "browser_onerror" | "browser_degraded" => "WRN",
         "translation_publish_accepted"
         | "browser_external_final"
+        | "browser_overlap_handoff"
+        | "browser_overlap_buddy_ghost_recovered"
         | "diagnostics_bundle_exported"
         | "browser_worker_disconnected" => "INF",
         _ => "DBG",
