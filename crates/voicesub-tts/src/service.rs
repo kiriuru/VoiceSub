@@ -9,8 +9,8 @@ use tracing::{debug, info, warn};
 
 use voicesub_audio::{list_output_devices, set_process_output_device, AudioOutputDevice};
 use voicesub_twitch::{
-    EventBroadcaster, SourceTextReplacementSettings, TwitchChatService, TwitchConnectionStatus,
-    TwitchTtsSettings,
+    normalize_twitch_settings, EventBroadcaster, SourceTextReplacementSettings, TwitchChatService,
+    TwitchConnectionStatus, TwitchTtsSettings,
 };
 
 
@@ -748,12 +748,18 @@ impl TtsModuleService {
     }
 
     pub fn queue_clear_channel(&self, channel: &str) -> Result<(), TtsServiceError> {
+        let waiting = self
+            .queues
+            .snapshot(channel)
+            .map_err(|e| TtsServiceError::InvalidProvider(e.to_string()))?;
         if channel == CHANNEL_SPEECH {
-            if let Ok(waiting) = self.queues.snapshot(channel) {
-                self.release_speech_dedupe_keys(&waiting);
-            }
+            self.release_speech_dedupe_keys(&waiting);
         }
-        info!(target: "voicesub.tts", channel, "channel queue cleared");
+        if waiting.is_empty() {
+            debug!(target: "voicesub.tts", channel, "channel queue already empty");
+        } else {
+            info!(target: "voicesub.tts", channel, "channel queue cleared");
+        }
         trace::trace("queue", "clear", json!({ "channel": channel }));
         self.queues
             .clear(channel)
@@ -761,10 +767,17 @@ impl TtsModuleService {
     }
 
     pub fn queue_clear_all(&self) {
-        if let Ok(waiting) = self.queues.snapshot(CHANNEL_SPEECH) {
-            self.release_speech_dedupe_keys(&waiting);
+        let speech_waiting = self.queues.snapshot(CHANNEL_SPEECH).unwrap_or_default();
+        let twitch_waiting = self
+            .queues
+            .snapshot(CHANNEL_TWITCH)
+            .unwrap_or_default();
+        self.release_speech_dedupe_keys(&speech_waiting);
+        if speech_waiting.is_empty() && twitch_waiting.is_empty() {
+            debug!(target: "voicesub.tts", "all channel queues already empty");
+        } else {
+            info!(target: "voicesub.tts", "all channel queues cleared");
         }
-        info!(target: "voicesub.tts", "all channel queues cleared");
         trace::trace("queue", "clear_all", json!({}));
         self.queues.clear_all();
     }
@@ -893,7 +906,11 @@ impl TtsModuleService {
                 "ignore_users": twitch.ignore_users.len(),
             }),
         );
-        let config = self.config_store.update(|cfg| cfg.twitch = twitch)?;
+        let config = self.config_store.update(|cfg| {
+            let mut twitch = twitch;
+            normalize_twitch_settings(&mut twitch);
+            cfg.twitch = twitch;
+        })?;
         self.twitch.apply_settings(config.twitch.clone());
         if !config.twitch.enabled {
             self.twitch.disconnect();

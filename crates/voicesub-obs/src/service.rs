@@ -60,7 +60,7 @@ struct Inner {
     connected_notify: Notify,
     last_partial_text: Mutex<String>,
     last_partial_sent: Mutex<Option<Instant>>,
-    last_payload_signature: Mutex<Option<(u64, String, String)>>,
+    last_payload_signature: StdMutex<Option<(u64, String, String)>>,
     connection_key: Mutex<Option<(String, u16, String)>>,
     delayed_generation: AtomicU64,
     clear_generation: AtomicU64,
@@ -99,7 +99,7 @@ impl ObsCaptionService {
                 connected_notify: Notify::new(),
                 last_partial_text: Mutex::new(String::new()),
                 last_partial_sent: Mutex::new(None),
-                last_payload_signature: Mutex::new(None),
+                last_payload_signature: StdMutex::new(None),
                 connection_key: Mutex::new(None),
                 delayed_generation: AtomicU64::new(0),
                 clear_generation: AtomicU64::new(0),
@@ -173,7 +173,7 @@ impl ObsCaptionService {
         drain_queue(&self.inner);
         *self.inner.last_partial_text.lock().await = String::new();
         *self.inner.last_partial_sent.lock().await = None;
-        *self.inner.last_payload_signature.lock().await = None;
+        *self.inner.last_payload_signature.lock().unwrap_or_else(|e| e.into_inner()) = None;
     }
 
     async fn clear_remote_outputs_if_possible(&self, settings: &ObsCaptionSettings) {
@@ -284,6 +284,10 @@ impl ObsCaptionService {
     }
 
     pub fn publish_source(&self, text: &str, is_final: bool) {
+        if is_final {
+            bump_delayed_generation(&self.inner);
+            bump_clear_generation(&self.inner);
+        }
         let item = if is_final {
             QueueItem::SourceFinal(text.to_string())
         } else {
@@ -293,6 +297,11 @@ impl ObsCaptionService {
     }
 
     pub fn publish_payload(&self, payload: SubtitlePayloadEvent) {
+        let settings = ObsCaptionSettings::from_config(&(self.config_getter)());
+        if payload_will_supersede_caption(&self.inner, &settings, &payload) {
+            bump_delayed_generation(&self.inner);
+            bump_clear_generation(&self.inner);
+        }
         self.enqueue(QueueItem::Payload(Box::new(payload)));
     }
 
@@ -615,7 +624,7 @@ async fn handle_source_final(inner: Arc<Inner>, text: &str) -> Result<(), String
     }
     *inner.last_partial_text.lock().await = String::new();
     *inner.last_partial_sent.lock().await = None;
-    *inner.last_payload_signature.lock().await = None;
+    *inner.last_payload_signature.lock().unwrap_or_else(|e| e.into_inner()) = None;
     schedule_final_send(inner, normalized, send_stream, mirror_debug).await?;
     Ok(())
 }
@@ -645,7 +654,10 @@ async fn handle_payload(inner: Arc<Inner>, payload: SubtitlePayloadEvent) -> Res
     }
     let signature = (payload.sequence, mode.to_string(), normalized.clone());
     if settings.avoid_duplicate_text {
-        let last = inner.last_payload_signature.lock().await;
+        let last = inner
+            .last_payload_signature
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         if last.as_ref() == Some(&signature) {
             inner.log.send_skipped(
                 "payload_dedup",
@@ -662,7 +674,10 @@ async fn handle_payload(inner: Arc<Inner>, payload: SubtitlePayloadEvent) -> Res
         mode,
         normalized.chars().count(),
     );
-    *inner.last_payload_signature.lock().await = Some(signature);
+    *inner
+        .last_payload_signature
+        .lock()
+        .unwrap_or_else(|e| e.into_inner()) = Some(signature);
     schedule_final_send(inner, normalized, send_stream, mirror_debug).await?;
     Ok(())
 }
@@ -796,6 +811,17 @@ async fn send_text(
                 inner.log.stream_output_inactive();
                 set_connection_state(&inner, ConnectionState::Connected, None).await;
                 drop(client_guard);
+                if mirror_debug_text
+                    && schedule_clear_after
+                    && !normalized.is_empty()
+                {
+                    enqueue_clear(
+                        inner,
+                        false,
+                        true,
+                        settings.clear_after_ms,
+                    );
+                }
                 return Ok(());
             }
             Err(err) => {
@@ -838,13 +864,48 @@ fn bump_clear_generation(inner: &Inner) {
     inner.clear_generation.fetch_add(1, Ordering::SeqCst);
 }
 
+fn payload_will_supersede_caption(
+    inner: &Inner,
+    settings: &ObsCaptionSettings,
+    payload: &SubtitlePayloadEvent,
+) -> bool {
+    let mode = settings.output_mode.as_str();
+    let send_stream = settings.native_enabled()
+        && !matches!(mode, "disabled" | "source_live" | "source_final_only");
+    let mirror_debug = settings.debug_text_input_enabled();
+    if !send_stream && !mirror_debug {
+        return false;
+    }
+    if !payload.completed_block_visible {
+        return false;
+    }
+    let mut selected = select_payload_text(payload, mode);
+    if send_stream && !mode.starts_with("translation_") && mode != "first_visible_line" {
+        selected = select_first_visible_text(payload);
+    }
+    let normalized = normalize_text(&selected);
+    if normalized.is_empty() {
+        return false;
+    }
+    if settings.avoid_duplicate_text {
+        let signature = (payload.sequence, mode.to_string(), normalized);
+        let last = inner
+            .last_payload_signature
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        if last.as_ref() == Some(&signature) {
+            return false;
+        }
+    }
+    true
+}
+
 async fn schedule_final_send(
     inner: Arc<Inner>,
     text: String,
     send_stream: bool,
     mirror_debug: bool,
 ) -> Result<(), String> {
-    bump_delayed_generation(&inner);
     let settings = ObsCaptionSettings::from_config(&(inner.config_getter)());
     let delay_ms = settings.final_replace_delay_ms;
     if delay_ms == 0 {

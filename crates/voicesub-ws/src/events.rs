@@ -285,6 +285,15 @@ impl EventsHub {
         client.notify.notify_one();
     }
 
+    pub async fn last_message(&self, message_type: &str) -> Option<Value> {
+        self.inner
+            .last_by_type
+            .read()
+            .await
+            .get(message_type)
+            .cloned()
+    }
+
     async fn disconnect(&self, socket_id: SocketId) {
         let mut clients = self.inner.clients.write().await;
         if clients.remove(&socket_id).is_some() {

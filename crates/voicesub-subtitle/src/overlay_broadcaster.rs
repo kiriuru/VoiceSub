@@ -56,6 +56,17 @@ impl OverlayBroadcaster {
         }
     }
 
+    pub fn reset_dedupe_state(&self) {
+        *self
+            .last_payload_signature
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = None;
+        *self
+            .last_publish_monotonic
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = None;
+    }
+
     /// Returns `true` when an overlay frame was broadcast.
     pub fn publish(&self, payload: &SubtitlePayloadEvent) -> bool {
         let mut body = serde_json::to_value(payload).unwrap_or_else(|_| json!({}));
@@ -247,7 +258,7 @@ mod tests {
     }
 
     #[test]
-    fn completed_only_payload_can_repeat_after_cooldown() {
+    fn reset_dedupe_state_allows_repeat_idle_publish() {
         let messages = Arc::new(Mutex::new(Vec::new()));
         let messages_cb = messages.clone();
         let tick = Arc::new(AtomicU64::new(0));
@@ -259,15 +270,16 @@ mod tests {
             }),
             SubtitleLog::default(),
             Box::new(move || {
-                start + std::time::Duration::from_millis(tick_cb.fetch_add(500, Ordering::SeqCst))
+                start + std::time::Duration::from_millis(tick_cb.fetch_add(10, Ordering::SeqCst))
             }),
             Box::new(|| 1_700_000_000_000),
         );
 
-        let mut payload = sample_payload(LifecycleState::CompletedOnly);
+        let mut payload = sample_payload(LifecycleState::Idle);
         payload.active_partial_text.clear();
-        payload.completed_block_visible = true;
         assert!(broadcaster.publish(&payload));
+        assert!(!broadcaster.publish(&payload));
+        broadcaster.reset_dedupe_state();
         assert!(broadcaster.publish(&payload));
         assert_eq!(messages.lock().unwrap().len(), 2);
     }

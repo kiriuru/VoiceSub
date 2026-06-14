@@ -1,6 +1,6 @@
 # VoiceSub — WIKI
 
-Операционный гайд по интерфейсу VoiceSub `0.5.1`. Формат описания элементов: **что это**, **зачем**, **как работает**, **на что влияет**, **типовые ошибки**.
+Операционный гайд по интерфейсу VoiceSub `0.5.2`. Формат описания элементов: **что это**, **зачем**, **как работает**, **на что влияет**, **типовые ошибки**.
 
 Техническая архитектура: `docs/TECHNICAL_ARCHITECTURE.md`. Предшественник SST `0.4.4` — только reference; поведение core описано здесь для VoiceSub.
 
@@ -9,7 +9,7 @@
 ## 0. О продукте и версии
 
 ### Элемент: VoiceSub vs SST
-- **VoiceSub** — активная линия `0.5.1` (Rust + Tauri + Svelte); baseline первого релиза — `0.5.0`.
+- **VoiceSub** — активная линия `0.5.2` (Rust + Tauri + Svelte); baseline первого релиза — `0.5.0`.
 - **SST** `0.4.4` — frozen reference; настройки импортируются, но режимы Parakeet/Experimental в core не поднимаются.
 - **Overlay URL новый:** `http://127.0.0.1:8765/overlay` — обновите Browser Source в OBS вручную.
 
@@ -20,7 +20,7 @@
 - Микрофон в Chrome worker; интернет — для внешних провайдеров перевода (опционально).
 
 ### Элемент: установка и обновление (NSIS)
-- **Что делает:** `VoiceSub_0.5.1_x64-setup.exe` ставит `VoiceSub.exe` и статические ресурсы (`bin/dashboard`, overlay, worker, tts).
+- **Что делает:** `VoiceSub_0.5.2_x64-setup.exe` ставит `VoiceSub.exe` и статические ресурсы (`bin/dashboard`, overlay, worker, tts).
 - **Для чего:** один установщик без Python/Node в runtime; при отсутствии WebView2 — загрузка через bootstrapper (`downloadBootstrapper` в Tauri).
 - **Обновление:** закройте приложение → запустите новый `setup.exe` поверх → `user-data/` и `logs/` сохраняются рядом с install path / project root.
 - **Разработчикам:** `build-release-msi.bat` → `build-release.ps1` → `F:\AI\VoiceSub - release\v{version}\`.

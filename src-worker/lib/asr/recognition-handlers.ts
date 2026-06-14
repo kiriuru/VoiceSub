@@ -7,16 +7,18 @@ import type {
 import { classifyRecognitionError, networkErrorHintMessages } from "./recognition-error-logic";
 import { parseRecognitionResultEvent } from "./recognition-result-logic";
 import {
+  handleInactiveOverlapBuddyEnded,
   handleOverlapRecognitionEnded,
+  markOverlapSlotActivity,
+  onOverlapActiveSlotReady,
+  overlapActiveSlotIndex,
   overlapResultAllowed,
+  overlapSlotInactive,
   prestartOverlapBuddyIfNeeded,
   recognitionOverlapActive,
+  shouldIgnoreOverlapBuddyError,
 } from "./overlap-logic";
 import { registerNetworkErrorForPreflight } from "./network-preflight-bridge";
-
-function overlapSlotInactive(manager: AsrManagerHost, overlapSlotIndex: number | null): boolean {
-  return overlapSlotIndex != null && overlapSlotIndex !== Number(manager.state.recognitionOverlapActiveSlot || 0) % 2;
-}
 
 function applyRecognitionError(
   manager: AsrManagerHost,
@@ -131,6 +133,9 @@ function handleRecognitionResult(
   if (!overlapResultAllowed(manager.state, overlapSlotIndex)) {
     return;
   }
+  if (overlapSlotIndex != null) {
+    markOverlapSlotActivity(manager.state, overlapSlotIndex, manager.now());
+  }
   const { interimText, finalText, resultIndex } = parseRecognitionResultEvent(event);
   manager.state.lastResultIndex = resultIndex;
   manager.state.restartBackoffMs = 0;
@@ -189,7 +194,9 @@ function handleRecognitionResult(
     });
     manager.consumeCompletedSegmentInternal();
     manager.setStatusInternal("final");
-    prestartOverlapBuddyIfNeeded(manager, overlapSlotIndex);
+    if (overlapSlotIndex == null || overlapSlotIndex === overlapActiveSlotIndex(manager.state)) {
+      prestartOverlapBuddyIfNeeded(manager, overlapActiveSlotIndex(manager.state));
+    }
   }
 
   manager.emitWorkerStatus("result");
@@ -211,7 +218,8 @@ export function wireRecognitionHandlers(
         manager.state.recognitionOverlapSlotListening = [false, false];
       }
       manager.state.recognitionOverlapSlotListening[overlapSlotIndex] = true;
-      if (overlapSlotInactive(manager, overlapSlotIndex)) {
+      onOverlapActiveSlotReady(manager, overlapSlotIndex);
+      if (overlapSlotInactive(manager.state, overlapSlotIndex)) {
         manager.markActivityInternal("start");
         return;
       }
@@ -238,8 +246,11 @@ export function wireRecognitionHandlers(
     if (!manager.isActiveGeneration(generationId)) {
       return;
     }
-    if (overlapSlotInactive(manager, overlapSlotIndex)) {
+    if (overlapSlotInactive(manager.state, overlapSlotIndex)) {
       return;
+    }
+    if (overlapSlotIndex != null) {
+      markOverlapSlotActivity(manager.state, overlapSlotIndex, manager.now());
     }
     manager.state.onSound = true;
     manager.markActivityInternal("sound");
@@ -250,7 +261,7 @@ export function wireRecognitionHandlers(
     if (!manager.isActiveGeneration(generationId)) {
       return;
     }
-    if (overlapSlotInactive(manager, overlapSlotIndex)) {
+    if (overlapSlotInactive(manager.state, overlapSlotIndex)) {
       return;
     }
     manager.state.onSound = false;
@@ -261,14 +272,24 @@ export function wireRecognitionHandlers(
     if (!manager.isActiveGeneration(generationId)) {
       return;
     }
-    if (overlapSlotInactive(manager, overlapSlotIndex)) {
+    if (overlapSlotInactive(manager.state, overlapSlotIndex)) {
       return;
+    }
+    if (overlapSlotIndex != null) {
+      markOverlapSlotActivity(manager.state, overlapSlotIndex, manager.now());
     }
     manager.markActivityInternal("speech");
   };
 
   recognition.onerror = (event: WorkerSpeechRecognitionErrorEvent) => {
     if (!manager.isActiveGeneration(generationId)) {
+      return;
+    }
+    const errorKind = String(event?.error || "")
+      .trim()
+      .toLowerCase();
+    if (shouldIgnoreOverlapBuddyError(manager.state, overlapSlotIndex, errorKind)) {
+      manager.emitWorkerStatus("overlap-buddy-error");
       return;
     }
     applyRecognitionError(manager, generationId, overlapSlotIndex, event);
@@ -278,11 +299,11 @@ export function wireRecognitionHandlers(
     if (!manager.isActiveGeneration(generationId)) {
       return;
     }
-    manager.state.lastEndAtMs = manager.now();
-    manager.state.lastSessionEndedAtMs = manager.state.lastEndAtMs;
-    manager.state.onSound = false;
-    manager.setRecognitionStateInternal("idle");
     if (!manager.state.desiredRunning) {
+      manager.state.lastEndAtMs = manager.now();
+      manager.state.lastSessionEndedAtMs = manager.state.lastEndAtMs;
+      manager.state.onSound = false;
+      manager.setRecognitionStateInternal("idle");
       manager.cleanupRecognitionInstance(generationId);
       manager.resetSegmentTrackingInternal();
       manager.setSupervisorStateInternal("idle");
@@ -290,6 +311,13 @@ export function wireRecognitionHandlers(
       manager.emitWorkerStatus("recognition-ended");
       return;
     }
+    if (overlapSlotIndex != null && handleInactiveOverlapBuddyEnded(manager, overlapSlotIndex)) {
+      return;
+    }
+    manager.state.lastEndAtMs = manager.now();
+    manager.state.lastSessionEndedAtMs = manager.state.lastEndAtMs;
+    manager.state.onSound = false;
+    manager.setRecognitionStateInternal("idle");
     if (overlapSlotIndex != null && handleOverlapRecognitionEnded(manager, overlapSlotIndex)) {
       return;
     }

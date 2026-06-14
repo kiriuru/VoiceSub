@@ -25,8 +25,8 @@ pub use error::TwitchError;
 pub use filter::should_speak_message;
 pub use service::{EventBroadcaster, TwitchChatService, TwitchConnectionState, TwitchConnectionStatus};
 pub use settings::{
-    normalize_speak_template, pause_separator, TwitchChatMessage, TwitchEmoteSources, TwitchPauseStyle,
-    TwitchReplacement, TwitchTtsSettings,
+    normalize_speak_template, normalize_twitch_settings, pause_separator, TwitchChatMessage,
+    TwitchEmoteSources, TwitchPauseStyle, TwitchReplacement, TwitchTtsSettings,
 };
 pub use source_text_replacement::{
     apply_source_text_replacement, settings_from_config_value, settings_from_section_value,

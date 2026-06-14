@@ -1,8 +1,8 @@
 # TTS Dual Sink + Native Playback — опорный план реализации
 
-**Статус:** реализовано в **0.5.1** (2026-06-13); reference для post-MVP  
-**Дата:** 2026-06-13 (обновлено)  
-**Продукт:** VoiceSub `0.5.1`  
+**Статус:** dual-sink native/Sonic реализовано в **0.5.1**; Rust hot-path pipeline (`TtsSpeechPipeline`) — **0.5.2**  
+**Дата:** 2026-06-14 (обновлено)  
+**Продукт:** VoiceSub `0.5.2`  
 **Модуль:** TTS (`src-tts/`, `crates/voicesub-tts/`, `crates/voicesub-audio/`)
 
 ---
@@ -57,7 +57,9 @@
 
 ## 2. Текущее состояние (baseline)
 
-Сверять с кодом; цифры и пути — ориентир на 2026-06-10.
+> **0.5.2 (актуально):** live speech/twitch hot path — Rust (`TtsSpeechPipeline`, `ChannelOrchestrator`, `google_fetch.rs`); dashboard/TTS UI — Tauri `runtime-event` + snapshot. JS `SpeechEngine` pump — только sample preview. Dual-sink native/Sonic playback — с **0.5.1**. См. `docs/CHANGELOG.md` §0.5.2 и `TECHNICAL_ARCHITECTURE.md` §17.
+
+Сверять с кодом; цифры и пути — ориентир на 2026-06-10 (**§2.1–2.2 описывают pre-0.5.1 browser path** — историческая справка).
 
 ### 2.1 Поток данных сегодня
 

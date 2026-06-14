@@ -1,6 +1,6 @@
 # VoiceSub — WIKI
 
-Operational guide for the VoiceSub `0.5.1` UI. Each element is described as: **what it is**, **why it exists**, **how it works**, **what it affects**, and **common mistakes**.
+Operational guide for the VoiceSub `0.5.2` UI. Each element is described as: **what it is**, **why it exists**, **how it works**, **what it affects**, and **common mistakes**.
 
 Technical architecture: `docs/TECHNICAL_ARCHITECTURE.en.md`. SST `0.4.4` is a frozen predecessor; core behavior in this document is VoiceSub-specific.
 
@@ -9,7 +9,7 @@ Technical architecture: `docs/TECHNICAL_ARCHITECTURE.en.md`. SST `0.4.4` is a fr
 ## 0. About the product
 
 ### Element: VoiceSub vs SST
-- **VoiceSub** — active `0.5.1` line (Rust + Tauri + Svelte); first release baseline is `0.5.0`.
+- **VoiceSub** — active `0.5.2` line (Rust + Tauri + Svelte); first release baseline is `0.5.0`.
 - **SST** `0.4.4` — frozen reference; settings import works, but Parakeet/Experimental modes are not started in core.
 - **New overlay URL:** `http://127.0.0.1:8765/overlay` — update OBS Browser Source manually.
 
@@ -20,7 +20,7 @@ Technical architecture: `docs/TECHNICAL_ARCHITECTURE.en.md`. SST `0.4.4` is a fr
 - Microphone in the Chrome worker; internet for external translation providers (optional).
 
 ### Element: install and update (NSIS)
-- **What it does:** `VoiceSub_0.5.1_x64-setup.exe` installs `VoiceSub.exe` and bundled static assets (dashboard, overlay, worker, tts).
+- **What it does:** `VoiceSub_0.5.2_x64-setup.exe` installs `VoiceSub.exe` and bundled static assets (dashboard, overlay, worker, tts).
 - **Why:** single installer without Python/Node in runtime; downloads WebView2 via bootstrapper when missing (`downloadBootstrapper` in Tauri).
 - **Update:** close app → run new `setup.exe` over existing → `user-data/` and `logs/` persist next to install/project root.
 - **Developers:** `build-release-msi.bat` → `build-release.ps1` → `F:\AI\VoiceSub - release\v{version}\`.

@@ -1,7 +1,7 @@
 # VoiceSub Phase 0 — PoC report
 
-**Date:** 2026-06-13 (updated)  
-**Status:** Phase 0 **closed** — automated checklist green; manual 30 min soak (Svelte worker, OBS overlap) **operator sign-off received**
+**Date:** 2026-06-14 (updated)  
+**Status:** Phase 0 **closed** — automated checklist green; manual 30 min soak (Svelte worker, OBS overlap) **operator sign-off received**; patch line **0.5.2**
 
 ## Delivered (roadmap §5 Phase 0)
 
@@ -16,6 +16,7 @@
 | Translation smoke stub → overlay broadcast | done |
 | IPC `launch_browser_worker`, `voicesub_version` | done |
 | `browser_worker_launch_skipped` + integration test harness (`VOICESUB_SKIP_BROWSER_WORKER`) | done (0.5.1) |
+| Rust TTS speech pipeline + RuntimeEventBus | done (0.5.2) |
 | Svelte dashboard (Phase 2 panels) | done |
 | Overlay vanilla `/overlay` | done |
 

@@ -116,7 +116,21 @@
   const canAddChannel = $derived(channelRows.length < TWITCH_MAX_CHANNELS);
   const hasConnectCredentials = $derived.by(() => {
     const { channels } = channelsFromRows(channelRows);
-    return channels.length > 0 && twitch.nick.trim().length > 0;
+    return (
+      channels.length > 0 &&
+      twitch.nick.trim().length > 0 &&
+      twitch.oauth_token.trim().length > 0
+    );
+  });
+  const canDisconnect = $derived(isConnected || isConnecting);
+  const connectDisabledReason = $derived.by(() => {
+    if (busy || isConnecting || isConnected) return "";
+    if (!moduleEnabled) return tr("tts.twitch.connect_need_module");
+    const { channels } = channelsFromRows(channelRows);
+    if (channels.length === 0) return tr("tts.twitch.connect_need_channel");
+    if (!twitch.nick.trim()) return tr("tts.twitch.connect_need_nick");
+    if (!twitch.oauth_token.trim()) return tr("tts.twitch.connect_need_oauth");
+    return "";
   });
 
   $effect(() => {
@@ -382,7 +396,7 @@
       const strip_symbols = stripSymbolsText
         .split(/[,\n;]/)
         .map((entry) => entry.trim())
-        .filter(Boolean);
+        .filter((entry) => Boolean(entry) && entry !== "_");
       const enabled_languages = enabledLanguagesText
         .split(/[,;\s]+/)
         .map((entry) => entry.trim().toLowerCase())
@@ -434,6 +448,9 @@
       channels: channelsFromRows(channelRows).channels.length,
     });
     try {
+      if (!twitch.enabled) {
+        twitch = { ...twitch, enabled: true };
+      }
       await persistSettings();
       status = await connectTwitchChat();
       ttsTrace("twitch", "connect_ok", {
@@ -445,6 +462,7 @@
       const message = err instanceof Error ? err.message : String(err);
       ttsTrace("twitch", "connect_error", { message });
       error = message;
+      await refreshStatus();
     } finally {
       busy = false;
     }
@@ -650,7 +668,7 @@
       <button
         type="button"
         class="btn btn-primary"
-        disabled={busy || isConnecting || isConnected || !moduleEnabled || !twitch.enabled || !hasConnectCredentials}
+        disabled={busy || isConnecting || isConnected || !hasConnectCredentials || !moduleEnabled}
         onclick={() => void handleConnect()}
       >
         {isConnecting ? tr("tts.twitch.connecting") : tr("tts.twitch.connect")}
@@ -658,12 +676,15 @@
       <button
         type="button"
         class="btn btn-ghost"
-        disabled={busy || !isConnected}
+        disabled={busy || !canDisconnect}
         onclick={() => void handleDisconnect()}
       >
         {tr("tts.twitch.disconnect")}
       </button>
     </div>
+    {#if connectDisabledReason}
+      <p class="muted tts-twitch-connect__hint">{connectDisabledReason}</p>
+    {/if}
   </div>
 
   <div class="tts-settings-grid">
@@ -755,6 +776,21 @@
         }}
         onblur={() => flushPendingSave()}
       />
+    </label>
+
+    <label class="checkbox-row">
+      <input
+        type="checkbox"
+        checked={twitch.replace_underscore_with_space ?? true}
+        onchange={(e) => {
+          twitch = {
+            ...twitch,
+            replace_underscore_with_space: (e.currentTarget as HTMLInputElement).checked,
+          };
+          saveNow();
+        }}
+      />
+      <span>{tr("tts.twitch.replace_underscore")}</span>
     </label>
 
     <label class="stack-field stack-field--full">

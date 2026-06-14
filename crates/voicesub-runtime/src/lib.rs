@@ -13,4 +13,5 @@ pub use http::{
     build_router, partial_emit_settings_from_config, HttpState, PartialEmitCoordinator,
     RuntimeMetricsCollector, StylePresetsFn,
 };
-pub use service::{RuntimeError, RuntimeHandle, RuntimeService};
+pub use service::{RuntimeError, RuntimeHandle, RuntimeService, SubtitlePayloadListener};
+pub use voicesub_ws::RuntimeStateSnapshot;

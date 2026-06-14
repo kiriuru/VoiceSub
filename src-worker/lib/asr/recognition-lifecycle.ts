@@ -4,6 +4,7 @@ import {
   createOverlapRecognitionPair,
   recognitionOverlapActive,
   recognitionOverlapModeDesired,
+  resetOverlapSlotTracking,
 } from "./overlap-logic";
 import { wireRecognitionHandlers } from "./recognition-handlers";
 
@@ -87,6 +88,7 @@ export function cleanupRecognitionInstance(manager: AsrManagerHost, generationId
   manager.state.recognitionOverlapActiveSlot = null;
   manager.state.recognitionOverlapPrestarted = false;
   manager.state.recognitionOverlapSlotListening = null;
+  resetOverlapSlotTracking(manager.state);
   manager.state.recognition = null;
 }
 
@@ -98,6 +100,7 @@ export function createRecognition(manager: AsrManagerHost, generationId: number)
   manager.state.recognitionOverlapActiveSlot = null;
   manager.state.recognitionOverlapPrestarted = false;
   manager.state.recognitionOverlapSlotListening = null;
+  resetOverlapSlotTracking(manager.state);
   manager.state.recognition = recognition;
   manager.applyRecognitionSettings();
   wireRecognitionHandlers(manager, recognition, generationId, null);

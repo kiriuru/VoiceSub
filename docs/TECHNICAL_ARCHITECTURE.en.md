@@ -1,6 +1,6 @@
-# VoiceSub 0.5.1 — Technical Architecture Document
+# VoiceSub 0.5.2 — Technical Architecture Document
 
-Valid for the codebase where `voicesub-types::PROJECT_VERSION = "0.5.1"`.
+Valid for the codebase where `voicesub-types::PROJECT_VERSION = "0.5.2"`.
 
 This document describes the actual VoiceSub project layout, HTTP/WebSocket/Tauri IPC contracts, configuration schema, data flow through the Rust runtime, and frontend surfaces. It is the **canonical full technical reference** for active development. README is a short product overview; CHANGELOG is release history; roadmap is `docs/plans/voicesub_roadmap.ru.md`.
 
@@ -441,7 +441,7 @@ Global middleware: CSP header, `Cache-Control: no-store`.
 
 ## 9. WebSocket Surface
 
-### `/ws/events` — dashboard + overlay
+### `/ws/events` — OBS overlay (+ optional external clients)
 
 **Implementation:** `crates/voicesub-ws/src/events.rs`
 
@@ -468,7 +468,17 @@ Payload enrichment: `event_sequence`, `created_at_ms`, `event_type` (`WsEventPub
 | `twitch_chat_message` | Twitch chat for TTS |
 | `twitch_connection_update` | Twitch connection state |
 
-**Stale guard:** dashboard (`src/lib/ws.ts`) and overlay (`overlay.js` + `ws-stale-guard-logic.js`) drop stale events after stop/start (timestamp-first on sequence reset).
+**Stale guard:** overlay (`overlay.js` + `ws-stale-guard-logic.js`) drops stale events after stop/start (timestamp-first on sequence reset).
+
+### In-process runtime events — Tauri dashboard + TTS (0.5.2+)
+
+**Implementation:** `RuntimeEventBus` (`crates/voicesub-ws/src/event_bus.rs`) + Tauri emit `runtime-event` (`src-tauri/src/lib.rs`).
+
+- Main dashboard (`src/lib/runtime-events.ts`) and TTS module (`src-tts/App.svelte`) **do not** open `ws://127.0.0.1:8765/ws/events`; they receive the same `{ type, payload }` envelopes via Tauri events.
+- On subscribe: IPC `get_runtime_state_snapshot` replays runtime/subtitle/overlay/translation/diagnostics without WS handshake race.
+- `WsEventPublisher` mirrors broadcasts into the EventBus for shell clients; OBS overlay remains WS-only.
+
+**Legacy:** `src/lib/ws.ts` (`EventsSocket`) for dev/external browser clients; production Tauri shell uses `runtime-events.ts`.
 
 ### `/ws/asr_worker` — browser worker
 
@@ -521,6 +531,9 @@ Payload enrichment: `event_sequence`, `created_at_ms`, `event_type` (`WsEventPub
 | `tts_open_window` | Open/focus `/tts` webview |
 | `tts_open_system_url` | Open validated Twitch OAuth URL externally |
 | `open_external_https_url` | Open GitHub release page (update banner **Download**) in system browser |
+| `get_runtime_state_snapshot` | Replay runtime/subtitle/overlay/translation/diagnostics for Tauri shell on connect |
+
+**Tauri events (shell clients):** `runtime-event` (WS-shaped envelopes), `tts-speech-activity` (planned speech queue items for TTS UI log).
 
 **Lifecycle:** main webview → `http://{bind_addr}/` on setup; on close → TTS shutdown → runtime stop.
 
@@ -589,6 +602,7 @@ With `logging.full_enabled`, close steps (`shutdown_begin`, `shutdown_step`, `sh
 - **No** `--app`, hidden windows, in-tab worker
 - Anti-throttling Chrome flags + Windows EcoQoS opt-out (ported from SST `browser_worker_launcher.py`)
 - Detached high-priority process; stop via `taskkill /T /F` (only when real `pid > 0`)
+- **Launch stability (0.5.2+):** `launch_stability.rs` (flag profile), `profile_bloat_guard.rs` (profile dir hygiene), `process_affinity.rs` (Windows CPU affinity); contract tests in `crates/voicesub-browser/tests/chrome_launch_contract.rs`
 
 ### Test harness (no Chrome spawn)
 
@@ -700,11 +714,13 @@ Without cleanup the last subtitle frame can stick in OBS. Contract: `crates/voic
 **Config:** `obs_closed_captions` in config
 
 - OBS WebSocket v5 client (`host`, `port`, `password`)
-- `output_mode`: `disabled` | …
-- `debug_mirror` — optional debug input
-- `timing` — partial throttle, final replace delay, clear after ms
+- `output_mode`: `disabled` | `source_live` | `source_final_only` | `translation_1..5` | `first_visible_line`
+- `debug_mirror` — optional OBS Text Source mirror (`SetInputSettings`)
+- `timing` — partial throttle, final replace delay, clear after ms, dedup
+- Two inputs: ASR **source events** (`source_live` / `source_final_only`) and **subtitle payload** (`translation_*`, `first_visible_line`, debug mirror)
+- Send/clear/dedup algorithm — SST parity + 0.5.2 fixes (501 debug clear, supersede generation, partial native stop after 501)
 
-Enabled only when `obs_closed_captions.enabled = true` and connection succeeds.
+Enabled when `obs_closed_captions.enabled = true` and connection succeeds. Native `SendStreamCaption` only during an active stream.
 
 ## 17. TTS Module
 
@@ -728,16 +744,18 @@ Shipped as **module** under `bin/modules/tts/` + Svelte UI at `/tts`.
 
 `speech` | `twitch` (`src-tts/lib/types.ts`)
 
-### Dual sink (speech + twitch)
+### Dual sink (speech + twitch) — Rust hot path (0.5.2+)
 
-Two independent playback channels with separate queues and output devices:
+Two independent playback channels with separate Rust queues and WASAPI devices:
 
-| Channel | Source | JS engine | Config device fields |
+| Channel | Source | Orchestrator | Config device fields |
 | --- | --- | --- | --- |
-| `speech` | `subtitle_payload` → `tts_plan_subtitle_speech` | `speechEngine` | root `audio_output_device_*` |
-| `twitch` | `twitch_chat` (WS) | `twitchEngine` | `[twitch].audio_output_device_*` |
+| `speech` | `subtitle_payload` → `TtsSpeechPipeline` | `ChannelOrchestrator` (speech) | root `audio_output_device_*` |
+| `twitch` | IRC → `TwitchChatService` | `ChannelOrchestrator` (twitch) | `[twitch].audio_output_device_*` |
 
-Queue and MP3 prefetch — `src-tts/lib/speech-engine.ts` + `google-tts.ts`. Playback is **native path only** (`tts_play_audio` / `PlaybackHub`); `HtmlAudioPlayer` removed in 0.5.1.
+Live path: plan → **`google_fetch.rs`** (HTTP) → enqueue → prefetch → `PlaybackHub` (`tts_play_audio`). TTS WebView — settings UI + manual sample test only (`SpeechEngine` preview).
+
+**0.5.1 (legacy note):** queue/prefetch lived in `src-tts/lib/speech-engine.ts` + `google-tts.ts`; **0.5.2** moved the hot path to Rust (`speech_pipeline.rs`, `channel_orchestrator.rs`).
 
 ### Playback modes (`playback_mode` in `user-data/modules/tts/config.toml`)
 
@@ -760,7 +778,7 @@ Devices: **label-first** (WASAPI friendly name → `cpal::Device`). List via `tt
 | Emotes | Twitch IRC tag + BTTV/7TV/Twitch lexical; **pure numeric tokens** are not matched as emote codes |
 | Emoji strip | `strip_unicode_emoji` preserves decimal digits (ASCII / Arabic-Indic / Fullwidth); `\p{Emoji}` does not eat `0–9` in chat text |
 | Links | `links.rs` + double `strip_links` in pipeline; link-only → `speakable: false` |
-| Symbols | `strip_symbols` — comma-separated tokens removed from text (not “mute all symbols”) |
+| Symbols | `strip_symbols` — comma-separated tokens (default `@, &, $, _`); optional `replace_underscore_with_space` for nick/text |
 | Lang | Lingua 1.8 subset + Unicode heuristics + whatlang; `strip_leading_speaker_label` |
 | UI | `TwitchPanel.svelte`: connection card, save queue (`saveNow` / debounce), “Settings applied” badge, `?` nick help (`popover-position.ts`) |
 
@@ -921,9 +939,9 @@ Active HTTP server does **not** mount experimental routes or in-process Parakeet
 
 ## 25. Versioning and Update Checks
 
-- **Single source (interim):** `voicesub-types::PROJECT_VERSION` = `"0.5.1"`
-- Workspace `Cargo.toml` `[workspace.package].version` = `0.5.1`
-- `package.json`, `tauri.conf.json` — aligned `0.5.1`
+- **Single source (interim):** `voicesub-types::PROJECT_VERSION` = `"0.5.2"`
+- Workspace `Cargo.toml` `[workspace.package].version` = `0.5.2`
+- `package.json`, `tauri.conf.json` — aligned `0.5.2`
 - `GET /api/version`, `POST /api/updates/check` — GitHub Releases poll (`update_service.rs`, `voicesub-types::version`)
 - Config `updates.*` — defaults + `normalize_updates_config` for legacy `config.toml`
 - Dashboard `UpdateBanner.svelte`; **Download** → Tauri `open_external_https_url` (`shell.rs`)

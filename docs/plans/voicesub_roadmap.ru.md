@@ -1,15 +1,15 @@
 # VoiceSub 0.5.0 — план перехода на новую архитектуру
 
-> **Текущая линия кода:** patch **`0.5.1`** — см. `docs/CHANGELOG.md` §0.5.1. Документ описывает переход **0.4.4 → 0.5.0**; patch-изменения после релиза — в CHANGELOG.
+> **Текущая линия кода:** patch **`0.5.2`** — см. `docs/CHANGELOG.md` §0.5.2. Документ описывает переход **0.4.4 → 0.5.0**; patch-изменения после релиза — в CHANGELOG.
 
 **Статус:** принятый internal roadmap (канон для `F:\AI\VoiceSub`)  
-**Дата:** 2026-06-13 (обновлено)  
+**Дата:** 2026-06-14 (обновлено)  
 **Предшественник:** SST `0.4.4` — `F:\AI\stream-sub-translator`  
-**Baseline:** `0.5.0` | **Текущий patch:** `0.5.1` | **Продукт:** VoiceSub  
+**Baseline:** `0.5.0` | **Текущий patch:** `0.5.2` | **Продукт:** VoiceSub  
 
 Политика: `AGENTS.md` (локально). Техническая архитектура — `docs/TECHNICAL_ARCHITECTURE.md` (обновляется по фазам).
 
-**Сводка выполнения (2026-06-13):** Фаза 0 закрыта (soak пройден). **NSIS installer pipeline работает** (`VoiceSub_0.5.1_x64-setup.exe`). Patch **0.5.1**: native/Sonic TTS dual-sink, Twitch multi-channel (до 5), hot-apply фильтров, сохранение цифр в чате. Golden parity, formal DoD Фазы 1 и публикация на GitHub — **отложены**. Паритет полей SST dashboard / preview=OBS / выбор default worker UI — **сняты** (свой стек и компоновка UI). Подробнее: §12.
+**Сводка выполнения (2026-06-14):** Фаза 0 закрыта (soak пройден). **NSIS installer pipeline работает** (`VoiceSub_0.5.2_x64-setup.exe`). Patch **0.5.2**: Rust TTS speech pipeline, RuntimeEventBus, OBS CC send fixes, browser worker stability. Patch **0.5.1** (GitHub [v0.5.1](https://github.com/kiriuru/VoiceSub/releases/tag/v0.5.1)): native/Sonic dual-sink, Twitch multi-channel. Golden parity, formal DoD Фазы 1 и публикация на GitHub — **отложены**. Подробнее: §12.
 
 ---
 
@@ -318,7 +318,8 @@ PoC soak (automated + manual 30 min) — **done** (§10).
 | S3 | **Formal DoD sign-off Фазы 1** — отложено |
 | S4 | **Полный паритет полей SST dashboard; preview payload = OBS; выбор default worker UI** — **снято** (новый стек и компоновка UI, не копия SST dashboard) |
 | S5 | **Релиз 0.5.0 / NSIS installer** — pipeline готов (`build-release.ps1`); публикация на GitHub — отложено |
-| S6 | **Patch 0.5.1** — native/Sonic TTS dual-sink, Twitch multi-channel + hot-apply, digit-safe chat filters, `VOICESUB_SKIP_BROWSER_WORKER` в integration tests; см. `docs/CHANGELOG.md` §0.5.1 |
+| S6 | **Patch 0.5.1** — native/Sonic TTS dual-sink, Twitch multi-channel + hot-apply, digit-safe chat filters, `VOICESUB_SKIP_BROWSER_WORKER` в integration tests; GitHub [v0.5.1](https://github.com/kiriuru/VoiceSub/releases/tag/v0.5.1); см. `docs/CHANGELOG.md` §0.5.1 |
+| S7 | **Patch 0.5.2** — Rust TTS speech pipeline, RuntimeEventBus + snapshot, OBS CC send algorithm fixes, browser worker launch stability; см. `docs/CHANGELOG.md` §0.5.2 |
 
 PoC report: `docs/plans/voicesub_poc_report.md`.
 

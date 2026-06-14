@@ -89,6 +89,9 @@ pub struct TwitchTtsSettings {
     /// Symbol tokens removed from spoken chat text (`@`, `&`, `$`, …). Empty = read all symbols.
     #[serde(default = "default_strip_symbols")]
     pub strip_symbols: Vec<String>,
+    /// Replace `_` with a space in nicks and message text (pause like a word boundary).
+    #[serde(default = "default_replace_underscore_with_space")]
+    pub replace_underscore_with_space: bool,
     /// Remove Twitch / BTTV / 7TV emote codes from message text.
     #[serde(default = "default_true")]
     pub strip_emotes: bool,
@@ -160,7 +163,11 @@ fn default_block_commands() -> bool {
 }
 
 fn default_strip_symbols() -> Vec<String> {
-    vec!["@".into(), "&".into(), "$".into(), "_".into()]
+    vec!["@".into(), "&".into(), "$".into()]
+}
+
+fn default_replace_underscore_with_space() -> bool {
+    true
 }
 
 fn default_true() -> bool {
@@ -196,6 +203,7 @@ impl Default for TwitchTtsSettings {
             block_commands: default_block_commands(),
             ignore_users: Vec::new(),
             strip_symbols: default_strip_symbols(),
+            replace_underscore_with_space: default_replace_underscore_with_space(),
             strip_emotes: true,
             strip_emoji: true,
             strip_links: true,
@@ -324,6 +332,37 @@ impl TwitchTtsSettings {
 
 fn normalize_channel_login(raw: &str) -> String {
     raw.trim().trim_start_matches('#').to_lowercase()
+}
+
+/// Migrate legacy configs that stripped `_` via `strip_symbols`.
+pub fn normalize_twitch_settings(settings: &mut TwitchTtsSettings) {
+    let had_underscore_strip = settings
+        .strip_symbols
+        .iter()
+        .any(|entry| entry.trim() == "_");
+    settings
+        .strip_symbols
+        .retain(|entry| entry.trim() != "_");
+    if had_underscore_strip {
+        settings.replace_underscore_with_space = true;
+    }
+}
+
+#[cfg(test)]
+mod normalize_twitch_settings_tests {
+    use super::*;
+
+    #[test]
+    fn migrates_legacy_underscore_strip_symbol() {
+        let mut settings = TwitchTtsSettings {
+            strip_symbols: vec!["@".into(), "_".into()],
+            replace_underscore_with_space: false,
+            ..Default::default()
+        };
+        normalize_twitch_settings(&mut settings);
+        assert_eq!(settings.strip_symbols, vec!["@".to_string()]);
+        assert!(settings.replace_underscore_with_space);
+    }
 }
 
 #[cfg(test)]

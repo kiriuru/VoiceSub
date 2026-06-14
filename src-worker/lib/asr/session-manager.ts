@@ -45,7 +45,13 @@ import {
   transitionToStopping,
 } from "./recognition-lifecycle";
 import { wireRecognitionHandlers } from "./recognition-handlers";
-import { recognitionOverlapActive } from "./overlap-logic";
+import {
+  clearOverlapTimeBasedPrestart,
+  overlapActiveSlotIndex,
+  prestartOverlapBuddyIfNeeded,
+  recognitionOverlapActive,
+  recoverGhostOverlapBuddy,
+} from "./overlap-logic";
 import { webSpeechRecognitionPolicy } from "./web-speech-policy";
 import { INSTANCE_DEFAULTS } from "./session-defaults";
 
@@ -380,6 +386,9 @@ export class BrowserAsrSessionManager implements AsrManagerHost {
       this.options.setFinalText?.(finalText);
       this.options.setPartialText?.("");
       this.setStatusInternal("forced-finalized");
+      if (recognitionOverlapActive(this.state)) {
+        prestartOverlapBuddyIfNeeded(this, overlapActiveSlotIndex(this.state));
+      }
       this.updateCountersInternal();
     }, Number(this.state.forceFinalizationTimeoutMs || 1600));
   }
@@ -409,6 +418,7 @@ export class BrowserAsrSessionManager implements AsrManagerHost {
     this.clearForceFinalizeTimerInternal();
     this.clearRestartTimerInternal();
     this.clearReconnectTimerInternal();
+    clearOverlapTimeBasedPrestart(this.state);
   }
 
   recognitionStartBurstThrottleInternal(reason: string) {
@@ -852,6 +862,9 @@ export class BrowserAsrSessionManager implements AsrManagerHost {
       this.state.pendingRestartReason = "watchdog_stall";
       this.appendLogInternal("watchdog forced rearm");
       this.transitionToStoppingInternal("watchdog");
+      return;
+    }
+    if (recoverGhostOverlapBuddy(this, now)) {
       return;
     }
     if (tick.type === "heartbeat" || tick.type === "cycle_pending") {

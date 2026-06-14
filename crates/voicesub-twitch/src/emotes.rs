@@ -9,6 +9,9 @@ use crate::emoji::{is_plain_decimal_token, normalize_whitespace, strip_unicode_e
 use crate::settings::TwitchEmoteSources;
 
 pub const DEFAULT_TWITCH_CLIENT_ID: &str = "oraf2d29s9mm8kxq4xx97zo28xaj7b";
+const SEVENTV_API_BASE: &str = "https://7tv.io/v3";
+const BTTV_API_BASE: &str = "https://api.betterttv.net/3/cached";
+const HTTP_USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
 
 #[derive(Debug, Default, Clone)]
 pub struct EmoteSets {
@@ -41,12 +44,25 @@ impl EmoteRegistry {
 
     #[cfg(test)]
     pub(crate) fn seed_test_emotes(&self, twitch: &[&str], bttv: &[&str]) {
+        self.seed_test_emotes_with_seventv(twitch, bttv, &[]);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn seed_test_emotes_with_seventv(
+        &self,
+        twitch: &[&str],
+        bttv: &[&str],
+        seventv: &[&str],
+    ) {
         let mut guard = self.inner.write().expect("emote lock");
         for name in twitch {
             guard.twitch.insert(name.to_ascii_lowercase());
         }
         for code in bttv {
             insert_third_party_code(&mut guard.bttv, code);
+        }
+        for code in seventv {
+            insert_third_party_code(&mut guard.seventv, code);
         }
     }
 
@@ -346,34 +362,49 @@ async fn fetch_bttv_emotes(
     broadcaster_id: &str,
     out: &mut HashSet<String>,
 ) -> Result<(), String> {
-    let global: Vec<BttvEmote> = client
-        .get("https://api.betterttv.net/3/cached/emotes/global")
+    let global_url = format!("{BTTV_API_BASE}/emotes/global");
+    let global: Vec<BttvEmote> = bttv_api_request(client, global_url)
         .send()
         .await
         .map_err(|err| err.to_string())?
         .json()
         .await
         .map_err(|err| err.to_string())?;
-    for emote in global {
-        insert_third_party_code(out, &emote.code);
-    }
+    collect_bttv_emotes(out, &global);
 
-    let url = format!("https://api.betterttv.net/3/cached/users/twitch/{broadcaster_id}");
-    let user: BttvUser = client
-        .get(url)
+    let url = format!("{BTTV_API_BASE}/users/twitch/{broadcaster_id}");
+    let user: BttvUser = bttv_api_request(client, url)
         .send()
         .await
         .map_err(|err| err.to_string())?
         .json()
         .await
         .map_err(|err| err.to_string())?;
-    for emote in user.channel_emotes {
-        insert_third_party_code(out, &emote.code);
-    }
-    for emote in user.shared_emotes {
-        insert_third_party_code(out, &emote.code);
-    }
+    collect_bttv_emotes(out, &user.channel_emotes);
+    collect_bttv_emotes(out, &user.shared_emotes);
     Ok(())
+}
+
+fn bttv_api_request(client: &reqwest::Client, url: String) -> reqwest::RequestBuilder {
+    client
+        .get(url)
+        .header("User-Agent", HTTP_USER_AGENT)
+        .header("Accept", "application/json")
+}
+
+fn collect_bttv_emotes(out: &mut HashSet<String>, emotes: &[BttvEmote]) {
+    for emote in emotes {
+        insert_third_party_code(out, &emote.code);
+    }
+}
+
+fn seventv_api_request(client: &reqwest::Client, url: String) -> reqwest::RequestBuilder {
+    client
+        .get(url)
+        .header("User-Agent", HTTP_USER_AGENT)
+        .header("Accept", "application/json")
+        .header("X-SevenTV-Platform", "voicesub")
+        .header("X-SevenTV-Version", env!("CARGO_PKG_VERSION"))
 }
 
 async fn fetch_seventv_emotes(
@@ -381,37 +412,104 @@ async fn fetch_seventv_emotes(
     broadcaster_id: &str,
     out: &mut HashSet<String>,
 ) -> Result<(), String> {
-    let global: SevenTvEmoteSet = client
-        .get("https://7tv.io/v3/emote-sets/global")
+    let global_url = format!("{SEVENTV_API_BASE}/emote-sets/global");
+    let global: SevenTvEmoteSet = seventv_api_request(client, global_url)
         .send()
         .await
         .map_err(|err| err.to_string())?
         .json()
         .await
         .map_err(|err| err.to_string())?;
-    for emote in global.emotes {
-        if let Some(name) = emote.name {
-            insert_third_party_code(out, &name);
+    collect_seventv_set_emotes(out, &global.emotes);
+
+    let url = format!("{SEVENTV_API_BASE}/users/twitch/{broadcaster_id}");
+    let user: SevenTvUserResponse = seventv_api_request(client, url)
+        .send()
+        .await
+        .map_err(|err| err.to_string())?
+        .json()
+        .await
+        .map_err(|err| err.to_string())?;
+
+    if let Some(set) = user.emote_set {
+        collect_seventv_set_emotes(out, &set.emotes);
+        if set.emotes.is_empty() {
+            if let Some(set_id) = user.emote_set_id.as_deref().or(Some(set.id.as_str())) {
+                if let Err(err) = fetch_seventv_emote_set_by_id(client, set_id, out).await {
+                    warn!(
+                        target: "voicesub.twitch.emotes",
+                        set_id = %set_id,
+                        error = %err,
+                        "7tv emote set fetch by id failed"
+                    );
+                }
+            }
         }
+    } else if let Some(set_id) = user.emote_set_id.as_deref() {
+        fetch_seventv_emote_set_by_id(client, set_id, out).await?;
     }
 
-    let url = format!("https://7tv.io/v3/users/twitch/{broadcaster_id}");
-    let user: SevenTvUser = client
-        .get(url)
-        .send()
-        .await
-        .map_err(|err| err.to_string())?
-        .json()
-        .await
-        .map_err(|err| err.to_string())?;
-    if let Some(set) = user.emote_set {
-        for emote in set.emotes {
-            if let Some(name) = emote.name {
-                insert_third_party_code(out, &name);
+    if let Some(profile) = user.user {
+        for set_ref in profile.emote_sets {
+            if !set_ref.emotes.is_empty() {
+                collect_seventv_set_emotes(out, &set_ref.emotes);
+                continue;
+            }
+            if let Some(set_id) = set_ref.id.as_deref() {
+                if let Err(err) = fetch_seventv_emote_set_by_id(client, set_id, out).await {
+                    warn!(
+                        target: "voicesub.twitch.emotes",
+                        set_id = %set_id,
+                        error = %err,
+                        "7tv supplemental emote set fetch failed"
+                    );
+                }
             }
         }
     }
+
     Ok(())
+}
+
+async fn fetch_seventv_emote_set_by_id(
+    client: &reqwest::Client,
+    set_id: &str,
+    out: &mut HashSet<String>,
+) -> Result<(), String> {
+    let url = format!("{SEVENTV_API_BASE}/emote-sets/{set_id}");
+    let set: SevenTvEmoteSet = seventv_api_request(client, url)
+        .send()
+        .await
+        .map_err(|err| err.to_string())?
+        .json()
+        .await
+        .map_err(|err| err.to_string())?;
+    collect_seventv_set_emotes(out, &set.emotes);
+    Ok(())
+}
+
+fn collect_seventv_set_emotes(out: &mut HashSet<String>, emotes: &[SevenTvEmote]) {
+    for emote in emotes {
+        insert_seventv_emote(out, emote);
+    }
+}
+
+/// Index both the active set name (channel alias) and canonical `data.name`.
+fn insert_seventv_emote(out: &mut HashSet<String>, emote: &SevenTvEmote) {
+    if let Some(name) = emote.name.as_deref().map(str::trim).filter(|name| !name.is_empty()) {
+        insert_third_party_code(out, name);
+    }
+    if let Some(base) = emote
+        .data
+        .as_ref()
+        .and_then(|data| data.name.as_deref())
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+    {
+        if emote.name.as_deref().map(str::trim) != Some(base) {
+            insert_third_party_code(out, base);
+        }
+    }
 }
 
 /// Strip Twitch IRC `emotes` tag ranges (UTF-16 indices, inclusive).
@@ -509,6 +607,7 @@ struct BttvEmote {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct BttvUser {
     #[serde(default)]
     channel_emotes: Vec<BttvEmote>,
@@ -517,18 +616,43 @@ struct BttvUser {
 }
 
 #[derive(Debug, Deserialize)]
-struct SevenTvUser {
+struct SevenTvUserResponse {
+    #[serde(default)]
+    emote_set_id: Option<String>,
     emote_set: Option<SevenTvEmoteSet>,
+    user: Option<SevenTvUserProfile>,
+}
+
+#[derive(Debug, Deserialize)]
+struct SevenTvUserProfile {
+    #[serde(default)]
+    emote_sets: Vec<SevenTvEmoteSetRef>,
+}
+
+#[derive(Debug, Deserialize)]
+struct SevenTvEmoteSetRef {
+    id: Option<String>,
+    #[serde(default)]
+    emotes: Vec<SevenTvEmote>,
 }
 
 #[derive(Debug, Deserialize)]
 struct SevenTvEmoteSet {
+    #[serde(default)]
+    id: String,
     #[serde(default)]
     emotes: Vec<SevenTvEmote>,
 }
 
 #[derive(Debug, Deserialize)]
 struct SevenTvEmote {
+    name: Option<String>,
+    #[serde(default)]
+    data: Option<SevenTvEmoteData>,
+}
+
+#[derive(Debug, Deserialize)]
+struct SevenTvEmoteData {
     name: Option<String>,
 }
 
@@ -561,6 +685,62 @@ mod tests {
         insert_third_party_code(&mut set, "baleGIGA");
         assert!(emote_set_contains(&set, "baleGIGA"));
         assert!(emote_set_contains(&set, "BaleGIGA"));
+    }
+
+    #[test]
+    fn parses_bttv_user_payload_camel_case_fields() {
+        let payload = r#"{
+            "id": "602017945244db6c5980e4bc",
+            "channelEmotes": [
+                { "id": "60bb405ff8b3f62601c38e47", "code": "peepoHeyyy" }
+            ],
+            "sharedEmotes": [
+                { "id": "5f503a0568d9d86c020db3bb", "code": "NOPERS" }
+            ]
+        }"#;
+        let user: BttvUser = serde_json::from_str(payload).expect("json");
+        assert_eq!(user.channel_emotes.len(), 1);
+        assert_eq!(user.shared_emotes.len(), 1);
+        assert_eq!(user.channel_emotes[0].code, "peepoHeyyy");
+        assert_eq!(user.shared_emotes[0].code, "NOPERS");
+
+        let mut out = HashSet::new();
+        collect_bttv_emotes(&mut out, &user.channel_emotes);
+        collect_bttv_emotes(&mut out, &user.shared_emotes);
+        assert!(emote_set_contains(&out, "peepoHeyyy"));
+        assert!(emote_set_contains(&out, "NOPERS"));
+    }
+
+    #[test]
+    fn bttv_strips_channel_and_shared_codes() {
+        let registry = EmoteRegistry::new();
+        registry.seed_test_emotes(&[], &["OMEGALUL", "NOPERS"]);
+        let mut sources = TwitchEmoteSources::default();
+        sources.twitch = false;
+        sources.seventv = false;
+        assert_eq!(
+            registry.remove_emotes_from_text("OMEGALUL hi NOPERS", &sources, false),
+            "hi"
+        );
+    }
+
+    #[test]
+    fn bttv_respects_source_toggle() {
+        let registry = EmoteRegistry::new();
+        registry.seed_test_emotes(&[], &["CiGrip"]);
+        let mut sources = TwitchEmoteSources::default();
+        sources.twitch = false;
+        sources.seventv = false;
+        sources.bttv = false;
+        assert_eq!(
+            registry.remove_emotes_from_text("CiGrip hello", &sources, false),
+            "CiGrip hello"
+        );
+        sources.bttv = true;
+        assert_eq!(
+            registry.remove_emotes_from_text("CiGrip hello", &sources, false),
+            "hello"
+        );
     }
 
     #[test]
@@ -608,5 +788,95 @@ mod tests {
     fn irc_emote_strip_leaves_surrounding_digits() {
         let out = strip_irc_emotes("5 baleGIGA 100", "25:2-9");
         assert_eq!(out, "5  100");
+    }
+
+    #[test]
+    fn seventv_strips_channel_alias_and_canonical_name() {
+        let registry = EmoteRegistry::new();
+        registry.seed_test_emotes_with_seventv(&[], &[], &["MyClap"]);
+        {
+            let mut guard = registry.inner.write().unwrap();
+            insert_third_party_code(&mut guard.seventv, "Clap");
+        }
+        let mut sources = TwitchEmoteSources::default();
+        sources.twitch = false;
+        sources.bttv = false;
+        assert_eq!(
+            registry.remove_emotes_from_text("hello MyClap world", &sources, false),
+            "hello world"
+        );
+        assert_eq!(
+            registry.remove_emotes_from_text("hello Clap world", &sources, false),
+            "hello world"
+        );
+    }
+
+    #[test]
+    fn seventv_respects_source_toggle() {
+        let registry = EmoteRegistry::new();
+        registry.seed_test_emotes_with_seventv(&[], &[], &["RainbowPls"]);
+        let mut sources = TwitchEmoteSources::default();
+        sources.twitch = false;
+        sources.bttv = false;
+        sources.seventv = false;
+        assert_eq!(
+            registry.remove_emotes_from_text("RainbowPls gg", &sources, false),
+            "RainbowPls gg"
+        );
+        sources.seventv = true;
+        assert_eq!(
+            registry.remove_emotes_from_text("RainbowPls gg", &sources, false),
+            "gg"
+        );
+    }
+
+    #[test]
+    fn insert_seventv_emote_indexes_alias_and_base_name() {
+        let mut set = HashSet::new();
+        insert_seventv_emote(
+            &mut set,
+            &SevenTvEmote {
+                name: Some("MyClap".into()),
+                data: Some(SevenTvEmoteData {
+                    name: Some("Clap".into()),
+                }),
+            },
+        );
+        assert!(emote_set_contains(&set, "MyClap"));
+        assert!(emote_set_contains(&set, "Clap"));
+    }
+
+    #[test]
+    fn parses_seventv_user_payload_and_collects_alias_names() {
+        let payload = r#"{
+            "emote_set_id": "01SET",
+            "emote_set": {
+                "id": "01SET",
+                "emotes": [
+                    {
+                        "name": "MyClap",
+                        "data": { "name": "Clap" }
+                    }
+                ]
+            },
+            "user": {
+                "emote_sets": [
+                    { "id": "01OTHER", "emotes": [ { "name": "RainbowPls", "data": { "name": "RainbowPls" } } ] }
+                ]
+            }
+        }"#;
+        let parsed: SevenTvUserResponse = serde_json::from_str(payload).expect("json");
+        let mut out = HashSet::new();
+        if let Some(set) = parsed.emote_set {
+            collect_seventv_set_emotes(&mut out, &set.emotes);
+        }
+        if let Some(profile) = parsed.user {
+            for set_ref in profile.emote_sets {
+                collect_seventv_set_emotes(&mut out, &set_ref.emotes);
+            }
+        }
+        assert!(emote_set_contains(&out, "MyClap"));
+        assert!(emote_set_contains(&out, "Clap"));
+        assert!(emote_set_contains(&out, "RainbowPls"));
     }
 }

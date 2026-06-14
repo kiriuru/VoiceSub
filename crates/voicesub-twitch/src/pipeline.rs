@@ -54,6 +54,10 @@ pub fn process_chat_message(
 
     clean_text = crate::symbols::strip_configured_symbols(&clean_text, &settings.strip_symbols);
 
+    if settings.replace_underscore_with_space {
+        clean_text = crate::symbols::replace_underscores_with_spaces(&clean_text);
+    }
+
     if settings.strip_links {
         clean_text = crate::links::strip_links_from_text(&clean_text);
         clean_text = crate::emoji::normalize_whitespace(&clean_text);
@@ -130,7 +134,11 @@ pub fn process_chat_message(
 }
 
 fn strip_symbols_for_speech(text: &str, settings: &TwitchTtsSettings) -> String {
-    crate::symbols::strip_configured_symbols(text, &settings.strip_symbols)
+    let mut out = crate::symbols::strip_configured_symbols(text, &settings.strip_symbols);
+    if settings.replace_underscore_with_space {
+        out = crate::symbols::replace_underscores_with_spaces(&out);
+    }
+    out
 }
 
 fn build_speak_text(settings: &TwitchTtsSettings, spoken_nick: &str, clean_text: &str) -> String {
@@ -429,8 +437,8 @@ mod tests {
         assert!(out.speakable);
         assert_eq!(out.language, "ru");
         assert_eq!(out.clean_text, "Привет");
-        assert_eq!(out.spoken_nick, "sasha12041998");
-        assert_eq!(out.speak_text, "sasha12041998. Привет");
+        assert_eq!(out.spoken_nick, "sasha 12041998");
+        assert_eq!(out.speak_text, "sasha 12041998. Привет");
     }
 
     #[test]
@@ -534,8 +542,31 @@ mod tests {
     }
 
     #[test]
+    fn replace_underscore_with_space_in_message_and_nick() {
+        let settings = TwitchTtsSettings {
+            replace_underscore_with_space: true,
+            ..Default::default()
+        };
+        let registry = EmoteRegistry::new();
+        let out = process_chat_message(
+            &settings,
+            &no_replacement(),
+            &registry,
+            "cool_guy",
+            "Cool_Guy",
+            "see you_later",
+            None,
+        );
+        assert!(out.speakable);
+        assert_eq!(out.clean_text, "see you later");
+        assert_eq!(out.spoken_nick, "Cool Guy");
+        assert_eq!(out.speak_text, "Cool Guy. see you later");
+    }
+
+    #[test]
     fn strip_symbols_removes_underscore_from_message_and_nick() {
         let settings = TwitchTtsSettings {
+            replace_underscore_with_space: false,
             strip_symbols: vec!["@".into(), "&".into(), "$".into(), "_".into()],
             ..Default::default()
         };
@@ -595,6 +626,68 @@ mod tests {
             "digits must remain in clean_text, got: {}",
             out.clean_text
         );
+    }
+
+    #[test]
+    fn digit_only_chat_lines_are_speakable() {
+        let settings = TwitchTtsSettings::default();
+        let registry = EmoteRegistry::new();
+        for sample in ["522", "123", "1 2 3"] {
+            let out = process_chat_message(
+                &settings,
+                &no_replacement(),
+                &registry,
+                "kiriuru",
+                "Kiriuru",
+                sample,
+                None,
+            );
+            assert!(
+                out.speakable,
+                "expected speakable for {sample:?}, got {:?}",
+                out.skip_reason
+            );
+            assert_eq!(out.clean_text, sample);
+            assert!(out.speak_text.contains(sample));
+        }
+    }
+
+    #[test]
+    fn pipeline_strips_bttv_emotes_from_speech() {
+        let settings = TwitchTtsSettings::default();
+        let registry = EmoteRegistry::new();
+        registry.seed_test_emotes(&[], &["OMEGALUL", "NOPERS"]);
+        let out = process_chat_message(
+            &settings,
+            &no_replacement(),
+            &registry,
+            "viewer",
+            "Viewer",
+            "OMEGALUL NOPERS gg",
+            None,
+        );
+        assert!(out.speakable);
+        assert_eq!(out.clean_text, "gg");
+        assert_eq!(out.speak_text, "Viewer. gg");
+    }
+
+    #[test]
+    fn pipeline_strips_seventv_emotes_from_speech() {
+        let settings = TwitchTtsSettings::default();
+        let registry = EmoteRegistry::new();
+        registry.seed_test_emotes_with_seventv(&[], &[], &["RainbowPls", "Clap"]);
+        let out = process_chat_message(
+            &settings,
+            &no_replacement(),
+            &registry,
+            "viewer",
+            "Viewer",
+            "RainbowPls Clap nice",
+            None,
+        );
+        assert!(out.speakable);
+        assert_eq!(out.clean_text, "nice");
+        assert_eq!(out.speak_text, "Viewer. nice");
     }
 
     #[test]

@@ -2,6 +2,9 @@
 
 mod chrome_flags;
 mod launch_config;
+mod launch_stability;
+mod process_affinity;
+mod profile_bloat_guard;
 mod ecoqos;
 mod gateway;
 mod launcher;
@@ -14,10 +17,14 @@ mod webview2_runtime;
 mod webview_power;
 
 pub use chrome_flags::{
-    default_chrome_launch_value, disabled_chrome_features_csv, BrowserChromeLaunchConfig,
-    CHROME_ANTI_THROTTLE_FLAGS,
+    default_anti_throttle_args, default_chrome_launch_value, default_disabled_chrome_features,
+    disabled_chrome_features_csv, finalize_chrome_launch_config, BrowserChromeLaunchConfig,
+    CHROME_ANTI_THROTTLE_FLAGS, CHROME_DISK_BLOAT_GUARD_FLAGS, DISABLED_CHROME_DISK_BLOAT_FEATURES,
+    DISABLED_CHROME_FEATURES, FORBIDDEN_WORKER_LAUNCH_FLAGS,
 };
 pub use launch_config::chrome_launch_from_config;
+pub use launch_stability::apply_launch_stability_overrides;
+pub use process_affinity::{apply_browser_worker_affinity, resolve_browser_worker_affinity_mask};
 pub use launcher::{browser_worker_launch_skipped, BrowserLaunchError, BrowserWorkerLauncher, LaunchResult};
 pub use gateway::{BrowserAsrGateway, GatewayDiagnostics};
 pub use operational_fsm::{BrowserAsrOperationalFsm, BrowserOperationalPhase};

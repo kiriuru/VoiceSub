@@ -68,6 +68,8 @@ export interface TwitchTtsSettings {
   ignore_users: string[];
   /** Symbol tokens not spoken in chat TTS. Empty = read all symbols. */
   strip_symbols?: string[];
+  /** Replace `_` with a space in nicks and message text. */
+  replace_underscore_with_space?: boolean;
   strip_emotes?: boolean;
   strip_emoji?: boolean;
   strip_links?: boolean;

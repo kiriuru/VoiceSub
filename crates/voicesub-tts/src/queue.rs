@@ -175,28 +175,9 @@ fn adaptive_low_water(cap: usize) -> usize {
     (cap / 2).max(1)
 }
 
-/// Lower value = dropped first when the queue is saturated.
-fn enqueue_drop_priority(source: &str) -> u8 {
-    if source == "subtitle_source" {
-        0
-    } else if source.starts_with("subtitle_") {
-        1
-    } else {
-        2
-    }
-}
-
-fn pick_adaptive_drop_index(items: &VecDeque<SpeechQueueItem>) -> usize {
-    let mut best = 0usize;
-    let mut best_priority = enqueue_drop_priority(&items[0].source);
-    for (index, item) in items.iter().enumerate().skip(1) {
-        let priority = enqueue_drop_priority(&item.source);
-        if priority < best_priority {
-            best_priority = priority;
-            best = index;
-        }
-    }
-    best
+fn pick_adaptive_drop_index(_items: &VecDeque<SpeechQueueItem>) -> usize {
+    // Drop the oldest queued item first so backlog trimming stays fair across source and translations.
+    0
 }
 
 fn adaptive_drop_for_enqueue(
@@ -258,7 +239,7 @@ mod tests {
     }
 
     #[test]
-    fn adaptive_drop_prefers_subtitle_source_over_translation() {
+    fn adaptive_drop_removes_oldest_items_first() {
         let mut items = VecDeque::new();
         for index in 0..4 {
             items.push_back(item_with_source(
@@ -271,14 +252,14 @@ mod tests {
             items.push_back(item_with_source(
                 &format!("tl-{index}"),
                 "translation",
-                "subtitle_line1",
+                "subtitle_translation_1",
             ));
         }
         let dropped = adaptive_drop_for_enqueue(&mut items, 8);
         assert_eq!(dropped.len(), 4);
         assert!(dropped.iter().all(|item| item.id.starts_with("src-")));
         assert_eq!(items.len(), 4);
-        assert!(items.iter().all(|item| item.source.starts_with("subtitle_") && item.source != "subtitle_source"));
+        assert!(items.iter().all(|item| item.id.starts_with("tl-")));
     }
 
     #[test]

@@ -10,6 +10,10 @@ mod queue;
 mod service;
 mod subtitle_speech;
 mod trace;
+mod google_fetch;
+mod playback_policy;
+mod channel_orchestrator;
+mod speech_pipeline;
 
 pub use config::{
     normalize_playback_mode, normalize_tts_config, normalize_tts_provider, TtsConfig,
@@ -31,6 +35,11 @@ pub use ipc::{
 };
 pub use service::TtsModuleService;
 pub use subtitle_speech::{SubtitleSpeechPlanner, TtsSpeechSettings};
+pub use google_fetch::{
+    chunk_text_for_google_tts, fetch_google_tts_browser, prefetch_tts_line, GOOGLE_TTS_MAX_CHARS,
+};
+pub use speech_pipeline::TtsSpeechPipeline;
+pub use channel_orchestrator::CompletionWaiter;
 pub use voicesub_twitch::{
     SourceTextReplacementPair, SourceTextReplacementSettings,
     TwitchChatService, TwitchConnectionState, TwitchConnectionStatus, TwitchTtsSettings,

@@ -191,6 +191,7 @@ impl RuntimeOrchestrator {
         }
 
         state.subtitle.reset().await;
+        state.flush_overlay_presentations_to_clients().await;
         state.translation.lock().await.stop().await;
         state.obs_captions.stop().await;
         state.runtime_broadcaster.reset_broadcast_state();

@@ -4,6 +4,7 @@ fn main() {
             tauri_build::AppManifest::new().commands(&[
                 "voicesub_version",
                 "launch_browser_worker",
+                "get_runtime_state_snapshot",
                 "set_dashboard_layout",
                 "tts_get_config",
                 "tts_set_provider",

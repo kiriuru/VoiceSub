@@ -1,10 +1,92 @@
 # Журнал изменений VoiceSub / SST Desktop
 
-Единая история изменений desktop-линии: **VoiceSub** `0.5.1` (текущая линия), **VoiceSub** `0.5.0` (первый релиз новой линии, baseline — SST `0.4.4`) и **SST Desktop** `0.4.4` и ниже (frozen reference в `F:\AI\stream-sub-translator`).
+Единая история изменений desktop-линии: **VoiceSub** `0.5.2` (текущая линия), **VoiceSub** `0.5.1`, **VoiceSub** `0.5.0` (первый релиз новой линии, baseline — SST `0.4.4`) и **SST Desktop** `0.4.4` и ниже (frozen reference в `F:\AI\stream-sub-translator`).
 
 Этот файл — канонический changelog. Installer delta SST `0.4.1`: [DESKTOP_RELEASE_CHANGELOG_0.4.1.md](./DESKTOP_RELEASE_CHANGELOG_0.4.1.md). Старые per-version delta (`0.3.x`, `0.4.0`) удалены — история только здесь.
 
 **Формат записей (как [GitHub Release v0.2.9.2](https://github.com/kiriuru/stream_sub_translator/releases/tag/v0.2.9.2)):** одно предложение о версии; буллеты «что вошло» — только факты изменений; для desktop-exe / installer — блок «формат release» (структура поставки, без перечисления старых профилей как новинки).
+
+## 0.5.2
+
+Patch release. `PROJECT_VERSION` — **0.5.2**; `config_version` **8** (без изменений). Относительно [v0.5.1](https://github.com/kiriuru/VoiceSub/releases/tag/v0.5.1): hot path TTS speech/twitch перенесён в Rust; dashboard и TTS UI получают live state через Tauri in-process events вместо localhost WebSocket; исправлен алгоритм OBS Closed Captions (clear/timing/dedup); стабилизация Chrome worker profile/launch. HTTP/WebSocket контракты **OBS overlay** (`/overlay`) и **browser worker** (`/ws/asr_worker`) **не менялись**.
+
+### TTS — Rust speech pipeline (hot path)
+
+- **`TtsSpeechPipeline`** (`crates/voicesub-tts/src/speech_pipeline.rs`) — subtitle → plan → Google TTS fetch → enqueue → `PlaybackHub` полностью в Rust; TTS WebView **не участвует** в live озвучивании субтитров и Twitch chat.
+- **`ChannelOrchestrator`** — prefetch, pump, chunk playback, stuck watchdog, completion waiter на Rust-стороне (speech + twitch каналы).
+- **`google_fetch.rs`** — HTTP fetch/chunk Google TTS (reqwest pool + keepalive); sidecar `google_tts_fetch.exe` — fallback path.
+- **`playback_policy.rs`** — effective playback rate / queue depth для sonic backlog (порт policy из JS).
+- **Speech activity UI** — Tauri event `tts-speech-activity` + `src-tts/lib/speech-activity-log.ts` (очередь «что озвучивается» без WS polling).
+- **Sample test** в TTS UI остаётся на `SpeechEngine` (ручной preview); live speech/twitch — только Rust pipeline.
+
+### Runtime — EventBus + snapshot
+
+- **`RuntimeEventBus`** (`crates/voicesub-ws/src/event_bus.rs`) — in-process broadcast параллельно WS publisher; revision counter для reconnect.
+- **Dashboard** (`src/lib/runtime-events.ts`) — Tauri channel `runtime-event` + IPC `get_runtime_state_snapshot` вместо `ws://127.0.0.1:8765/ws/events` для live state в main shell.
+- **TTS module** (`src-tts/App.svelte`) — тот же `runtime-event` transport; **`src-tts/lib/ws.ts` удалён**.
+- **`RuntimeStateSnapshot`** — on connect: runtime, subtitle, overlay, translation, diagnostics (replay без гонки WS handshake).
+
+### OBS Closed Captions — алгоритм отправки
+
+- **501 (stream not running)** — после успешного debug mirror `SetInputSettings` планируется `clear_after_ms` (parity SST; Text Source не залипает).
+- **Stale clear** — отмена pending `DelayedClear` при новой финальной фразе (source final / superseding payload) **до** sleep worker; без преждевременного wipe между фразами.
+- **`payload_will_supersede_caption`** — bump generation только когда payload реально заменит caption; dedup и `completed_block_visible: false` **не отменяют** pending clear.
+- **Partial native** — после OBS 501 прекращаются повторные `SendStreamCaption` на partial (`source_live`), debug mirror продолжает расти.
+- **Unicode partial throttle** — `.chars().count()` вместо byte `len()` (кириллица/CJK).
+- **Тесты:** 32 сценария в `voicesub-obs` (SST parity + clear race + 501 debug clear + dedup/partial guard).
+
+### Browser worker — launch stability
+
+- **`launch_stability.rs`** — stability profile overrides для Chrome flags (anti-throttle parity SST).
+- **`profile_bloat_guard.rs`** — подготовка/очистка `--user-data-dir` worker profile.
+- **`process_affinity.rs`** — CPU affinity mask для browser worker на Windows.
+- **Chrome launch contract tests** — `crates/voicesub-browser/tests/chrome_launch_contract.rs`.
+
+### ASR worker (Web Speech)
+
+- **`overlap-logic.ts`** — уточнён lifecycle partial/final overlap; Vitest `overlap-logic.test.ts`.
+- **Session/recognition handlers** — согласованы с overlap guards (revision/segment continuity).
+
+### TTS / Twitch — исправления поверх 0.5.1
+
+- **Queue recovery** — закрытие TTS WebView mid-playback больше не оставляет Rust queues в `Speaking`; force-idle speech+twitch on close/reopen и on module mount (`channel_queue.rs`, `src-tauri/src/tts.rs`).
+- **Underscore в Twitch TTS** — `_` в default `strip_symbols`; `replace_underscore_with_space` для spoken nick и текста сообщения.
+- **GitHub updates slug** — canonical repo **`kiriuru/VoiceSub`** + migration legacy `stream_sub_translator` / `kiriuru/voicesub` в config normalize.
+
+### Dashboard / UI
+
+- **Anime UI theme preset** — локализованная метка пресета (`ui-theme-presets.ts`, i18n).
+
+### Контракты (что не менялось vs 0.5.1)
+
+| Surface | Transport | Изменение в 0.5.2 |
+| --- | --- | --- |
+| OBS overlay | `ws://…/ws/events` | **нет** |
+| Browser worker | `/ws/asr_worker` | **нет** |
+| Subtitle/translation HTTP API | Axum | **нет** |
+| Dashboard (Tauri main webview) | Tauri `runtime-event` | **да** — вместо localhost WS |
+| TTS module webview | Tauri `runtime-event` | **да** — вместо localhost WS |
+
+### Breaking / migration notes
+
+- **Нет смены `config_version`.** Пользовательские TOML/JSON из 0.5.1 совместимы.
+- **Dashboard/TTS live updates** — только внутри Tauri shell (`VoiceSub.exe`); внешний браузер на `:8765` по-прежнему может использовать WS (OBS path).
+- **TTS hot path** — JS `speechEngine`/`twitchEngine` pump для live subtitle/twitch **не используется**; UI settings/save IPC без изменений семантики.
+
+### Формат desktop release
+
+- **`VoiceSub_0.5.2_x64-setup.exe`** — Tauri 2 NSIS (`installMode: currentUser`).
+- Сборка: `build-release-msi.bat` → `build-release.ps1` → `F:\AI\VoiceSub - release\v0.5.2\`.
+
+### Тесты
+
+```powershell
+cargo test --workspace
+npm run build
+npm run test:frontend
+```
+
+- **Новое:** `src/lib/runtime-events.test.ts`, `src-tts/lib/speech-activity-log.test.ts`, `src-worker/lib/asr/overlap-logic.test.ts`, расширен `voicesub-obs` send integration suite, `voicesub-ws` event bus tests.
 
 ## 0.5.1
 
@@ -232,7 +314,7 @@ Major release. Преемник frozen SST `0.4.4`. Все пункты ниже
 
 ### Документация
 
-- `docs/TECHNICAL_ARCHITECTURE.md`, `docs/TECHNICAL_ARCHITECTURE.en.md` — VoiceSub **0.5.1** (TTS native/Sonic, Twitch pipeline, test harness).
+- `docs/TECHNICAL_ARCHITECTURE.md`, `docs/TECHNICAL_ARCHITECTURE.en.md` — VoiceSub **0.5.2** (Rust TTS pipeline, RuntimeEventBus, OBS CC send fixes).
 - `README.md`, `README.ru.md`, `docs/WIKI.en.md`, `docs/WIKI.ru.md` — актуализированы под новый стек.
 - Roadmap: `docs/plans/voicesub_roadmap.ru.md`.
 - **2026-06-10 sync:** MSI → NSIS; overlay TTL cleanup; update check (не stub); баннер обновлений; `AGENTS.md`; roadmap §12.
@@ -251,7 +333,7 @@ npm run test:frontend
 
 ## 0.4.4
 
-> **Frozen line.** SST `0.4.4` — read-only reference (`F:\AI\stream-sub-translator`). Активная разработка — VoiceSub `0.5.1`.
+> **Frozen line.** SST `0.4.4` — read-only reference (`F:\AI\stream-sub-translator`). Активная разработка — VoiceSub `0.5.2`.
 
 Patch release. `PROJECT_VERSION` в `backend/versioning.py` — **0.4.4**; `config_version` **7**. Публичные HTTP/WebSocket route contracts и subtitle/translation lifecycle **не менялись**.
 

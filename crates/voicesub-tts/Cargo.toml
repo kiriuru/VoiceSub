@@ -15,3 +15,9 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 toml = "0.8"
 tracing = { workspace = true }
+reqwest = { workspace = true }
+urlencoding = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

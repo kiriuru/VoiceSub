@@ -78,6 +78,13 @@ pub fn has_meaningful_linguistic_content(text: &str) -> bool {
         }
     }
 
+    if words
+        .iter()
+        .all(|word| crate::emoji::is_plain_decimal_token(word))
+    {
+        return true;
+    }
+
     let alpha_count = normalized.chars().filter(|ch| ch.is_alphabetic()).count();
     alpha_count >= 2
 }
@@ -989,5 +996,12 @@ mod tests {
             "Привет"
         );
         assert_eq!(strip_twitch_mentions("hi @friend there"), "hi there");
+    }
+
+    #[test]
+    fn digit_only_lines_are_meaningful() {
+        assert!(has_meaningful_linguistic_content("522"));
+        assert!(has_meaningful_linguistic_content("123"));
+        assert!(has_meaningful_linguistic_content("1 2 3"));
     }
 }

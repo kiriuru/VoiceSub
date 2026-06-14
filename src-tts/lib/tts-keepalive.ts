@@ -15,6 +15,7 @@ export type TtsKeepaliveContext = {
 
 let wakeLockSentinel: WakeLockSentinelLike | null = null;
 let wakeLockRetryTimer: ReturnType<typeof setTimeout> | null = null;
+let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 let started = false;
 let lastContext: TtsKeepaliveContext = {
   runtimeActive: false,
@@ -36,6 +37,13 @@ function contextsEqual(a: TtsKeepaliveContext, b: TtsKeepaliveContext): boolean 
     a.ttsEnabled === b.ttsEnabled &&
     a.enginesBusy === b.enginesBusy
   );
+}
+
+function clearHeartbeatTimer(): void {
+  if (heartbeatTimer) {
+    clearInterval(heartbeatTimer);
+    heartbeatTimer = null;
+  }
 }
 
 function clearWakeLockRetryTimer(): void {
@@ -126,16 +134,28 @@ export function startTtsKeepalive(): void {
   if (started || typeof window === "undefined") return;
   started = true;
   document.addEventListener("visibilitychange", onVisibilityChange);
+  startHeartbeatTimer();
   ttsTrace("keepalive", "started", {
     wake_lock_supported: hasWakeLockSupport(),
     visibility_state: document.visibilityState,
   });
 }
 
+function startHeartbeatTimer(): void {
+  clearHeartbeatTimer();
+  heartbeatTimer = setInterval(() => {
+    if (!lastContext.ttsEnabled) {
+      return;
+    }
+    notifyRust(lastContext);
+  }, 20_000);
+}
+
 export function stopTtsKeepalive(): void {
   if (!started || typeof window === "undefined") return;
   started = false;
   document.removeEventListener("visibilitychange", onVisibilityChange);
+  clearHeartbeatTimer();
   lastContext = {
     runtimeActive: false,
     ttsEnabled: false,

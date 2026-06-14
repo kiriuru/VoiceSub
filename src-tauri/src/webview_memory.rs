@@ -1,6 +1,7 @@
 //! Apply WebView2 memory / suspend policy to Tauri windows (Windows only).
 
 use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 use tauri::{AppHandle, Manager, WebviewWindow};
 use tracing::debug;
@@ -22,7 +23,12 @@ pub struct WebviewMemoryManager {
     runtime_active: bool,
     tts_enabled: bool,
     engines_busy: bool,
+    /// User closed the TTS window via the title-bar close button; suppress auto-reopen.
+    user_dismissed_tts_window: bool,
+    last_tts_heartbeat: Option<Instant>,
 }
+
+const TTS_HEARTBEAT_STALE: Duration = Duration::from_secs(90);
 
 impl WebviewMemoryManager {
     pub fn set_main_focused(&mut self, focused: bool) {
@@ -37,6 +43,19 @@ impl WebviewMemoryManager {
         self.tts.visible = visible;
     }
 
+    pub fn set_tts_enabled(&mut self, enabled: bool) {
+        self.tts_enabled = enabled;
+        self.last_tts_heartbeat = Some(Instant::now());
+    }
+
+    pub fn set_user_dismissed_tts_window(&mut self, dismissed: bool) {
+        self.user_dismissed_tts_window = dismissed;
+    }
+
+    pub fn user_dismissed_tts_window(&self) -> bool {
+        self.user_dismissed_tts_window
+    }
+
     pub fn set_tts_activity(
         &mut self,
         runtime_active: bool,
@@ -46,6 +65,18 @@ impl WebviewMemoryManager {
         self.runtime_active = runtime_active;
         self.tts_enabled = tts_enabled;
         self.engines_busy = engines_busy;
+        self.last_tts_heartbeat = Some(Instant::now());
+    }
+
+    pub fn tts_heartbeat_stale(&self) -> bool {
+        let Some(last) = self.last_tts_heartbeat else {
+            return true;
+        };
+        last.elapsed() > TTS_HEARTBEAT_STALE
+    }
+
+    pub fn tts_should_be_active(&self) -> bool {
+        self.tts_enabled && self.runtime_active
     }
 
     fn activity(&self, role: WebviewRole) -> WebviewActivity {
@@ -100,6 +131,21 @@ pub fn refresh_from_state(app: &AppHandle, state: &SharedWebviewMemoryManager) {
     refresh_webview_power(app, &guard);
 }
 
+/// Update only the main dashboard WebView — skip TTS during close/destroy callbacks.
+pub fn refresh_main_shell_only(app: &AppHandle, state: &SharedWebviewMemoryManager) {
+    let Ok(guard) = state.lock() else {
+        return;
+    };
+    if let Some(main) = app.get_webview_window("main") {
+        let action = resolve_power_action(
+            WebviewRole::MainShell,
+            guard.activity(WebviewRole::MainShell),
+        );
+        debug!(window = "main", ?action, "apply webview power");
+        apply_to_window(&main, WebviewRole::MainShell, action);
+    }
+}
+
 pub fn sync_tts_window_visibility(app: &AppHandle, state: &SharedWebviewMemoryManager) {
     let Some(tts) = app.get_webview_window(TTS_WINDOW_LABEL) else {
         return;
@@ -123,6 +169,12 @@ mod tests {
         manager.tts.visible = false;
         manager.tts.focused = false;
         let action = resolve_power_action(WebviewRole::TtsModule, manager.activity(WebviewRole::TtsModule));
-        assert_eq!(action, WebviewPowerAction::LowMemory);
+        assert_eq!(action, WebviewPowerAction::Normal);
+    }
+
+    #[test]
+    fn user_dismissed_tts_window_defaults_false() {
+        let manager = WebviewMemoryManager::default();
+        assert!(!manager.user_dismissed_tts_window());
     }
 }

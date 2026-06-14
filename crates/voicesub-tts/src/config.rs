@@ -6,7 +6,7 @@ use thiserror::Error;
 use tracing::{debug, info, warn};
 
 use crate::subtitle_speech::TtsSpeechSettings;
-use voicesub_twitch::TwitchTtsSettings;
+use voicesub_twitch::{normalize_twitch_settings, TwitchTtsSettings};
 
 #[derive(Debug, Error)]
 pub enum TtsConfigError {
@@ -94,6 +94,7 @@ pub fn normalize_tts_config(config: &mut TtsConfig) {
             config.twitch.speech_rate = 0.0;
         }
     }
+    normalize_twitch_settings(&mut config.twitch);
 }
 
 fn default_rate() -> f32 {

@@ -6,6 +6,8 @@ use tracing::{info, instrument, warn};
 
 use crate::chrome_flags::BrowserChromeLaunchConfig;
 use crate::ecoqos::opt_out_chrome_power_throttling;
+use crate::process_affinity::apply_browser_worker_affinity;
+use crate::profile_bloat_guard::prepare_worker_profile_dir;
 
 /// When true, [`BrowserWorkerLauncher::launch_worker`] returns a stub result without spawning Chrome.
 ///
@@ -92,7 +94,7 @@ impl BrowserWorkerLauncher {
             );
             let chrome_path = find_chrome_executable().unwrap_or_else(|| PathBuf::from("chrome.exe"));
             let profile_dir = self.profile_dir(worker_url, &chrome_path);
-            let _ = std::fs::create_dir_all(&profile_dir);
+            prepare_worker_profile_dir(&profile_dir).map_err(BrowserLaunchError::ProfileDir)?;
             return Ok(LaunchResult {
                 chrome_path,
                 profile_dir,
@@ -103,7 +105,7 @@ impl BrowserWorkerLauncher {
 
         let chrome_path = find_chrome_executable().ok_or(BrowserLaunchError::ChromeNotFound)?;
         let profile_dir = self.profile_dir(worker_url, &chrome_path);
-        std::fs::create_dir_all(&profile_dir).map_err(BrowserLaunchError::ProfileDir)?;
+        prepare_worker_profile_dir(&profile_dir).map_err(BrowserLaunchError::ProfileDir)?;
 
         let chrome_args = chrome_launch.launch_args_for_url(&profile_dir, worker_url);
         let mut args = vec![chrome_path.display().to_string()];
@@ -113,12 +115,14 @@ impl BrowserWorkerLauncher {
         let pid = child.id();
 
         opt_out_chrome_power_throttling(pid);
+        apply_browser_worker_affinity(pid);
 
         info!(
             chrome = %chrome_path.display(),
             profile = %profile_dir.display(),
             pid,
             high_priority = chrome_launch.use_high_priority,
+            disable_gpu = chrome_launch.extra_args.iter().any(|arg| arg == "--disable-gpu"),
             "browser worker launched"
         );
 

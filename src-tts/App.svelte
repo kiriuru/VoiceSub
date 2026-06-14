@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
-  import { EventsSocket } from "./lib/ws";
+  import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { fetchRuntimeStatus, isRuntimeActive } from "./lib/runtime";
   import { createAudioPlayer, isNativePlaybackMode } from "./lib/audio-player";
   import { SpeechEngine } from "./lib/speech-engine";
@@ -9,7 +9,6 @@
     fetchAudioRoutingMode,
     loadTtsConfig,
     listRustOutputDevices,
-    planSubtitleSpeech,
     recoverStuckSpeechQueues,
     resetSubtitlePlanner,
     fetchPythonTtsStatus,
@@ -24,7 +23,10 @@
     type TtsAudioRoutingMode,
   } from "./lib/tts-ipc";
   import type { AudioOutputDevice } from "./lib/types";
-  import { prependActivityLog } from "./lib/activity-log";
+  import {
+    prependSpeechActivity,
+    type SpeechActivityEntry,
+  } from "./lib/speech-activity-log";
   import {
     findWatchedProcess,
     formatCompactBytes,
@@ -35,7 +37,7 @@
   import { formatSpeechVolume } from "./lib/playback-format";
   import { warmupTtsFetch } from "./lib/google-tts";
   import { startTtsKeepalive, stopTtsKeepalive, updateTtsKeepalive } from "./lib/tts-keepalive";
-  import { ttsTrace, ttsTraceText, setTtsFullLoggingEnabled } from "./lib/tts-trace";
+  import { ttsTrace, setTtsFullLoggingEnabled } from "./lib/tts-trace";
   import { buildTtsAudioUrl } from "./lib/google-tts";
   import {
     loadSampleLang,
@@ -65,6 +67,8 @@
     UI_CONFIG_WS_EVENT,
     uiConfigFromWsPayload,
   } from "../src/lib/ui-config-sync";
+  import { startRuntimeEventChannelWithHandler } from "../src/lib/runtime-events";
+  import type { WsMessage } from "../src/lib/types";
   import { normalizeConfigPayload } from "../src/lib/config-normalize";
   import { setLocale, t, locale, getLocale } from "../src/lib/i18n";
   import type { LocaleCode } from "../src/lib/types";
@@ -77,7 +81,8 @@
     TtsSpeechSettings,
     TtsTab,
     TwitchChatMessage,
-    WsConnectionStatus,
+    TwitchConnectionStatus,
+    SpeechQueueItem,
   } from "./lib/types";
 
   const defaultSpeech = (): TtsSpeechSettings => ({
@@ -115,8 +120,8 @@
   });
   let status = $state("");
   let error = $state("");
-  let activity = $state<string[]>([]);
-  let wsStatus = $state<WsConnectionStatus>("disconnected");
+  let activity = $state<SpeechActivityEntry[]>([]);
+  let eventsStatus = $state<"connected" | "disconnected">("disconnected");
   let runtime = $state<RuntimeStatus | null>(null);
   let pythonStatus = $state<PythonTtsStatus | null>(null);
   let resourceTelemetry = $state<ResourceTelemetry | null>(null);
@@ -134,34 +139,26 @@
     twitch: defaultTwitchSettings(),
   });
 
-  let speechEngine = new SpeechEngine(
+  let sampleEngine = new SpeechEngine(
     "speech",
     createAudioPlayer("speech", initialEngineConfig().playback_mode),
     initialEngineConfig(),
   );
-  let twitchEngine = new SpeechEngine(
-    "twitch",
-    createAudioPlayer("twitch", initialEngineConfig().playback_mode),
-    initialEngineConfig(),
-  );
 
-  function syncEnginesFromConfig(cfg: TtsConfig) {
+  function syncSampleEngineFromConfig(cfg: TtsConfig) {
     const mode = cfg.playback_mode ?? "native";
-    speechEngine.setPlayer(createAudioPlayer("speech", mode));
-    twitchEngine.setPlayer(createAudioPlayer("twitch", mode));
-    speechEngine.setConfig(cfg);
-    twitchEngine.setConfig(cfg);
-    speechEngine.setEnabled(cfg.enabled);
-    twitchEngine.setEnabled(cfg.enabled);
+    sampleEngine.setPlayer(createAudioPlayer("speech", mode));
+    sampleEngine.setConfig(cfg);
+    sampleEngine.setEnabled(cfg.enabled);
     refreshKeepaliveContext();
   }
 
-  function clearAllEngines() {
-    speechEngine.clear();
-    twitchEngine.clear();
+  function clearSampleEngine() {
+    sampleEngine.clear();
   }
 
-  let socket: EventsSocket | null = null;
+  let runtimeEventsUnlisten: (() => void) | null = null;
+  let speechActivityUnlisten: UnlistenFn | null = null;
   let runtimeTimer: ReturnType<typeof setInterval> | null = null;
   let resourceTelemetryTimer: ReturnType<typeof setInterval> | null = null;
   let settingsTimer: ReturnType<typeof setTimeout> | null = null;
@@ -170,7 +167,6 @@
   let unsubscribeUiLocale: (() => void) | null = null;
   let runtimeWasActive = false;
   let twitchPanel = $state<TwitchPanel | undefined>(undefined);
-  let subtitlePayloadTask: Promise<void> = Promise.resolve();
 
   const activeTranslationLines = $derived(getActiveTranslationLines(appSpeech));
   const obsResourceTelemetry = $derived(findWatchedProcess(resourceTelemetry, "obs64.exe"));
@@ -227,20 +223,37 @@
     updateTtsKeepalive({
       runtimeActive: isRuntimeActive(runtime),
       ttsEnabled: config.enabled,
-      enginesBusy: speechEngine.isBusy() || twitchEngine.isBusy(),
+      enginesBusy: sampleEngine.isBusy(),
     });
+  }
+
+  function recordSpeechActivity(items: SpeechQueueItem[]) {
+    if (!items.length) return;
+    activity = prependSpeechActivity(activity, items);
+  }
+
+  function speechActivityKindLabel(entry: SpeechActivityEntry): string {
+    if (entry.kind === "source") {
+      return tr("tts.speech.activity_source");
+    }
+    if (entry.kind === "translation") {
+      return translationLineTitle(entry.slotId || "");
+    }
+    return tr("tts.speech.activity_test");
   }
 
   function handleSpeechEngineEvent(
     event: import("./lib/speech-engine").SpeechEngineEvent,
   ) {
     if (event.type === "started") {
-      const providerLabel =
-        event.provider === "python_stdlib" ? "python" : "browser";
-      activity = prependActivityLog(
-        activity,
-        `[${event.lang}] ${providerLabel}: ${event.text}`,
-      );
+      recordSpeechActivity([
+        {
+          id: event.id,
+          text: event.text,
+          lang: event.lang,
+          source: "test",
+        },
+      ]);
       status = tr("tts.status.speaking", { lang: event.lang });
     } else if (event.type === "ended") {
       status = config.enabled ? tr("tts.status.listening") : tr("tts.status.disabled");
@@ -251,26 +264,56 @@
     refreshKeepaliveContext();
   }
 
-  function handleTwitchEngineEvent(
-    event: import("./lib/speech-engine").SpeechEngineEvent,
-  ) {
-    if (event.type === "started") {
-      activity = prependActivityLog(
-        activity,
-        `[twitch:${event.lang}] ${event.text}`,
-      );
-      status = tr("tts.status.speaking_twitch", { lang: event.lang });
-    } else if (event.type === "ended") {
-      status = config.enabled ? tr("tts.status.listening") : tr("tts.status.disabled");
-    } else if (event.type === "error") {
-      error = event.message;
-      status = tr("tts.status.error");
+  const unsubscribeSample = sampleEngine.on(handleSpeechEngineEvent);
+
+  function applyRuntimeEventPayload(payload: RuntimeStatus) {
+    const wasActive = runtimeWasActive;
+    runtime = { ...(runtime || {}), ...payload };
+    const isActive = isRuntimeActive(runtime);
+    if (wasActive && !isActive) {
+      ttsTrace("runtime", "stopped_event", {});
+      clearSampleEngine();
+      activity = [];
+      if (config.enabled) status = tr("tts.status.listening");
     }
+    runtimeWasActive = isActive;
     refreshKeepaliveContext();
   }
 
-  const unsubscribeSpeech = speechEngine.on(handleSpeechEngineEvent);
-  const unsubscribeTwitch = twitchEngine.on(handleTwitchEngineEvent);
+  function handleRuntimeEvent(message: WsMessage) {
+    const payload = (message.payload || {}) as Record<string, unknown>;
+    if (message.type === "twitch_chat_message") {
+      twitchPanel?.recordChatMessage(payload as unknown as TwitchChatMessage);
+      return;
+    }
+    if (message.type === "twitch_connection_update") {
+      twitchPanel?.handleConnectionUpdate(payload as unknown as TwitchConnectionStatus);
+      return;
+    }
+    if (message.type === UI_CONFIG_WS_EVENT) {
+      const partial = uiConfigFromWsPayload(payload);
+      if (partial) {
+        applyDashboardUiSync(partial);
+      }
+      return;
+    }
+    if (message.type === "runtime_update" || message.type === "runtime_status") {
+      applyRuntimeEventPayload(payload as RuntimeStatus);
+    }
+  }
+
+  async function connectRuntimeEvents() {
+    runtimeEventsUnlisten?.();
+    runtimeEventsUnlisten = null;
+    eventsStatus = "disconnected";
+    const unlisten = await startRuntimeEventChannelWithHandler(handleRuntimeEvent, () => {
+      eventsStatus = "connected";
+    });
+    runtimeEventsUnlisten = unlisten;
+    if (!unlisten) {
+      eventsStatus = "disconnected";
+    }
+  }
 
   function applySpeechContext(nextSpeech: AppSpeechContext) {
     appSpeech = nextSpeech;
@@ -282,7 +325,7 @@
         JSON.stringify(config.speech.translation_slots || [])
     ) {
       config = { ...config, speech: reconciled };
-      syncEnginesFromConfig(config);
+      syncSampleEngineFromConfig(config);
       queueSpeechSettingsSave();
     }
     ttsTrace("speech", "context_updated", {
@@ -433,127 +476,12 @@
     const isActive = isRuntimeActive(runtime);
     if (wasActive && !isActive) {
       ttsTrace("runtime", "stopped", {});
-      clearAllEngines();
-      await resetSubtitlePlanner().catch(() => {});
+      clearSampleEngine();
       activity = [];
       if (config.enabled) status = tr("tts.status.listening");
     }
     runtimeWasActive = isActive;
     refreshKeepaliveContext();
-  }
-
-  async function handleSubtitlePayload(payload: Record<string, unknown>) {
-    if (!config.enabled || !isRuntimeActive(runtime)) {
-      ttsTrace("speech", "skip", {
-        enabled: config.enabled,
-        runtime_active: isRuntimeActive(runtime),
-        sequence: payload.sequence ?? null,
-      });
-      return;
-    }
-    try {
-      const planned = await planSubtitleSpeech(payload);
-      ttsTrace("speech", "planned", {
-        sequence: payload.sequence ?? null,
-        count: planned.length,
-      });
-      for (const item of planned) {
-        speechEngine.enqueue(item.id, item.text, item.lang || "en");
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      ttsTrace("speech", "plan_error", { message });
-      error = message;
-    }
-  }
-
-  function handleTwitchChatMessage(message: TwitchChatMessage) {
-    twitchPanel?.recordChatMessage(message);
-    if (
-      !config.enabled ||
-      !config.twitch?.enabled ||
-      message.speakable === false
-    ) {
-      ttsTrace("twitch", "chat_skip_speak", {
-        module_enabled: config.enabled,
-        twitch_enabled: config.twitch?.enabled ?? false,
-        speakable: message.speakable ?? true,
-        id: message.id,
-      });
-      return;
-    }
-    handleTwitchSpeak(message);
-  }
-
-  function handleTwitchSpeak(message: TwitchChatMessage) {
-    if (!config.enabled || message.speakable === false) {
-      ttsTrace("twitch", "speak_skip", {
-        enabled: config.enabled,
-        speakable: message.speakable ?? true,
-        id: message.id,
-      });
-      return;
-    }
-    ttsTraceText("twitch", "speak_enqueue", message.speak_text, {
-      id: message.id,
-      lang: message.language,
-      user: message.user,
-    });
-    twitchEngine.enqueue(`twitch-${message.id}`, message.speak_text, message.language || "en");
-  }
-
-  function scheduleSubtitlePayload(payload: Record<string, unknown>) {
-    subtitlePayloadTask = subtitlePayloadTask
-      .then(() => handleSubtitlePayload(payload))
-      .catch((err) => {
-        const message = err instanceof Error ? err.message : String(err);
-        ttsTrace("speech", "plan_chain_error", { message });
-      });
-  }
-
-  function connectWs() {
-    socket?.disconnect();
-    socket = new EventsSocket(
-      async (message) => {
-        if (message.type === "subtitle_payload_update") {
-          const payload = (message.payload || {}) as Record<string, unknown>;
-          scheduleSubtitlePayload(payload);
-        }
-        if (message.type === "twitch_chat_message") {
-          handleTwitchChatMessage(
-            (message.payload || {}) as TwitchChatMessage,
-          );
-        }
-        if (message.type === "twitch_connection_update") {
-          twitchPanel?.handleConnectionUpdate(
-            (message.payload || {}) as import("./lib/types").TwitchConnectionStatus,
-          );
-        }
-        if (message.type === UI_CONFIG_WS_EVENT) {
-          const partial = uiConfigFromWsPayload(message.payload);
-          if (partial) {
-            applyDashboardUiSync(partial);
-          }
-        }
-        if (message.type === "runtime_update" || message.type === "runtime_status") {
-          const wasActive = runtimeWasActive;
-          runtime = { ...(runtime || {}), ...(message.payload as RuntimeStatus) };
-          const isActive = isRuntimeActive(runtime);
-          if (wasActive && !isActive) {
-            ttsTrace("runtime", "stopped_ws", {});
-            clearAllEngines();
-            void resetSubtitlePlanner();
-            activity = [];
-          }
-          runtimeWasActive = isActive;
-          refreshKeepaliveContext();
-        }
-      },
-      (next) => {
-        wsStatus = next;
-      },
-    );
-    socket.connect();
   }
 
   onMount(async () => {
@@ -616,7 +544,7 @@
           ttsTrace("audio", "bind_window_failed", { message });
         }
       }
-      syncEnginesFromConfig(config);
+      syncSampleEngineFromConfig(config);
       refreshNativeDeviceHint(config);
       if (!config.tts_provider) {
         config.tts_provider = "browser_google";
@@ -626,7 +554,17 @@
       await refreshRuntime();
       await refreshResourceTelemetry();
       runtimeWasActive = isRuntimeActive(runtime);
-      connectWs();
+      await connectRuntimeEvents();
+      try {
+        speechActivityUnlisten = await listen<SpeechQueueItem[]>(
+          "tts-speech-activity",
+          (event) => {
+            recordSpeechActivity(event.payload ?? []);
+          },
+        );
+      } catch {
+        speechActivityUnlisten = null;
+      }
       runtimeTimer = setInterval(() => void refreshRuntime(), 3000);
       refreshKeepaliveContext();
       resourceTelemetryTimer = setInterval(() => void refreshResourceTelemetry(), 30_000);
@@ -659,16 +597,15 @@
   onDestroy(() => {
     ttsTrace("app", "destroy", {});
     stopTtsKeepalive();
-    speechEngine.dispose();
-    twitchEngine.dispose();
-    unsubscribeSpeech();
-    unsubscribeTwitch();
+    sampleEngine.dispose();
+    unsubscribeSample();
     unsubscribeUiSync?.();
     unsubscribeUiLocale?.();
     window.removeEventListener("sst:locale-changed", handleLocaleChanged);
     window.removeEventListener("focus", handleWindowFocus);
-    clearAllEngines();
-    socket?.disconnect();
+    clearSampleEngine();
+    runtimeEventsUnlisten?.();
+    speechActivityUnlisten?.();
     if (runtimeTimer) clearInterval(runtimeTimer);
     if (resourceTelemetryTimer) clearInterval(resourceTelemetryTimer);
     if (speechContextTimer) clearInterval(speechContextTimer);
@@ -681,7 +618,7 @@
     const device = audioOutputs.find((entry) => entry.id === deviceId);
     try {
       config = await setTtsAudioDevice(deviceId, device?.label || "");
-      syncEnginesFromConfig(config);
+      syncSampleEngineFromConfig(config);
       refreshNativeDeviceHint(config);
       status = tr("tts.status.audio_updated");
       error = "";
@@ -699,7 +636,7 @@
     ttsTrace("settings", "enabled_change", { enabled: target.checked });
     try {
       config = await setTtsEnabled(target.checked);
-      syncEnginesFromConfig(config);
+      syncSampleEngineFromConfig(config);
       status = config.enabled ? tr("tts.status.listening") : tr("tts.status.disabled");
       error = "";
     } catch (err) {
@@ -717,7 +654,7 @@
   async function persistSpeechSettings() {
     try {
       config = await updateSpeechSettings(config.speech);
-      syncEnginesFromConfig(config);
+      syncSampleEngineFromConfig(config);
       error = "";
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);
@@ -730,7 +667,7 @@
     ttsTrace("settings", "provider_change", { provider });
     try {
       config = await setTtsProvider(provider);
-      syncEnginesFromConfig(config);
+      syncSampleEngineFromConfig(config);
       await refreshPythonStatus();
       error = "";
       if (provider === "python_stdlib" && pythonStatus && !pythonStatus.available) {
@@ -744,7 +681,7 @@
   async function persistVoiceSettings() {
     try {
       config = await updateVoiceSettings(config.speech_rate, config.speech_volume);
-      syncEnginesFromConfig(config);
+      syncSampleEngineFromConfig(config);
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);
     }
@@ -755,7 +692,7 @@
     const mode = target.value === "sonic" ? "sonic" : "native";
     try {
       config = await setTtsPlaybackMode(mode);
-      syncEnginesFromConfig(config);
+      syncSampleEngineFromConfig(config);
       refreshNativeDeviceHint(config);
       await refreshAudioOutputs();
       status = tr("tts.status.playback_mode_updated");
@@ -798,12 +735,12 @@
       provider,
       request_url: lastTestRequest,
     });
-    speechEngine.enqueue(`local-${Date.now()}`, sampleText, lang);
+    sampleEngine.enqueue(`local-${Date.now()}`, sampleText, lang);
   }
 
   async function clearQueue() {
     ttsTrace("speech", "clear_queue", {});
-    clearAllEngines();
+    clearSampleEngine();
     activity = [];
     await resetSubtitlePlanner().catch(() => {});
     status = config.enabled ? tr("tts.status.listening") : tr("tts.status.disabled");
@@ -970,7 +907,7 @@
       </div>
 
       <div class="tts-status-badges">
-        <span class="badge" class:active={wsStatus === "connected"}>{tr("tts.badge.ws")}: {wsStatus}</span>
+        <span class="badge" class:active={eventsStatus === "connected"}>{tr("tts.badge.events")}: {eventsStatus}</span>
         <span class="badge" class:active={isRuntimeActive(runtime)}>
           {tr("tts.badge.runtime")}: {isRuntimeActive(runtime) ? tr("tts.badge.runtime_active") : tr("tts.badge.runtime_idle")}
         </span>
@@ -1162,8 +1099,11 @@
 
       {#if activity.length}
         <ul class="transcript-box tts-activity-log">
-          {#each activity as line}
-            <li>{line}</li>
+          {#each activity as line (line.id)}
+            <li>
+              <strong>[{line.lang}] {speechActivityKindLabel(line)}</strong>
+              : {line.text}
+            </li>
           {/each}
         </ul>
       {:else}
@@ -1182,7 +1122,7 @@
       audioOutputs={audioOutputs}
       onTwitchConfigSaved={(next) => {
         config = { ...config, twitch: next };
-        syncEnginesFromConfig(config);
+        syncSampleEngineFromConfig(config);
         refreshNativeDeviceHint(config);
       }}
     />

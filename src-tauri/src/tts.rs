@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 
 use serde_json::Value;
 
@@ -13,7 +14,7 @@ use voicesub_audio::{PlaybackHub, CHANNEL_SPEECH, CHANNEL_TWITCH};
 use voicesub_tts::{
     bind_window_process, build_tts_module_url, speech_queue_item_id, tts_webview_data_dir,
     validate_twitch_oauth_url, ChannelEnqueueResult, SpeechQueueItem, TtsConfig, TtsModuleService,
-    TtsSpeechSettings, TTS_WINDOW_LABEL,
+    TtsSpeechPipeline, TtsSpeechSettings, TTS_WINDOW_LABEL,
 };
 use voicesub_twitch::TwitchConnectionStatus;
 
@@ -30,6 +31,114 @@ pub fn recover_tts_after_window_closed(state: &TtsState) {
     state.service.queue_force_idle_all();
 }
 
+fn tts_module_should_stay_open(service: &TtsModuleService) -> bool {
+    service
+        .load_config()
+        .map(|cfg| cfg.enabled)
+        .unwrap_or(false)
+}
+
+/// Re-open the TTS module window after an unexpected close while the module stays enabled.
+pub fn schedule_tts_window_reopen(app: AppHandle, state: &TtsState) {
+    if !tts_module_should_stay_open(&state.service) {
+        return;
+    }
+    if app.get_webview_window(TTS_WINDOW_LABEL).is_some() {
+        return;
+    }
+    info!(
+        target: "voicesub.tts.ipc",
+        "scheduling tts module window reopen after unexpected close"
+    );
+    let state = TtsState {
+        service: state.service.clone(),
+        bind_addr: state.bind_addr,
+        playback: state.playback.clone(),
+        pipeline: state.pipeline.clone(),
+    };
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        if app.get_webview_window(TTS_WINDOW_LABEL).is_some() {
+            return;
+        }
+        if !tts_module_should_stay_open(&state.service) {
+            return;
+        }
+        let memory = app.state::<SharedWebviewMemoryManager>();
+        if let Err(err) = open_tts_window(app.clone(), state, memory.inner()).await {
+            warn!(
+                target: "voicesub.tts.ipc",
+                error = %err,
+                "tts module window reopen failed"
+            );
+        }
+    });
+}
+
+const TTS_HEALTH_POLL_SECS: u64 = 45;
+
+/// Rust-side watchdog: reopen or recycle the TTS WebView when the module is enabled but the
+/// frontend heartbeat goes stale (WS/renderer wedged while the shell process stays alive).
+pub fn start_tts_health_watchdog(app: AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        let mut ticker = tokio::time::interval(Duration::from_secs(TTS_HEALTH_POLL_SECS));
+        ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        loop {
+            ticker.tick().await;
+            let memory = app.state::<SharedWebviewMemoryManager>();
+            let should_watch = memory
+                .lock()
+                .map(|guard| guard.tts_should_be_active())
+                .unwrap_or(false);
+            if !should_watch {
+                continue;
+            }
+            if !tts_module_should_stay_open(&app.state::<TtsState>().service) {
+                continue;
+            }
+
+            let window_missing = app.get_webview_window(TTS_WINDOW_LABEL).is_none();
+            let heartbeat_stale = memory
+                .lock()
+                .map(|guard| guard.tts_heartbeat_stale())
+                .unwrap_or(true);
+
+            if window_missing {
+                let user_dismissed = memory
+                    .lock()
+                    .map(|guard| guard.user_dismissed_tts_window())
+                    .unwrap_or(false);
+                if user_dismissed {
+                    continue;
+                }
+                let state = app.state::<TtsState>().inner().clone();
+                schedule_tts_window_reopen(app.clone(), &state);
+                continue;
+            }
+
+            if !heartbeat_stale {
+                continue;
+            }
+
+            warn!(
+                target: "voicesub.tts.ipc",
+                "tts webview heartbeat stale; recycling module window"
+            );
+            let state = app.state::<TtsState>().inner().clone();
+            recover_tts_after_window_closed(&state);
+            if let Some(window) = app.get_webview_window(TTS_WINDOW_LABEL) {
+                let _ = window.close();
+            }
+            if let Ok(mut guard) = memory.lock() {
+                guard.set_tts_visible(false);
+                guard.set_tts_focused(false);
+            }
+            webview_memory::refresh_main_shell_only(&app, memory.inner());
+            schedule_tts_window_reopen(app.clone(), &state);
+        }
+    });
+}
+
 /// Close the module window when the desktop shell shuts down (same lifecycle as browser worker).
 pub fn close_tts_window(app: &AppHandle) {
     let Some(window) = app.get_webview_window(TTS_WINDOW_LABEL) else {
@@ -42,10 +151,12 @@ pub fn close_tts_window(app: &AppHandle) {
     let _ = window.destroy();
 }
 
+#[derive(Clone)]
 pub struct TtsState {
     pub service: Arc<TtsModuleService>,
     pub bind_addr: std::net::SocketAddr,
     pub playback: Arc<PlaybackHub>,
+    pub pipeline: Arc<TtsSpeechPipeline>,
 }
 
 pub fn sync_playback_devices(state: &TtsState) {
@@ -60,6 +171,7 @@ pub fn sync_playback_devices(state: &TtsState) {
     let _ = state
         .playback
         .set_device_label(CHANNEL_TWITCH, twitch_label);
+    state.pipeline.sync_enabled_from_config();
 }
 
 
@@ -87,18 +199,24 @@ pub fn tts_set_provider(state: State<'_, TtsState>, provider: String) -> Result<
 }
 
 #[tauri::command]
-pub fn tts_set_enabled(state: State<'_, TtsState>, enabled: bool) -> Result<TtsConfig, String> {
-
+pub fn tts_set_enabled(
+    app: AppHandle,
+    state: State<'_, TtsState>,
+    memory: State<'_, SharedWebviewMemoryManager>,
+    enabled: bool,
+) -> Result<TtsConfig, String> {
     info!(target: "voicesub.tts.ipc", enabled, "tts_set_enabled");
 
-    state
-
+    let config = state
         .service
-
         .set_enabled(enabled)
-
-        .map_err(|e| e.to_string())
-
+        .map_err(|e| e.to_string())?;
+    state.pipeline.sync_enabled_from_config();
+    if let Ok(mut guard) = memory.lock() {
+        guard.set_tts_enabled(enabled);
+    }
+    webview_memory::refresh_from_state(&app, memory.inner());
+    Ok(config)
 }
 
 
@@ -582,6 +700,8 @@ pub fn tts_report_webview_activity(
     );
     if let Ok(mut guard) = memory.lock() {
         guard.set_tts_activity(runtime_active, tts_enabled, engines_busy);
+    } else {
+        return Ok(());
     }
     webview_memory::sync_tts_window_visibility(&app, memory.inner());
     webview_memory::refresh_from_state(&app, memory.inner());
@@ -603,9 +723,15 @@ pub async fn tts_open_window(
     state: State<'_, TtsState>,
     memory: State<'_, SharedWebviewMemoryManager>,
 ) -> Result<(), String> {
+    open_tts_window(app, state.inner().clone(), memory.inner()).await
+}
 
+async fn open_tts_window(
+    app: AppHandle,
+    state: TtsState,
+    memory: &SharedWebviewMemoryManager,
+) -> Result<(), String> {
     if let Some(window) = app.get_webview_window(TTS_WINDOW_LABEL) {
-
         info!(target: "voicesub.tts.ipc", "tts window focus existing");
 
         let _ = window.show();
@@ -617,16 +743,14 @@ pub async fn tts_open_window(
         }
 
         if let Ok(mut guard) = memory.lock() {
+            guard.set_user_dismissed_tts_window(false);
             guard.set_tts_visible(true);
             guard.set_tts_focused(true);
         }
-        webview_memory::refresh_from_state(&app, memory.inner());
+        webview_memory::refresh_from_state(&app, memory);
 
         return Ok(());
-
     }
-
-
 
     recover_tts_after_window_closed(&state);
 
@@ -666,15 +790,15 @@ pub async fn tts_open_window(
     }
 
     if let Ok(mut guard) = memory.lock() {
+        guard.set_user_dismissed_tts_window(false);
         guard.set_tts_visible(true);
         guard.set_tts_focused(true);
     }
-    webview_memory::refresh_from_state(&app, memory.inner());
+    webview_memory::refresh_from_state(&app, memory);
 
     info!(target: "voicesub.tts.ipc", "tts module window opened");
 
     Ok(())
-
 }
 
 

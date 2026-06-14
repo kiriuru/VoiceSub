@@ -27,6 +27,9 @@ export const browserLifecycleDefaults: BrowserLifecycleConfig = Object.freeze({
   forceFinalOnInterruption: true,
   forceFinalMinChars: 3,
   forceFinalMinStableMs: 700,
+  overlapPrestartAfterMs: 8000,
+  overlapBuddyGhostTimeoutMs: 6000,
+  overlapBuddyGhostActiveMicMs: 3000,
 });
 
 export interface ResolvedWorkerSettings {

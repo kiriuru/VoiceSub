@@ -3,6 +3,7 @@ use serde_json::{json, Value};
 use std::sync::{mpsc, OnceLock};
 
 use crate::event_sequence::SharedEventSequencer;
+use crate::event_bus::RuntimeEventBus;
 use crate::events::EventsHub;
 
 /// Wraps [`EventsHub`] with SST-compatible payload enrichment.
@@ -10,11 +11,28 @@ use crate::events::EventsHub;
 pub struct WsEventPublisher {
     hub: EventsHub,
     sequencer: SharedEventSequencer,
+    event_bus: Option<RuntimeEventBus>,
 }
 
 impl WsEventPublisher {
     pub fn new(hub: EventsHub, sequencer: SharedEventSequencer) -> Self {
-        Self { hub, sequencer }
+        Self::with_event_bus(hub, sequencer, None)
+    }
+
+    pub fn with_event_bus(
+        hub: EventsHub,
+        sequencer: SharedEventSequencer,
+        event_bus: Option<RuntimeEventBus>,
+    ) -> Self {
+        Self {
+            hub,
+            sequencer,
+            event_bus,
+        }
+    }
+
+    pub fn event_bus(&self) -> Option<RuntimeEventBus> {
+        self.event_bus.clone()
     }
 
     pub fn hub(&self) -> EventsHub {
@@ -33,12 +51,12 @@ impl WsEventPublisher {
 
     pub async fn broadcast_channel(&self, channel: &str, enrich_as: &str, payload: Value) {
         let enriched = self.enrich_payload(enrich_as, payload);
-        self.hub
-            .broadcast(json!({
-                "type": channel,
-                "payload": enriched,
-            }))
-            .await;
+        let message = json!({
+            "type": channel,
+            "payload": enriched,
+        });
+        self.publish_message(&message);
+        self.hub.broadcast(message).await;
     }
 
     pub fn broadcast_channel_now(&self, channel: &str, enrich_as: &str, payload: Value) {
@@ -47,18 +65,18 @@ impl WsEventPublisher {
             "type": channel,
             "payload": enriched,
         });
-        broadcast_now(&self.hub, message);
+        broadcast_now(&self.hub, message, self.event_bus.as_ref());
     }
 
     /// Overlay/subtitle payloads are already shaped; enrich in-place for stale guards.
     pub async fn broadcast_overlay_body(&self, channel: &str, enrich_as: &str, mut body: Value) {
         let enriched = self.enrich_payload(enrich_as, body.take());
-        self.hub
-            .broadcast(json!({
-                "type": channel,
-                "payload": enriched,
-            }))
-            .await;
+        let message = json!({
+            "type": channel,
+            "payload": enriched,
+        });
+        self.publish_message(&message);
+        self.hub.broadcast(message).await;
     }
 
     pub fn broadcast_overlay_body_now(&self, channel: &str, enrich_as: &str, mut body: Value) {
@@ -69,7 +87,14 @@ impl WsEventPublisher {
                 "type": channel,
                 "payload": enriched,
             }),
+            self.event_bus.as_ref(),
         );
+    }
+
+    fn publish_message(&self, message: &Value) {
+        if let Some(bus) = &self.event_bus {
+            bus.publish(message.clone());
+        }
     }
 
     fn enrich_payload(&self, enrich_as: &str, payload: Value) -> Value {
@@ -83,6 +108,7 @@ impl WsEventPublisher {
 struct SyncBroadcastJob {
     hub: EventsHub,
     message: Value,
+    event_bus: Option<RuntimeEventBus>,
 }
 
 fn sync_broadcast_loop(rx: mpsc::Receiver<SyncBroadcastJob>) {
@@ -91,6 +117,9 @@ fn sync_broadcast_loop(rx: mpsc::Receiver<SyncBroadcastJob>) {
         .build()
         .expect("ws publisher broadcast runtime");
     for job in rx {
+        if let Some(bus) = &job.event_bus {
+            bus.publish(job.message.clone());
+        }
         rt.block_on(job.hub.broadcast(job.message));
     }
 }
@@ -108,7 +137,10 @@ fn sync_broadcast_sender() -> &'static mpsc::Sender<SyncBroadcastJob> {
     })
 }
 
-fn broadcast_now(events: &EventsHub, message: Value) {
+fn broadcast_now(events: &EventsHub, message: Value, event_bus: Option<&RuntimeEventBus>) {
+    if let Some(bus) = event_bus {
+        bus.publish(message.clone());
+    }
     if let Ok(handle) = tokio::runtime::Handle::try_current() {
         let events = events.clone();
         handle.spawn(async move {
@@ -121,6 +153,7 @@ fn broadcast_now(events: &EventsHub, message: Value) {
         .send(SyncBroadcastJob {
             hub: events.clone(),
             message,
+            event_bus: event_bus.cloned(),
         })
         .is_err()
     {

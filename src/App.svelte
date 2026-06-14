@@ -38,6 +38,7 @@
   import { mergeFontCatalogPreservingSystem } from "./lib/font-catalog";
   import { mergeStylePresetCatalog } from "./lib/style-presets";
   import { appStore, handleWsEvent, patchApp } from "./lib/stores/app";
+  import { startRuntimeEventChannel } from "./lib/runtime-events";
   import { EventsSocket } from "./lib/ws";
   import type { CompactPaneId, ConfigPayload, LocaleCode, TabId, VersionInfo } from "./lib/types";
 
@@ -54,7 +55,8 @@
   $: overlayUrl = snapshot.overlayUrl || snapshot.runtime.overlay?.overlay_url || "";
   $: saveStatusText = formatSaveStatusDisplay(snapshot.saveStatus, snapshot.runtime, loc);
 
-  let socket: EventsSocket | null = null;
+  let socketUnlisten: (() => void) | null = null;
+  let eventsSocket: EventsSocket | null = null;
   let compactPane: CompactPaneId = "live";
   let commandPaletteOpen = false;
   /** Last config persisted to disk — baseline for restart-required diff on save. */
@@ -348,11 +350,20 @@
 
   onMount(() => {
     void bootstrap();
-    socket = new EventsSocket(
-      (message) => handleWsEvent(message),
-      (status) => patchApp({ wsConnected: status === "connected" }),
-    );
-    socket.connect();
+    void startRuntimeEventChannel(() => patchApp({ wsConnected: true })).then((unlisten) => {
+      if (unlisten) {
+        socketUnlisten = unlisten;
+        return;
+      }
+      eventsSocket = new EventsSocket(handleWsEvent, (status) => {
+        patchApp({ wsConnected: status === "connected" });
+      });
+      eventsSocket.connect();
+      socketUnlisten = () => {
+        eventsSocket?.disconnect();
+        eventsSocket = null;
+      };
+    });
 
     const poll = window.setInterval(async () => {
       try {
@@ -369,7 +380,8 @@
   });
 
   onDestroy(() => {
-    socket?.disconnect();
+    socketUnlisten?.();
+    eventsSocket = null;
     unsubscribe();
     document.body.classList.remove("voicesub-layout-compact", "compact-nav-expanded");
   });

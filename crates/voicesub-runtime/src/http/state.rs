@@ -1,7 +1,6 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
-
-use std::sync::RwLock;
+use std::sync::{Mutex, RwLock};
 
 use super::partial_emit::PartialEmitCoordinator;
 use serde_json::Value;
@@ -12,10 +11,10 @@ use voicesub_config::{AppConfig, ConfigStore, ProjectPaths};
 use voicesub_export::ExportService;
 use voicesub_logging::{SessionLogManager, StructuredRuntimeLogger};
 use voicesub_obs::ObsCaptionService;
-use voicesub_subtitle::SubtitleRouter;
+use voicesub_subtitle::{OverlayBroadcaster, SubtitleRouter};
 use voicesub_translation::TranslationRuntimeController;
 use voicesub_tts::TwitchOAuthBridge;
-use voicesub_ws::{AsrWorkerHub, EventsHub};
+use voicesub_ws::{AsrWorkerHub, EventsHub, WsEventPublisher};
 
 use crate::trace::RuntimePipelineLog;
 
@@ -48,6 +47,30 @@ pub struct HttpState {
     pub twitch_oauth: Arc<TwitchOAuthBridge>,
     pub style_presets: StylePresetsFn,
     pub version: &'static str,
+    pub ws_publisher: WsEventPublisher,
+    pub overlay_broadcaster: Arc<OverlayBroadcaster>,
+    pub last_subtitle_payload: Arc<Mutex<Option<Value>>>,
+}
+
+impl HttpState {
+    /// Deliver the latest subtitle/overlay payload to WS clients before teardown.
+    pub async fn flush_overlay_presentations_to_clients(&self) {
+        self.overlay_broadcaster.reset_dedupe_state();
+        let body = self
+            .last_subtitle_payload
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+        let Some(body) = body else {
+            return;
+        };
+        self.ws_publisher
+            .broadcast_overlay_body("overlay_update", "overlay_update", body.clone())
+            .await;
+        self.ws_publisher
+            .broadcast_overlay_body("subtitle_payload_update", "overlay_update", body)
+            .await;
+    }
 }
 
 impl HttpState {
@@ -75,6 +98,9 @@ impl HttpState {
         twitch_oauth: Arc<TwitchOAuthBridge>,
         style_presets: StylePresetsFn,
         version: &'static str,
+        ws_publisher: WsEventPublisher,
+        overlay_broadcaster: Arc<OverlayBroadcaster>,
+        last_subtitle_payload: Arc<Mutex<Option<Value>>>,
     ) -> Arc<Self> {
         Arc::new(Self {
             paths,
@@ -100,6 +126,9 @@ impl HttpState {
             twitch_oauth,
             style_presets,
             version,
+            ws_publisher,
+            overlay_broadcaster,
+            last_subtitle_payload,
         })
     }
 }

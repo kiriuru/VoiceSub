@@ -124,7 +124,7 @@ async fn health_endpoint_returns_ok() {
     assert!(response.status().is_success());
     let body: serde_json::Value = response.json().await.expect("json");
     assert_eq!(body["status"], "ok");
-    assert_eq!(body["version"], "0.5.1");
+    assert_eq!(body["version"], voicesub_types::PROJECT_VERSION);
 
     handle.shutdown().await;
 }
@@ -523,10 +523,10 @@ async fn updates_check_ok() {
         .json()
         .await
         .expect("json");
-    assert_eq!(body["version"], "0.5.1");
-    assert_eq!(body["current_version"], "0.5.1");
+    assert_eq!(body["version"], voicesub_types::PROJECT_VERSION);
+    assert_eq!(body["current_version"], voicesub_types::PROJECT_VERSION);
     assert_eq!(body["sync"]["enabled"], true);
-    // Live GitHub latest is v0.5.0 (2026-06); local build is 0.5.1 — no false-positive banner.
+    // Live GitHub latest is v0.5.0 (2026-06); local build is 0.5.2 — no false-positive banner.
     assert_eq!(body["sync"]["update_available"], false);
     let latest = body["sync"]["latest_known_version"]
         .as_str()

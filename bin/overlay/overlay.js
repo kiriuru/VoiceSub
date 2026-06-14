@@ -47,6 +47,7 @@
   };
 
   const debugEntries = [];
+  const runtimeGoneClearDelayMs = 900;
   const staleGuard = window.SstWsStaleGuard?.createWsStaleGuardState?.() || {
     sequenceByType: new Map(),
     timestampByType: new Map(),
@@ -57,6 +58,23 @@
   let reconnectBackoffMs = 1000;
   const maxReconnectBackoffMs = 10000;
   let reconnectTimer = null;
+  let pendingOverlayPayload = null;
+  let overlayRenderRafId = 0;
+
+  function scheduleOverlayPayload(payload) {
+    pendingOverlayPayload = payload;
+    if (overlayRenderRafId) {
+      return;
+    }
+    overlayRenderRafId = window.requestAnimationFrame(() => {
+      overlayRenderRafId = 0;
+      const next = pendingOverlayPayload;
+      pendingOverlayPayload = null;
+      if (next) {
+        applyOverlayPayload(next);
+      }
+    });
+  }
 
   function sendUiTracePayload(payload) {
     const body = JSON.stringify(payload);
@@ -120,6 +138,9 @@
   }
 
   function shouldPersistOverlayLog(message) {
+    if (!debugMode) {
+      return false;
+    }
     const normalized = String(message || "").trim().toLowerCase();
     return [
       "overlay boot",
@@ -266,6 +287,29 @@
       writeDebug("text hidden", reason);
     }
     render();
+  }
+
+  async function isRuntimeReachable() {
+    try {
+      const response = await fetch("/api/health", { cache: "no-store" });
+      return response.ok;
+    } catch (_error) {
+      return false;
+    }
+  }
+
+  function scheduleRuntimeGoneClear(currentConnectionId) {
+    window.setTimeout(() => {
+      if (currentConnectionId !== connectionId) {
+        return;
+      }
+      void isRuntimeReachable().then((alive) => {
+        if (currentConnectionId !== connectionId || alive) {
+          return;
+        }
+        clearOverlayPresentation("runtime unavailable");
+      });
+    }, runtimeGoneClearDelayMs);
   }
 
   function buildPresentationPayload() {
@@ -485,7 +529,7 @@
           if (isWsEventStale(staleGuard, eventType, data.payload)) {
             return;
           }
-          applyOverlayPayload(data.payload);
+          scheduleOverlayPayload(data.payload);
         }
       } catch (_error) {
         // ignore malformed messages in skeleton stage
@@ -497,6 +541,7 @@
         return;
       }
       writeDebug("ws disconnected", `keeping last frame; reconnect in ${reconnectBackoffMs}ms`);
+      scheduleRuntimeGoneClear(currentConnectionId);
       if (reconnectTimer !== null) {
         window.clearTimeout(reconnectTimer);
       }

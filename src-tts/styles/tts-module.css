@@ -388,6 +388,10 @@ textarea.control {
   gap: var(--space-2);
 }
 
+.tts-twitch-connect__hint {
+  margin: var(--space-2) 0 0;
+}
+
 .tts-twitch-channels {
   display: flex;
   flex-direction: column;

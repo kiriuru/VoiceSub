@@ -96,11 +96,52 @@ impl TwitchChatService {
                     "include_username": settings.include_username,
                     "strip_emotes": settings.strip_emotes,
                     "block_commands": settings.block_commands,
+                    "emote_sources": settings.emote_sources,
                 }),
             );
             guard.chat = settings.clone();
             guard.source_replacement = profanity_settings_for_twitch(&settings);
         }
+        if self.is_session_active() {
+            self.spawn_emote_refresh(settings);
+        }
+    }
+
+    fn is_session_active(&self) -> bool {
+        self.inner
+            .active
+            .lock()
+            .map(|guard| guard.is_some())
+            .unwrap_or(false)
+    }
+
+    fn spawn_emote_refresh(&self, settings: TwitchTtsSettings) {
+        if !settings.strip_emotes {
+            return;
+        }
+        let sources = settings.emote_sources.clone();
+        if !sources.twitch && !sources.bttv && !sources.seventv {
+            return;
+        }
+        let logins = settings.channel_logins();
+        if logins.is_empty() {
+            return;
+        }
+        let emotes = self.emotes.clone();
+        let client_id = settings.resolve_client_id();
+        let oauth_token = settings.oauth_token.clone();
+        self.runtime.spawn(async move {
+            if let Err(err) = emotes
+                .refresh_all(&logins, &client_id, &oauth_token, &sources)
+                .await
+            {
+                warn!(
+                    target: "voicesub.twitch.emotes",
+                    error = %err,
+                    "hot-apply emote refresh failed"
+                );
+            }
+        });
     }
 
     /// Legacy IPC hook; profanity for Twitch chat lives in `TwitchTtsSettings.include_builtin_profanity`.
@@ -175,22 +216,12 @@ impl TwitchChatService {
         let connect_label = refresh_settings.normalized_channels_label();
         self.apply_settings(settings);
 
-        let emotes = self.emotes.clone();
-        let refresh_runtime = self.runtime.clone();
-        let refresh_logins = refresh_settings.channel_logins();
-        refresh_runtime.spawn(async move {
-            let _ = emotes
-                .refresh_all(
-                    &refresh_logins,
-                    &refresh_settings.resolve_client_id(),
-                    &refresh_settings.oauth_token,
-                    &refresh_settings.emote_sources,
-                )
-                .await;
-        });
-
         let (stop_tx, stop_rx) = watch::channel(false);
         let emotes_for_session = self.emotes.clone();
+        let refresh_logins = refresh_settings.channel_logins();
+        let refresh_client_id = refresh_settings.resolve_client_id();
+        let refresh_token = refresh_settings.oauth_token.clone();
+        let refresh_sources = refresh_settings.emote_sources.clone();
         let inner = self.inner.clone();
         let on_status: StatusCallback = Arc::new(move |state, channel| {
             let mapped = match state {
@@ -253,6 +284,26 @@ impl TwitchChatService {
         let live_for_task = self.live.clone();
         let on_status_for_err = on_status.clone();
         let task = self.runtime.spawn(async move {
+            if refresh_settings.strip_emotes
+                && (refresh_sources.twitch || refresh_sources.bttv || refresh_sources.seventv)
+            {
+                if let Err(err) = emotes_for_session
+                    .refresh_all(
+                        &refresh_logins,
+                        &refresh_client_id,
+                        &refresh_token,
+                        &refresh_sources,
+                    )
+                    .await
+                {
+                    warn!(
+                        target: "voicesub.twitch.emotes",
+                        error = %err,
+                        "pre-connect emote refresh failed"
+                    );
+                }
+            }
+
             if let Err(err) = run_session(
                 live_for_task,
                 stop_rx,

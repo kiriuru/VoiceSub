@@ -114,6 +114,10 @@ impl RuntimeStatusBroadcaster {
         }
     }
 
+    pub fn publisher(&self) -> WsEventPublisher {
+        self.publisher.clone()
+    }
+
     pub async fn broadcast_runtime(&self, runtime: Value, force: bool) {
         let signature = runtime_material_status_snapshot(&runtime);
         let now = Instant::now();

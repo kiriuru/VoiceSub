@@ -4,6 +4,7 @@ description = "VoiceSub shell and TTS module IPC (localhost webviews)."
 commands.allow = [
   "voicesub_version",
   "launch_browser_worker",
+  "get_runtime_state_snapshot",
   "set_dashboard_layout",
   "tts_get_config",
   "tts_set_provider",

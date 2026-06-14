@@ -44,11 +44,9 @@ fn resolve_tts_module(activity: WebviewActivity) -> WebviewPowerAction {
     if activity.engines_busy {
         return WebviewPowerAction::Normal;
     }
-    if activity.runtime_active && activity.tts_enabled {
-        if activity.focused || activity.visible {
-            return WebviewPowerAction::Normal;
-        }
-        return WebviewPowerAction::LowMemory;
+    // Module enabled: keep renderer alive for keepalive/WS even without subtitle runtime.
+    if activity.tts_enabled {
+        return WebviewPowerAction::Normal;
     }
     WebviewPowerAction::Suspend
 }
@@ -107,13 +105,24 @@ mod tests {
     }
 
     #[test]
-    fn tts_listening_hidden_is_low_memory() {
+    fn tts_listening_hidden_stays_normal() {
         assert_eq!(
             resolve_power_action(
                 WebviewRole::TtsModule,
                 activity(false, false, true, true, false)
             ),
-            WebviewPowerAction::LowMemory
+            WebviewPowerAction::Normal
+        );
+    }
+
+    #[test]
+    fn tts_enabled_without_runtime_stays_normal() {
+        assert_eq!(
+            resolve_power_action(
+                WebviewRole::TtsModule,
+                activity(false, false, false, true, false)
+            ),
+            WebviewPowerAction::Normal
         );
     }
 

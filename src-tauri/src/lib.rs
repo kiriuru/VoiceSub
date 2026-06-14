@@ -22,8 +22,8 @@ use voicesub_logging::{
     complete_graceful_shutdown, init_tracing_backbone, install_lifecycle_hooks, log_shutdown_begin,
     log_shutdown_step, set_config_full_logging_enabled,
 };
-use voicesub_runtime::{RuntimeHandle, RuntimeService};
-use voicesub_tts::{TtsModuleService, TTS_WINDOW_LABEL, TwitchOAuthBridge};
+use voicesub_runtime::{RuntimeHandle, RuntimeService, RuntimeStateSnapshot};
+use voicesub_tts::{TtsModuleService, TtsSpeechPipeline, TTS_WINDOW_LABEL, TwitchOAuthBridge};
 
 use crate::tts::TtsState;
 use crate::webview_memory::{SharedWebviewMemoryManager, WebviewMemoryManager};
@@ -69,6 +69,13 @@ fn set_dashboard_layout(window: WebviewWindow, compact: bool) -> Result<(), Stri
 }
 
 #[tauri::command]
+async fn get_runtime_state_snapshot(
+    state: State<'_, AppState>,
+) -> Result<RuntimeStateSnapshot, String> {
+    Ok(state.runtime.runtime_state_snapshot().await)
+}
+
+#[tauri::command]
 async fn launch_browser_worker(state: State<'_, AppState>) -> Result<String, String> {
     let result = state
         .runtime
@@ -96,7 +103,7 @@ async fn stop_runtime_session(bind_addr: SocketAddr) {
             tracing::warn!(%bind_addr, error = %err, "runtime stop request failed before desktop exit");
         }
     }
-    tokio::time::sleep(Duration::from_millis(120)).await;
+    tokio::time::sleep(Duration::from_millis(350)).await;
 }
 
 pub fn run() {
@@ -162,11 +169,23 @@ pub fn run() {
         project_root.join("user-data"),
         tts_broadcaster,
         oauth_bridge,
-        http_handle,
+        http_handle.clone(),
     ));
 
     let (playback_hub, completion_rx) = PlaybackHub::spawn();
     let playback_hub = Arc::new(playback_hub);
+    let speech_pipeline = Arc::new(TtsSpeechPipeline::new(
+        tts_service.clone(),
+        playback_hub.clone(),
+        paths.tts_module_dir(),
+        http_handle.clone(),
+    ));
+
+    runtime_service.set_subtitle_payload_listener(Arc::new({
+        let pipeline = speech_pipeline.clone();
+        move |payload| pipeline.handle_subtitle_payload(payload)
+    }));
+
     let webview_memory = Mutex::new(WebviewMemoryManager::default());
 
     tauri::Builder::default()
@@ -181,11 +200,13 @@ pub fn run() {
             service: tts_service.clone(),
             bind_addr,
             playback: playback_hub.clone(),
+            pipeline: speech_pipeline.clone(),
         })
         .manage(webview_memory)
         .invoke_handler(tauri::generate_handler![
             voicesub_version,
             launch_browser_worker,
+            get_runtime_state_snapshot,
             set_dashboard_layout,
             tts::tts_get_config,
             tts::tts_set_provider,
@@ -236,15 +257,59 @@ pub fn run() {
             }
             let tts_state = app.state::<TtsState>();
             tts::sync_playback_devices(&tts_state);
+            tts_state.pipeline.sync_enabled_from_config();
             let app_handle = app.handle().clone();
+            let app_for_speech_activity = app_handle.clone();
+            tts_state.pipeline.set_speech_planned_listener(Arc::new(
+                move |items: &[voicesub_tts::SpeechQueueItem]| {
+                    let _ = app_for_speech_activity.emit("tts-speech-activity", items);
+                },
+            ));
+            tts_state.pipeline.clone().start();
+            let app_handle_for_events = app_handle.clone();
+            let runtime_for_bus = app.state::<AppState>().runtime.clone();
+            let pipeline_for_bus = tts_state.pipeline.clone();
+            let http_handle = app.state::<AppState>()._http_runtime.handle().clone();
+            http_handle.spawn(async move {
+                let mut bus_rx = runtime_for_bus.runtime_event_bus().subscribe();
+                loop {
+                    match bus_rx.recv().await {
+                        Ok(message) => {
+                            let event_type = message
+                                .get("type")
+                                .and_then(|value| value.as_str())
+                                .unwrap_or("");
+                            if event_type == "runtime_update" {
+                                let running = message
+                                    .pointer("/payload/running")
+                                    .and_then(|value| value.as_bool())
+                                    .unwrap_or(false);
+                                pipeline_for_bus.set_runtime_active(running);
+                            } else if event_type == "twitch_chat_message" {
+                                if let Ok(chat) = serde_json::from_value::<voicesub_twitch::TwitchChatMessage>(
+                                    message.get("payload").cloned().unwrap_or_default(),
+                                ) {
+                                    pipeline_for_bus.handle_twitch_chat_message(&chat);
+                                }
+                            }
+                            let _ = app_handle_for_events.emit("runtime-event", message.as_ref().clone());
+                        }
+                        Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                        Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                    }
+                }
+            });
+            let pipeline_for_playback = tts_state.pipeline.clone();
             std::thread::Builder::new()
                 .name("voicesub-tts-playback-events".into())
                 .spawn(move || {
                     while let Ok(finished) = completion_rx.recv() {
+                        pipeline_for_playback.on_playback_finished(&finished);
                         let _ = app_handle.emit("playback-finished", finished);
                     }
                 })
                 .expect("spawn playback completion event thread");
+            tts::start_tts_health_watchdog(app.handle().clone());
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -271,16 +336,38 @@ pub fn run() {
                     }
                 }
                 WindowEvent::CloseRequested { .. } if window.label() == TTS_WINDOW_LABEL => {
-                    tts::recover_tts_after_window_closed(window.state::<TtsState>().inner());
+                    let tts_state = window.state::<TtsState>().inner().clone();
+                    tts::recover_tts_after_window_closed(&tts_state);
                     let memory = window.state::<SharedWebviewMemoryManager>();
+                    if let Ok(mut guard) = memory.lock() {
+                        guard.set_user_dismissed_tts_window(true);
+                        guard.set_tts_visible(false);
+                        guard.set_tts_focused(false);
+                    }
+                    crate::webview_memory::refresh_main_shell_only(
+                        &window.app_handle(),
+                        memory.inner(),
+                    );
+                }
+                WindowEvent::Destroyed if window.label() == TTS_WINDOW_LABEL => {
+                    let tts_state = window.state::<TtsState>().inner().clone();
+                    tts::recover_tts_after_window_closed(&tts_state);
+                    let memory = window.state::<SharedWebviewMemoryManager>();
+                    let user_dismissed = memory
+                        .lock()
+                        .map(|guard| guard.user_dismissed_tts_window())
+                        .unwrap_or(false);
                     if let Ok(mut guard) = memory.lock() {
                         guard.set_tts_visible(false);
                         guard.set_tts_focused(false);
                     }
-                    crate::webview_memory::refresh_from_state(
+                    crate::webview_memory::refresh_main_shell_only(
                         &window.app_handle(),
                         memory.inner(),
                     );
+                    if !user_dismissed {
+                        tts::schedule_tts_window_reopen(window.app_handle().clone(), &tts_state);
+                    }
                 }
                 WindowEvent::CloseRequested { api, .. } if window.label() == "main" => {
                     api.prevent_close();

@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use std::sync::{
     atomic::AtomicBool,
-    Arc, RwLock as StdRwLock,
+    Arc, Mutex, RwLock as StdRwLock,
 };
 
 use tokio::sync::RwLock as TokioRwLock;
@@ -41,7 +41,7 @@ use voicesub_subtitle::{
 };
 use voicesub_ws::{
     shared_event_sequencer, ws_structured_log_from_runtime_logger, AsrWorkerHub, EventsHub,
-    WsEventPublisher, WsLog,
+    RuntimeEventBus, RuntimeStateSnapshot, WsEventPublisher, WsLog,
 };
 
 use crate::trace::{structured_log_from_runtime_logger as runtime_pipeline_structured_log, RuntimePipelineLog};
@@ -56,6 +56,8 @@ use crate::transcript_controller::TranscriptController;
 
 use voicesub_tts::TwitchOAuthBridge;
 use voicesub_types::PROJECT_VERSION;
+
+pub type SubtitlePayloadListener = Arc<dyn Fn(serde_json::Value) + Send + Sync>;
 
 #[derive(Debug, thiserror::Error)]
 
@@ -158,6 +160,14 @@ pub struct RuntimeService {
     twitch_oauth: Arc<TwitchOAuthBridge>,
 
     structured_runtime_logger: Arc<StructuredRuntimeLogger>,
+
+    runtime_event_bus: RuntimeEventBus,
+
+    subtitle_payload_listener: Arc<Mutex<Option<SubtitlePayloadListener>>>,
+
+    overlay_broadcaster: Arc<OverlayBroadcaster>,
+
+    last_subtitle_payload: Arc<Mutex<Option<serde_json::Value>>>,
 }
 
 impl RuntimeService {
@@ -211,7 +221,14 @@ impl RuntimeService {
             structured_runtime_logger.clone(),
         )));
         let events = EventsHub::with_log(ws_log);
-        let ws_publisher = WsEventPublisher::new(events.clone(), shared_event_sequencer());
+        let runtime_event_bus = RuntimeEventBus::new();
+        let ws_publisher = WsEventPublisher::with_event_bus(
+            events.clone(),
+            shared_event_sequencer(),
+            Some(runtime_event_bus.clone()),
+        );
+        let subtitle_payload_listener: Arc<Mutex<Option<SubtitlePayloadListener>>> =
+            Arc::new(Mutex::new(None));
         let runtime_broadcaster = Arc::new(RuntimeStatusBroadcaster::new(
             ws_publisher.clone(),
             1_000,
@@ -223,6 +240,9 @@ impl RuntimeService {
         let subtitle_log = SubtitleLog::new(Some(subtitle_structured_log.clone()));
 
         let publisher_for_overlay = ws_publisher.clone();
+        let last_subtitle_payload: Arc<Mutex<Option<serde_json::Value>>> =
+            Arc::new(Mutex::new(None));
+        let last_subtitle_payload_for_publish = last_subtitle_payload.clone();
         let overlay_broadcaster = Arc::new(OverlayBroadcaster::new(
             Arc::new({
                 let publisher = publisher_for_overlay.clone();
@@ -238,13 +258,24 @@ impl RuntimeService {
             }),
             subtitle_log,
         ));
+        let overlay_broadcaster_for_publish = overlay_broadcaster.clone();
 
         let publisher_for_publish = ws_publisher.clone();
+        let subtitle_listener_for_publish = subtitle_payload_listener.clone();
         let publish: PublishCallback = Arc::new(move |payload| {
-            let overlay = overlay_broadcaster.clone();
+            let overlay = overlay_broadcaster_for_publish.clone();
             let publisher = publisher_for_publish.clone();
-            overlay.publish(&payload);
+            let subtitle_listener = subtitle_listener_for_publish.clone();
             let subtitle_body = serde_json::to_value(&payload).unwrap_or_default();
+            *last_subtitle_payload_for_publish
+                .lock()
+                .unwrap_or_else(|e| e.into_inner()) = Some(subtitle_body.clone());
+            overlay.publish(&payload);
+            if let Ok(guard) = subtitle_listener.lock() {
+                if let Some(listener) = guard.as_ref() {
+                    listener(subtitle_body.clone());
+                }
+            }
             publisher.broadcast_overlay_body_now(
                 "subtitle_payload_update",
                 "overlay_update",
@@ -443,6 +474,52 @@ impl RuntimeService {
             browser_speech,
             twitch_oauth,
             structured_runtime_logger,
+            runtime_event_bus,
+            subtitle_payload_listener,
+            overlay_broadcaster,
+            last_subtitle_payload,
+        }
+    }
+
+    pub fn set_subtitle_payload_listener(&self, listener: SubtitlePayloadListener) {
+        if let Ok(mut guard) = self.subtitle_payload_listener.lock() {
+            *guard = Some(listener);
+        }
+    }
+
+    pub fn runtime_event_bus(&self) -> RuntimeEventBus {
+        self.runtime_event_bus.clone()
+    }
+
+    pub async fn runtime_state_snapshot(&self) -> RuntimeStateSnapshot {
+        RuntimeStateSnapshot {
+            rev: self.runtime_event_bus.revision(),
+            runtime: self
+                .events
+                .last_message("runtime_update")
+                .await
+                .map(|message| message.get("payload").cloned().unwrap_or_default())
+                .unwrap_or(serde_json::Value::Null),
+            subtitle: self
+                .events
+                .last_message("subtitle_payload_update")
+                .await
+                .map(|message| message.get("payload").cloned().unwrap_or_default()),
+            overlay: self
+                .events
+                .last_message("overlay_update")
+                .await
+                .map(|message| message.get("payload").cloned().unwrap_or_default()),
+            translation: self
+                .events
+                .last_message("translation_update")
+                .await
+                .map(|message| message.get("payload").cloned().unwrap_or_default()),
+            diagnostics: self
+                .events
+                .last_message("diagnostics_update")
+                .await
+                .map(|message| message.get("payload").cloned().unwrap_or_default()),
         }
     }
 
@@ -509,6 +586,9 @@ impl RuntimeService {
             self.twitch_oauth.clone(),
             style_presets,
             PROJECT_VERSION,
+            self.ws_publisher.clone(),
+            self.overlay_broadcaster.clone(),
+            self.last_subtitle_payload.clone(),
         )
     }
 

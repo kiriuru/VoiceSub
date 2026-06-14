@@ -26,7 +26,16 @@ mod imp {
             }
         };
         if let Err(err) = apply_to_webview(&webview, action, label) {
-            warn!(label, ?action, error = %err, "webview power action failed");
+            if action == WebviewPowerAction::Suspend {
+                debug!(
+                    label,
+                    ?action,
+                    error = %err,
+                    "webview TrySuspend skipped (webview not ready)"
+                );
+            } else {
+                warn!(label, ?action, error = %err, "webview power action failed");
+            }
         }
     }
 

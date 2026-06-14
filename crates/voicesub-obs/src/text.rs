@@ -6,6 +6,8 @@ pub fn normalize_text(text: &str) -> String {
         .filter(|line| !line.is_empty())
         .collect::<Vec<_>>()
         .join("\n")
+        .trim()
+        .to_string()
 }
 
 pub fn select_payload_text(payload: &SubtitlePayloadEvent, mode: &str) -> String {

@@ -3,7 +3,7 @@
 use serde_json::{json, Value};
 
 /// Product version — single source until crate-only policy is enforced.
-pub const PROJECT_VERSION: &str = "0.5.1";
+pub const PROJECT_VERSION: &str = "0.5.2";
 pub const RELEASE_TRACK: &str = "stable";
 pub const DEFAULT_UPDATE_PROVIDER: &str = "github_releases";
 pub const DEFAULT_RELEASE_CHANNEL: &str = "stable";
@@ -317,17 +317,17 @@ mod tests {
                 "html_url": "https://github.com/kiriuru/VoiceSub/releases/tag/v0.5.0"
             },
             {
-                "tag_name": "v0.5.2",
+                "tag_name": "v0.5.3",
                 "draft": false,
                 "prerelease": false,
-                "html_url": "https://github.com/kiriuru/VoiceSub/releases/tag/v0.5.2"
+                "html_url": "https://github.com/kiriuru/VoiceSub/releases/tag/v0.5.3"
             }
         ]);
         let (latest, _, url) = extract_latest_github_release(&releases, "stable");
-        assert_eq!(latest.as_deref(), Some("0.5.2"));
+        assert_eq!(latest.as_deref(), Some("0.5.3"));
         assert_eq!(
             url.as_deref(),
-            Some("https://github.com/kiriuru/VoiceSub/releases/tag/v0.5.2")
+            Some("https://github.com/kiriuru/VoiceSub/releases/tag/v0.5.3")
         );
         assert!(is_remote_version_newer(PROJECT_VERSION, latest.as_deref().unwrap()));
 
@@ -342,7 +342,7 @@ mod tests {
         assert_eq!(payload["sync"]["update_available"], true);
         assert_eq!(
             payload["sync"]["release_url"],
-            "https://github.com/kiriuru/VoiceSub/releases/tag/v0.5.2"
+            "https://github.com/kiriuru/VoiceSub/releases/tag/v0.5.3"
         );
     }
 
@@ -353,10 +353,10 @@ mod tests {
                 "enabled": true,
                 "provider": "github_releases",
                 "github_repo": "example/repo",
-                "latest_known_version": "0.5.2"
+                "latest_known_version": "0.5.3"
             }
         })));
-        assert_eq!(payload["current_version"], "0.5.1");
+        assert_eq!(payload["current_version"], PROJECT_VERSION);
         assert_eq!(payload["sync"]["update_available"], true);
     }
 

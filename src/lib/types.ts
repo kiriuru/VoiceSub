@@ -198,6 +198,15 @@ export interface WsMessage {
   payload?: Record<string, unknown>;
 }
 
+export interface RuntimeStateSnapshot {
+  rev: number;
+  runtime: Record<string, unknown>;
+  subtitle?: Record<string, unknown> | null;
+  overlay?: Record<string, unknown> | null;
+  translation?: Record<string, unknown> | null;
+  diagnostics?: Record<string, unknown> | null;
+}
+
 export type TabId =
   | "translation"
   | "subtitles"
