@@ -92,7 +92,7 @@
       ? SUBTITLES_PANEL_SECTIONS
       : [];
   $: usePanelTopNav = useTranslationTopNav || useSubtitlesTopNav;
-  $: panelNavMode = useSubtitlesTopNav ? "tabs" : "scroll";
+  $: panelNavMode = (useSubtitlesTopNav ? "tabs" : "scroll") as "scroll" | "tabs";
 
   function handleSubtitlesTabChange(tab: TabId) {
     onActiveTabChange(tab);
