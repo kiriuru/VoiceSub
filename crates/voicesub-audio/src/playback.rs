@@ -534,7 +534,13 @@ mod tests {
 
     #[test]
     fn resolve_default_when_label_empty() {
-        let _ = resolve_output_device("").expect("default output device");
+        let host = cpal::default_host();
+        let result = resolve_output_device("");
+        if host.default_output_device().is_some() {
+            result.expect("default output device");
+        } else {
+            assert!(matches!(result, Err(AudioError::DeviceNotFound(_))));
+        }
     }
 
     #[test]
