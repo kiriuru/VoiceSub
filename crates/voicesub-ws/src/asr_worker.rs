@@ -209,7 +209,10 @@ impl AsrWorkerHub {
             }
 
             _ => {
-                warn!(transport_id, kind, "asr worker ignored unknown message type");
+                warn!(
+                    transport_id,
+                    kind, "asr worker ignored unknown message type"
+                );
             }
         }
     }
