@@ -256,10 +256,10 @@ impl OrderedBrowserSpeechIngest {
             });
             *guard = Some(tx);
         }
-        if let Some(tx) = guard.as_ref() {
-            if tx.send(update).is_err() {
-                tracing::warn!("browser speech ingest channel closed");
-            }
+        if let Some(tx) = guard.as_ref()
+            && tx.send(update).is_err()
+        {
+            tracing::warn!("browser speech ingest channel closed");
         }
     }
 }
