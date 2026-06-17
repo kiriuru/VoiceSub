@@ -777,6 +777,7 @@ Devices: **label-first** (WASAPI friendly name → `cpal::Device`). List via `tt
 | --- | --- |
 | Channels | Up to **5** logins in `TwitchTtsSettings.channels`; IRC `JOIN #a,#b,…`; legacy `channel` → `channels[0]` |
 | Hot-apply | `TwitchChatService.apply_settings()` on `tts_update_twitch_settings` — no reconnect for filter changes |
+| Reconnect | `run_session_with_reconnect()` — auto-retry on stream/TCP/TLS loss; backoff 1→30 s; auth/settings errors stop the loop |
 | Emotes | Twitch IRC tag + BTTV/7TV/Twitch lexical; **pure numeric tokens** are not matched as emote codes |
 | Emoji strip | `strip_unicode_emoji` preserves decimal digits (ASCII / Arabic-Indic / Fullwidth); `\p{Emoji}` does not eat `0–9` in chat text |
 | Links | `links.rs` + double `strip_links` in pipeline; link-only → `speakable: false` |

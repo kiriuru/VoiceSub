@@ -257,6 +257,7 @@
 - OAuth через system browser; implicit grant + poll token.
 - **До 5 каналов** на одно подключение (список логинов без `#`); бейдж `IRC: connected #channel` или `3/5 каналов`.
 - IRC chat → очередь озвучки (`twitch` channel); фильтры emotes, links, symbols, lang — **без переподключения** при смене настроек.
+- **Auto-reconnect** при обрыве IRC/TLS — exponential backoff 1→30 s; ошибки OAuth/auth без retry; ручной Disconnect останавливает цикл.
 - Поле **«Не озвучивать символы»** — comma-separated токены, удаляемые из текста (пусто = все символы в речи).
 - Цифры в сообщениях (`5`, `100`, `5ю`) сохраняются при emoji/emote strip.
 - Справка **?** у «Ник бота» — IRC-логин аккаунта, с которого идёт `JOIN` (не ник зрителя); popover сдвигается в viewport (`popover-position.ts`).

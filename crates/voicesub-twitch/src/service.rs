@@ -8,7 +8,7 @@ use tracing::{info, warn};
 
 use crate::emotes::EmoteRegistry;
 use crate::error::TwitchError;
-use crate::irc::{MessageCallback, StatusCallback, run_session};
+use crate::irc::{MessageCallback, StatusCallback, run_session_with_reconnect};
 use crate::settings::{TwitchChatMessage, TwitchTtsSettings};
 use crate::source_text_replacement::{
     SourceTextReplacementSettings, profanity_settings_for_twitch,
@@ -285,7 +285,7 @@ impl TwitchChatService {
         };
 
         let live_for_task = self.live.clone();
-        let on_status_for_err = on_status.clone();
+        let inner_for_cleanup = self.inner.clone();
         let task = self.runtime.spawn(async move {
             if refresh_settings.strip_emotes
                 && (refresh_sources.twitch || refresh_sources.bttv || refresh_sources.seventv)
@@ -297,26 +297,25 @@ impl TwitchChatService {
                         &refresh_sources,
                     )
                     .await
-                {
-                    warn!(
-                        target: "voicesub.twitch.emotes",
-                        error = %err,
-                        "pre-connect emote refresh failed"
-                    );
-                }
+            {
+                warn!(
+                    target: "voicesub.twitch.emotes",
+                    error = %err,
+                    "pre-connect emote refresh failed"
+                );
+            }
 
-            if let Err(err) = run_session(
+            run_session_with_reconnect(
                 live_for_task,
                 stop_rx,
                 on_status,
                 on_message,
                 emotes_for_session,
             )
-            .await
-            {
-                warn!(target: "voicesub.twitch", error = %err, "twitch irc session ended with error");
-                trace::trace("service", "session_error", json!({ "error": err.to_string() }));
-                on_status_for_err("error", Some(&err.to_string()));
+            .await;
+
+            if let Ok(mut guard) = inner_for_cleanup.active.lock() {
+                guard.take();
             }
         });
 

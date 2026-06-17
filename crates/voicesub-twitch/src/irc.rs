@@ -21,25 +21,36 @@ const TWITCH_IRC_PORT: u16 = 6697;
 pub type StatusCallback = Arc<dyn Fn(&str, Option<&str>) + Send + Sync>;
 pub type MessageCallback = Arc<dyn Fn(TwitchChatMessage) + Send + Sync>;
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum SessionOutcome {
+    /// Stop requested via `stop_rx`.
+    Stopped,
+    /// IRC stream ended; `joined` is true when the channel JOIN completed.
+    Disconnected { joined: bool },
+    /// Session failed before or during IRC handling.
+    Error(TwitchError),
+}
+
 pub async fn run_session(
     live: Arc<RwLock<TwitchLiveState>>,
     mut stop_rx: watch::Receiver<bool>,
     on_status: StatusCallback,
     on_message: MessageCallback,
     emotes: Arc<EmoteRegistry>,
-) -> Result<(), TwitchError> {
-    let connect_settings = live
-        .read()
-        .map_err(|_| TwitchError::Irc("settings lock poisoned".into()))?
-        .chat
-        .clone();
-    connect_settings
-        .validate_for_connect()
-        .map_err(TwitchError::InvalidSettings)?;
+) -> SessionOutcome {
+    let connect_settings = match live.read() {
+        Ok(guard) => guard.chat.clone(),
+        Err(_) => {
+            return SessionOutcome::Error(TwitchError::Irc("settings lock poisoned".into()));
+        }
+    };
+    if let Err(err) = connect_settings.validate_for_connect() {
+        return SessionOutcome::Error(TwitchError::InvalidSettings(err));
+    }
 
     let channels = connect_settings.normalized_channels();
     if channels.is_empty() {
-        return Err(TwitchError::InvalidSettings(
+        return SessionOutcome::Error(TwitchError::InvalidSettings(
             "at least one channel is required".into(),
         ));
     }
@@ -61,32 +72,50 @@ pub async fn run_session(
         "connecting to twitch irc"
     );
 
-    let tcp = TcpStream::connect((TWITCH_IRC_HOST, TWITCH_IRC_PORT))
-        .await
-        .map_err(|err| {
+    let tcp = match TcpStream::connect((TWITCH_IRC_HOST, TWITCH_IRC_PORT)).await {
+        Ok(stream) => stream,
+        Err(err) => {
             trace::trace("irc", "tcp_failed", json!({ "error": err.to_string() }));
-            TwitchError::Irc(format!("tcp connect failed: {err}"))
-        })?;
+            return SessionOutcome::Error(TwitchError::Irc(format!("tcp connect failed: {err}")));
+        }
+    };
 
-    let connector = build_tls_connector()?;
-    let server_name = ServerName::try_from(TWITCH_IRC_HOST.to_string())
-        .map_err(|err| TwitchError::Tls(err.to_string()))?;
-    let tls = connector.connect(server_name, tcp).await.map_err(|err| {
-        trace::trace("irc", "tls_failed", json!({ "error": err.to_string() }));
-        TwitchError::Tls(err.to_string())
-    })?;
+    let connector = match build_tls_connector() {
+        Ok(connector) => connector,
+        Err(err) => return SessionOutcome::Error(err),
+    };
+    let server_name = match ServerName::try_from(TWITCH_IRC_HOST.to_string()) {
+        Ok(name) => name,
+        Err(err) => return SessionOutcome::Error(TwitchError::Tls(err.to_string())),
+    };
+    let tls = match connector.connect(server_name, tcp).await {
+        Ok(stream) => stream,
+        Err(err) => {
+            trace::trace("irc", "tls_failed", json!({ "error": err.to_string() }));
+            return SessionOutcome::Error(TwitchError::Tls(err.to_string()));
+        }
+    };
 
     let (reader, mut writer) = tokio::io::split(tls);
     let mut lines = BufReader::new(reader).lines();
 
-    send_line(
+    if let Err(err) = send_line(
         &mut writer,
         "CAP REQ :twitch.tv/membership twitch.tv/tags twitch.tv/commands",
     )
-    .await?;
-    send_line(&mut writer, &format!("PASS {pass}")).await?;
-    send_line(&mut writer, &format!("NICK {nick}")).await?;
-    send_line(&mut writer, &format!("JOIN {join_arg}")).await?;
+    .await
+    {
+        return SessionOutcome::Error(err);
+    }
+    if let Err(err) = send_line(&mut writer, &format!("PASS {pass}")).await {
+        return SessionOutcome::Error(err);
+    }
+    if let Err(err) = send_line(&mut writer, &format!("NICK {nick}")).await {
+        return SessionOutcome::Error(err);
+    }
+    if let Err(err) = send_line(&mut writer, &format!("JOIN {join_arg}")).await {
+        return SessionOutcome::Error(err);
+    }
 
     trace::trace("irc", "handshake_sent", json!({ "channels": channels }));
     let mut joined = false;
@@ -101,10 +130,16 @@ pub async fn run_session(
                 }
             }
             line = lines.next_line() => {
-                let Some(line) = line.map_err(|err| TwitchError::Irc(err.to_string()))? else {
-                    warn!(target: "voicesub.twitch", "irc stream closed");
-                    trace::trace("irc", "stream_closed", json!({}));
-                    break;
+                let line = match line {
+                    Ok(Some(line)) => line,
+                    Ok(None) => {
+                        warn!(target: "voicesub.twitch", "irc stream closed");
+                        trace::trace("irc", "stream_closed", json!({ "joined": joined }));
+                        break;
+                    }
+                    Err(err) => {
+                        return SessionOutcome::Error(TwitchError::Irc(err.to_string()));
+                    }
                 };
                 if line.is_empty() {
                     continue;
@@ -114,7 +149,7 @@ pub async fn run_session(
                     warn!(target: "voicesub.twitch", reason = %reason, "twitch login failed");
                     trace::trace("irc", "login_failed", json!({ "reason": reason }));
                     on_status("error", Some(&reason));
-                    return Err(TwitchError::Irc(reason));
+                    return SessionOutcome::Error(TwitchError::Irc(reason));
                 }
 
                 if !joined && line.contains(" JOIN ") {
@@ -130,7 +165,9 @@ pub async fn run_session(
 
                 if let Some(ping_payload) = line.strip_prefix("PING") {
                     let pong = format!("PONG{ping_payload}");
-                    send_line(&mut writer, &pong).await?;
+                    if let Err(err) = send_line(&mut writer, &pong).await {
+                        return SessionOutcome::Error(err);
+                    }
                     trace::trace("irc", "pong", json!({}));
                     continue;
                 }
@@ -142,10 +179,14 @@ pub async fn run_session(
                 }
 
                 if let Some(message) = parse_privmsg(&line) {
-                    let live_state = live
-                        .read()
-                        .map_err(|_| TwitchError::Irc("settings lock poisoned".into()))?
-                        .clone();
+                    let live_state = match live.read() {
+                        Ok(guard) => guard.clone(),
+                        Err(_) => {
+                            return SessionOutcome::Error(TwitchError::Irc(
+                                "settings lock poisoned".into(),
+                            ));
+                        }
+                    };
                     let emotes_tag = if message.emotes_tag.is_empty() {
                         None
                     } else {
@@ -200,9 +241,140 @@ pub async fn run_session(
         }
     }
 
-    on_status("disconnected", None);
-    trace::trace("irc", "session_end", json!({ "channels": channels }));
-    Ok(())
+    trace::trace(
+        "irc",
+        "session_end",
+        json!({ "channels": channels, "joined": joined }),
+    );
+    if *stop_rx.borrow() {
+        on_status("disconnected", None);
+        SessionOutcome::Stopped
+    } else {
+        SessionOutcome::Disconnected { joined }
+    }
+}
+
+const RECONNECT_INITIAL_BACKOFF: std::time::Duration = std::time::Duration::from_secs(1);
+const RECONNECT_MAX_BACKOFF: std::time::Duration = std::time::Duration::from_secs(30);
+
+pub async fn run_session_with_reconnect(
+    live: Arc<RwLock<TwitchLiveState>>,
+    mut stop_rx: watch::Receiver<bool>,
+    on_status: StatusCallback,
+    on_message: MessageCallback,
+    emotes: Arc<EmoteRegistry>,
+) {
+    let mut backoff = RECONNECT_INITIAL_BACKOFF;
+    let mut attempt = 0u32;
+
+    loop {
+        if *stop_rx.borrow() {
+            break;
+        }
+
+        let outcome = run_session(
+            live.clone(),
+            stop_rx.clone(),
+            on_status.clone(),
+            on_message.clone(),
+            emotes.clone(),
+        )
+        .await;
+
+        match outcome {
+            SessionOutcome::Stopped => break,
+            SessionOutcome::Disconnected { joined } => {
+                if *stop_rx.borrow() {
+                    break;
+                }
+                if joined {
+                    backoff = RECONNECT_INITIAL_BACKOFF;
+                }
+                attempt += 1;
+                let channels_label = live
+                    .read()
+                    .ok()
+                    .map(|guard| guard.chat.normalized_channels_label())
+                    .unwrap_or_default();
+                warn!(
+                    target: "voicesub.twitch",
+                    attempt,
+                    backoff_secs = backoff.as_secs(),
+                    joined,
+                    "twitch irc disconnected, reconnecting"
+                );
+                trace::trace(
+                    "irc",
+                    "reconnect_scheduled",
+                    json!({
+                        "attempt": attempt,
+                        "backoff_ms": backoff.as_millis(),
+                        "joined": joined,
+                        "channels": channels_label,
+                    }),
+                );
+                on_status("connecting", Some(&channels_label));
+                if sleep_or_stop(&mut stop_rx, backoff).await {
+                    break;
+                }
+                backoff = (backoff * 2).min(RECONNECT_MAX_BACKOFF);
+            }
+            SessionOutcome::Error(err) => {
+                if *stop_rx.borrow() {
+                    break;
+                }
+                if !err.is_retryable() {
+                    warn!(target: "voicesub.twitch", error = %err, "twitch irc session failed (non-retryable)");
+                    trace::trace(
+                        "service",
+                        "session_error",
+                        json!({ "error": err.to_string(), "retryable": false }),
+                    );
+                    on_status("error", Some(&err.to_string()));
+                    break;
+                }
+                attempt += 1;
+                let channels_label = live
+                    .read()
+                    .ok()
+                    .map(|guard| guard.chat.normalized_channels_label())
+                    .unwrap_or_default();
+                warn!(
+                    target: "voicesub.twitch",
+                    attempt,
+                    error = %err,
+                    backoff_secs = backoff.as_secs(),
+                    "twitch irc session failed, retrying"
+                );
+                trace::trace(
+                    "irc",
+                    "reconnect_scheduled",
+                    json!({
+                        "attempt": attempt,
+                        "backoff_ms": backoff.as_millis(),
+                        "error": err.to_string(),
+                    }),
+                );
+                on_status("connecting", Some(&channels_label));
+                if sleep_or_stop(&mut stop_rx, backoff).await {
+                    break;
+                }
+                backoff = (backoff * 2).min(RECONNECT_MAX_BACKOFF);
+            }
+        }
+    }
+}
+
+async fn sleep_or_stop(stop_rx: &mut watch::Receiver<bool>, delay: std::time::Duration) -> bool {
+    if *stop_rx.borrow() {
+        return true;
+    }
+    tokio::select! {
+        _ = tokio::time::sleep(delay) => *stop_rx.borrow(),
+        changed = stop_rx.changed() => {
+            changed.is_ok() && *stop_rx.borrow()
+        }
+    }
 }
 
 fn build_tls_connector() -> Result<TlsConnector, TwitchError> {

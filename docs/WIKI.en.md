@@ -257,6 +257,7 @@ Technical architecture: `docs/TECHNICAL_ARCHITECTURE.en.md`. SST `0.4.4` is a fr
 - OAuth via system browser; implicit grant + token poll.
 - **Up to 5 channels** per connection (channel logins without `#`); status badge `IRC: connected #channel` or `3/5 channels`.
 - IRC chat → speech queue (`twitch` channel); emote/link/symbol/lang filters apply **live** without IRC reconnect.
+- **Auto-reconnect** on IRC/TLS drop — exponential backoff 1→30 s; OAuth/auth errors do not retry; manual Disconnect stops the loop.
 - **Symbols not spoken** field — comma-separated tokens removed from text (empty = all symbols may be read).
 - Digits in messages (`5`, `100`, ordinals like `5ю`) are preserved during emoji/emote stripping.
 - **?** help on **Bot nick** — IRC login used for `JOIN` (not a viewer display name); popover clamped to viewport (`popover-position.ts`).

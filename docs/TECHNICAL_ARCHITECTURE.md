@@ -777,6 +777,7 @@ Live path: plan → **`google_fetch.rs`** (HTTP) → enqueue → prefetch → `P
 | --- | --- |
 | Каналы | До **5** логинов в `TwitchTtsSettings.channels`; IRC `JOIN #a,#b,…`; legacy `channel` → `channels[0]` |
 | Hot-apply | `TwitchChatService.apply_settings()` на `tts_update_twitch_settings` — без reconnect для фильтров |
+| Reconnect | `run_session_with_reconnect()` — auto-retry при обрыве stream/TCP/TLS; backoff 1→30 s; auth/settings останавливают цикл |
 | Emotes | Twitch IRC tag + BTTV/7TV/Twitch lexical; **чисто числовые токены** не матчатся как emote codes |
 | Emoji strip | `strip_unicode_emoji` сохраняет decimal digits (ASCII / Arabic-Indic / Fullwidth); `\p{Emoji}` не съедает `0–9` в тексте |
 | Links | `links.rs` + двойной `strip_links` в pipeline; link-only → `speakable: false` |
