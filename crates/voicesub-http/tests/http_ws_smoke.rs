@@ -8,6 +8,7 @@ use common::{EphemeralRuntime, integration_lock, workspace_root as project_root}
 use futures_util::{SinkExt, StreamExt};
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::Message;
+use voicesub_tts::embedded_binary_path;
 
 #[tokio::test]
 async fn http_responses_include_content_security_policy() {
@@ -425,8 +426,25 @@ async fn python_tts_status_reports_script() {
         .expect("python tts status");
     assert!(resp.status().is_success());
     let body: serde_json::Value = resp.json().await.expect("json");
-    assert_eq!(body["script_found"], true);
-    assert!(body.get("embedded_found").is_some());
+
+    let tts_dir = project_root().join("bin/modules/tts");
+    let script_path = tts_dir.join("google_tts_fetch.py");
+    assert_eq!(
+        body["script_found"],
+        script_path.is_file(),
+        "script_found should reflect workspace module dir"
+    );
+    assert_eq!(
+        body["embedded_found"],
+        embedded_binary_path(&tts_dir).is_file(),
+        "embedded_found should reflect workspace module dir"
+    );
+    assert!(
+        body["script_path"]
+            .as_str()
+            .unwrap_or("")
+            .ends_with("google_tts_fetch.py")
+    );
     assert!(body.get("build_hint").is_some());
 
     handle.shutdown().await;
