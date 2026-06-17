@@ -1,6 +1,6 @@
 use std::collections::{HashMap, VecDeque};
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use axum::extract::ws::{Message, WebSocket};
 use futures_util::{SinkExt, StreamExt};
@@ -92,15 +92,9 @@ impl EventsHub {
             connections_active: active,
             broadcast_count: self.inner.broadcast_count.load(Ordering::Relaxed),
             send_failures: self.inner.send_failures.load(Ordering::Relaxed),
-            dead_connections_removed: self
-                .inner
-                .dead_connections_removed
-                .load(Ordering::Relaxed),
+            dead_connections_removed: self.inner.dead_connections_removed.load(Ordering::Relaxed),
             dropped_oldest: self.inner.dropped_oldest.load(Ordering::Relaxed),
-            queue_max_depth_observed: self
-                .inner
-                .queue_max_depth_observed
-                .load(Ordering::Relaxed),
+            queue_max_depth_observed: self.inner.queue_max_depth_observed.load(Ordering::Relaxed),
         }
     }
 
@@ -124,7 +118,11 @@ impl EventsHub {
             );
             let active = clients.len();
             self.inner.log.connection_open(socket_id, active, queue_max);
-            info!(socket_id, connections_active = active, "ws events client connected");
+            info!(
+                socket_id,
+                connections_active = active,
+                "ws events client connected"
+            );
         }
 
         let hub = self.clone();
@@ -176,16 +174,12 @@ impl EventsHub {
             last.insert(message_type.clone(), message.clone());
         }
 
-        self.inner
-            .broadcast_count
-            .fetch_add(1, Ordering::Relaxed);
+        self.inner.broadcast_count.fetch_add(1, Ordering::Relaxed);
 
         let clients = self.inner.clients.read().await;
         let connection_count = clients.len();
         if !message_type.is_empty() {
-            self.inner
-                .log
-                .broadcast(&message_type, connection_count);
+            self.inner.log.broadcast(&message_type, connection_count);
         }
 
         let payload = match serde_json::to_string(&message) {
@@ -255,24 +249,17 @@ impl EventsHub {
             if guard.len() >= client.queue_max {
                 guard.pop_front();
                 self.inner.dropped_oldest.fetch_add(1, Ordering::Relaxed);
-                self.inner
-                    .log
-                    .outbound_queue_drop_oldest(&message_type);
+                self.inner.log.outbound_queue_drop_oldest(&message_type);
             }
             guard.push_back(message);
             let depth = guard.len();
             if depth >= client.queue_max.saturating_sub(4).max(1) {
-                self.inner.log.outbound_queue_pressure(
-                    depth,
-                    client.queue_max,
-                    &message_type,
-                );
+                self.inner
+                    .log
+                    .outbound_queue_pressure(depth, client.queue_max, &message_type);
             }
             let depth = depth as u64;
-            let mut observed = self
-                .inner
-                .queue_max_depth_observed
-                .load(Ordering::Relaxed);
+            let mut observed = self.inner.queue_max_depth_observed.load(Ordering::Relaxed);
             if depth > observed {
                 self.inner
                     .queue_max_depth_observed
@@ -302,7 +289,11 @@ impl EventsHub {
                 .fetch_add(1, Ordering::Relaxed);
             let active = clients.len();
             self.inner.log.connection_closed(socket_id, active);
-            info!(socket_id, connections_active = active, "ws events client disconnected");
+            info!(
+                socket_id,
+                connections_active = active,
+                "ws events client disconnected"
+            );
         }
     }
 }

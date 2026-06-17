@@ -2,12 +2,12 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use voicesub_subtitle::TranslationEvent;
 use voicesub_translation::{
-    arc_publish, arc_relevance, build_default_registry, ConfigGetter, DispatcherCallbacks,
-    MetricsCallback, SharedHttpClient, StructuredLogFn, StubTranslationProvider,
-    TranslationDispatcher, TranslationEngine, TranslationProvider,
+    ConfigGetter, DispatcherCallbacks, MetricsCallback, SharedHttpClient, StructuredLogFn,
+    StubTranslationProvider, TranslationDispatcher, TranslationEngine, TranslationProvider,
+    arc_publish, arc_relevance, build_default_registry,
 };
 
 fn stub_config(extra: Value) -> Value {
@@ -248,10 +248,12 @@ async fn dispatcher_publishes_incremental_and_completion_events() {
     let events = recorder.events.lock().unwrap().clone();
     assert!(!events.is_empty());
     assert!(events.iter().any(|event| !event.is_complete));
-    assert!(events
-        .last()
-        .map(|event| event.is_complete)
-        .unwrap_or(false));
+    assert!(
+        events
+            .last()
+            .map(|event| event.is_complete)
+            .unwrap_or(false)
+    );
     assert_eq!(events.last().unwrap().sequence, 1);
 }
 
@@ -394,12 +396,14 @@ async fn dispatcher_can_restart_after_stop() {
     tokio::time::sleep(Duration::from_millis(120)).await;
     dispatcher.stop().await;
 
-    assert!(recorder
-        .events
-        .lock()
-        .unwrap()
-        .iter()
-        .any(|event| event.sequence == 2 && !event.translations.is_empty()));
+    assert!(
+        recorder
+            .events
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|event| event.sequence == 2 && !event.translations.is_empty())
+    );
 }
 
 #[tokio::test]
@@ -590,19 +594,14 @@ async fn dispatcher_frees_concurrency_when_long_running_job_cancelled() {
 
     let deadline = Instant::now() + Duration::from_millis(800);
     loop {
-        let started = structured
-            .records
-            .lock()
-            .unwrap()
-            .iter()
-            .any(|record| {
-                record.get("event").and_then(|v| v.as_str()) == Some("translation_job_started")
-                    && record
-                        .get("payload")
-                        .and_then(|payload| payload.get("sequence"))
-                        .and_then(|v| v.as_u64())
-                        == Some(2)
-            });
+        let started = structured.records.lock().unwrap().iter().any(|record| {
+            record.get("event").and_then(|v| v.as_str()) == Some("translation_job_started")
+                && record
+                    .get("payload")
+                    .and_then(|payload| payload.get("sequence"))
+                    .and_then(|v| v.as_u64())
+                    == Some(2)
+        });
         if started || Instant::now() >= deadline {
             assert!(
                 started,
@@ -698,10 +697,12 @@ async fn dispatcher_timeout_emits_structured_event_and_still_completes() {
     assert!(!complete.translations[0].success);
 
     let records = structured.records.lock().unwrap().clone();
-    assert!(records
-        .iter()
-        .any(|record| record.get("event").and_then(|v| v.as_str())
-            == Some("translation_line_timeout")));
+    assert!(
+        records
+            .iter()
+            .any(|record| record.get("event").and_then(|v| v.as_str())
+                == Some("translation_line_timeout"))
+    );
 }
 
 #[tokio::test]

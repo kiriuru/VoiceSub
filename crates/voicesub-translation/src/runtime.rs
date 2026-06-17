@@ -112,11 +112,11 @@ impl TranslationRuntimeController {
         let translation = config.get("translation").cloned().unwrap_or(Value::Null);
         let readiness = if let Some(dispatcher) = &self.dispatcher {
             let handle = dispatcher.engine_handle();
-            let snapshot = match handle.try_lock() {
+
+            match handle.try_lock() {
                 Ok(guard) => guard.summarize_readiness(&translation),
                 Err(err) => translation_diagnostics_error(err.to_string()),
-            };
-            snapshot
+            }
         } else if let Some(engine) = &self.engine {
             engine.summarize_readiness(&translation)
         } else {

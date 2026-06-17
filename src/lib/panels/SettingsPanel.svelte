@@ -90,7 +90,7 @@
 
 
 
-<section class="glass-panel panel-padding stack">
+<section class="surface-card panel-padding stack">
 
   <div class="section-heading">
 

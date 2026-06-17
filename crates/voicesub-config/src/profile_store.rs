@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::atomic_io::atomic_write;
 use thiserror::Error;
@@ -42,10 +42,10 @@ impl ProfileStore {
         for entry in std::fs::read_dir(&self.profiles_dir)? {
             let entry = entry?;
             let path = entry.path();
-            if path.extension().and_then(|s| s.to_str()) == Some("json") {
-                if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
-                    names.push(stem.to_string());
-                }
+            if path.extension().and_then(|s| s.to_str()) == Some("json")
+                && let Some(stem) = path.file_stem().and_then(|s| s.to_str())
+            {
+                names.push(stem.to_string());
             }
         }
         names.sort();

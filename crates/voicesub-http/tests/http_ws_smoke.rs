@@ -4,7 +4,7 @@ mod common;
 
 use std::time::Duration;
 
-use common::{integration_lock, EphemeralRuntime, workspace_root as project_root};
+use common::{EphemeralRuntime, integration_lock, workspace_root as project_root};
 use futures_util::{SinkExt, StreamExt};
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::Message;
@@ -17,7 +17,8 @@ async fn http_responses_include_content_security_policy() {
     let addr = handle.bind_addr;
 
     let client = reqwest::Client::new();
-    let response = client
+    let response = runtime
+        .authed(&client)
         .get(format!("http://{addr}/api/health"))
         .timeout(Duration::from_secs(3))
         .send()
@@ -61,7 +62,8 @@ async fn runtime_start_emits_preflight_and_runtime_updates() {
         .expect("ok frame");
 
     let client = reqwest::Client::new();
-    let start = client
+    let start = runtime
+        .authed(&client)
         .post(format!("http://{addr}/api/runtime/start"))
         .json(&serde_json::json!({}))
         .timeout(Duration::from_secs(10))
@@ -77,15 +79,23 @@ async fn runtime_start_emits_preflight_and_runtime_updates() {
         let Ok(Some(Ok(Message::Text(text)))) = frame else {
             continue;
         };
-        let json: serde_json::Value = serde_json::from_str(&text).unwrap_or(serde_json::Value::Null);
-        let kind = json.get("type").and_then(|value| value.as_str()).unwrap_or("");
+        let json: serde_json::Value =
+            serde_json::from_str(&text).unwrap_or(serde_json::Value::Null);
+        let kind = json
+            .get("type")
+            .and_then(|value| value.as_str())
+            .unwrap_or("");
         if kind == "preflight_update" {
             saw_preflight = true;
         }
         if kind == "runtime_update" {
             let payload = json.get("payload").expect("runtime payload");
             assert!(
-                payload.get("event_sequence").and_then(|v| v.as_u64()).unwrap_or(0) > 0,
+                payload
+                    .get("event_sequence")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0)
+                    > 0,
                 "runtime_update must include event_sequence"
             );
             saw_runtime = true;
@@ -94,10 +104,14 @@ async fn runtime_start_emits_preflight_and_runtime_updates() {
             break;
         }
     }
-    assert!(saw_preflight, "expected preflight_update after runtime start");
+    assert!(
+        saw_preflight,
+        "expected preflight_update after runtime start"
+    );
     assert!(saw_runtime, "expected runtime_update after runtime start");
 
-    let _ = client
+    let _ = runtime
+        .authed(&client)
         .post(format!("http://{addr}/api/runtime/stop"))
         .timeout(Duration::from_secs(5))
         .send()
@@ -115,7 +129,8 @@ async fn health_endpoint_returns_ok() {
 
     let client = reqwest::Client::new();
     let url = format!("http://{addr}/api/health");
-    let response = client
+    let response = runtime
+        .authed(&client)
         .get(&url)
         .timeout(Duration::from_secs(3))
         .send()
@@ -125,6 +140,27 @@ async fn health_endpoint_returns_ok() {
     let body: serde_json::Value = response.json().await.expect("json");
     assert_eq!(body["status"], "ok");
     assert_eq!(body["version"], voicesub_types::PROJECT_VERSION);
+
+    handle.shutdown().await;
+}
+
+#[tokio::test]
+async fn public_live_endpoint_returns_ok_without_token() {
+    let _guard = integration_lock();
+    let runtime = EphemeralRuntime::new();
+    let handle = runtime.start().await;
+    let addr = handle.bind_addr;
+
+    let client = reqwest::Client::new();
+    let response = client
+        .get(format!("http://{addr}/live"))
+        .timeout(Duration::from_secs(3))
+        .send()
+        .await
+        .expect("live request");
+    assert!(response.status().is_success());
+    let body: serde_json::Value = response.json().await.expect("json");
+    assert_eq!(body["ok"], true);
 
     handle.shutdown().await;
 }
@@ -192,7 +228,9 @@ async fn settings_load_stub_ok() {
     let handle = runtime.start().await;
     let addr = handle.bind_addr;
 
-    let response = reqwest::Client::new()
+    let client = reqwest::Client::new();
+    let response = runtime
+        .authed(&client)
         .get(format!("http://{addr}/api/settings/load"))
         .send()
         .await
@@ -357,7 +395,9 @@ async fn google_tts_proxy_rejects_empty_query() {
     let handle = runtime.start().await;
     let addr = handle.bind_addr;
 
-    let resp = reqwest::Client::new()
+    let client = reqwest::Client::new();
+    let resp = runtime
+        .authed(&client)
         .get(format!("http://{addr}/api/tts/google?q=&tl=ru"))
         .timeout(Duration::from_secs(3))
         .send()
@@ -375,7 +415,9 @@ async fn python_tts_status_reports_script() {
     let handle = runtime.start().await;
     let addr = handle.bind_addr;
 
-    let resp = reqwest::Client::new()
+    let client = reqwest::Client::new();
+    let resp = runtime
+        .authed(&client)
         .get(format!("http://{addr}/api/tts/python/status"))
         .timeout(Duration::from_secs(3))
         .send()
@@ -397,7 +439,9 @@ async fn obs_url_points_to_overlay() {
     let handle = runtime.start().await;
     let addr = handle.bind_addr;
 
-    let body: serde_json::Value = reqwest::Client::new()
+    let client = reqwest::Client::new();
+    let body: serde_json::Value = runtime
+        .authed(&client)
         .get(format!("http://{addr}/api/obs/url"))
         .send()
         .await
@@ -449,7 +493,9 @@ async fn runtime_status_starts_idle() {
     let handle = runtime.start().await;
     let addr = handle.bind_addr;
 
-    let body: serde_json::Value = reqwest::Client::new()
+    let client = reqwest::Client::new();
+    let body: serde_json::Value = runtime
+        .authed(&client)
         .get(format!("http://{addr}/api/runtime/status"))
         .send()
         .await
@@ -469,6 +515,8 @@ async fn runtime_status_starts_idle() {
     assert_eq!(metrics["finals_emitted"], 0);
     assert_eq!(metrics["browser_transcripts_received"], 0);
     assert_eq!(metrics["ws_events_connections_active"], 0);
+    assert!(metrics.get("event_bus_subscribers").is_some());
+    assert!(metrics.get("background_tasks").is_some());
 
     handle.shutdown().await;
 }
@@ -479,7 +527,9 @@ async fn devices_audio_inputs_ok() {
     let runtime = EphemeralRuntime::new();
     let handle = runtime.start().await;
     let addr = handle.bind_addr;
-    let body: serde_json::Value = reqwest::Client::new()
+    let client = reqwest::Client::new();
+    let body: serde_json::Value = runtime
+        .authed(&client)
         .get(format!("http://{addr}/api/devices/audio-inputs"))
         .send()
         .await
@@ -497,7 +547,9 @@ async fn openai_recommended_models_ok() {
     let runtime = EphemeralRuntime::new();
     let handle = runtime.start().await;
     let addr = handle.bind_addr;
-    let body: serde_json::Value = reqwest::Client::new()
+    let client = reqwest::Client::new();
+    let body: serde_json::Value = runtime
+        .authed(&client)
         .get(format!("http://{addr}/api/openai/recommended-models"))
         .send()
         .await
@@ -515,7 +567,9 @@ async fn updates_check_ok() {
     let runtime = EphemeralRuntime::new();
     let handle = runtime.start().await;
     let addr = handle.bind_addr;
-    let body: serde_json::Value = reqwest::Client::new()
+    let client = reqwest::Client::new();
+    let body: serde_json::Value = runtime
+        .authed(&client)
         .post(format!("http://{addr}/api/updates/check"))
         .send()
         .await
@@ -526,10 +580,11 @@ async fn updates_check_ok() {
     assert_eq!(body["version"], voicesub_types::PROJECT_VERSION);
     assert_eq!(body["current_version"], voicesub_types::PROJECT_VERSION);
     assert_eq!(body["sync"]["enabled"], true);
-    let latest = body["sync"]["latest_known_version"]
-        .as_str()
-        .unwrap_or("");
-    assert!(!latest.is_empty(), "expected cached latest_known_version from GitHub");
+    let latest = body["sync"]["latest_known_version"].as_str().unwrap_or("");
+    assert!(
+        !latest.is_empty(),
+        "expected cached latest_known_version from GitHub"
+    );
     let update_available = body["sync"]["update_available"].as_bool().unwrap_or(false);
     assert_eq!(
         update_available,
@@ -547,7 +602,8 @@ async fn profiles_api_roundtrip() {
     let addr = handle.bind_addr;
     let client = reqwest::Client::new();
 
-    let list: serde_json::Value = client
+    let list: serde_json::Value = runtime
+        .authed(&client)
         .get(format!("http://{addr}/api/profiles"))
         .timeout(Duration::from_secs(3))
         .send()
@@ -559,7 +615,8 @@ async fn profiles_api_roundtrip() {
     let profiles = list["profiles"].as_array().expect("profiles array");
     assert!(profiles.iter().any(|item| item.as_str() == Some("default")));
 
-    let save: serde_json::Value = client
+    let save: serde_json::Value = runtime
+        .authed(&client)
         .post(format!("http://{addr}/api/profiles/stream"))
         .timeout(Duration::from_secs(3))
         .json(&serde_json::json!({ "payload": { "translation": { "enabled": true } } }))
@@ -572,7 +629,8 @@ async fn profiles_api_roundtrip() {
     assert_eq!(save["name"], "stream");
     assert_eq!(save["payload"]["profile"], "stream");
 
-    let load: serde_json::Value = client
+    let load: serde_json::Value = runtime
+        .authed(&client)
         .get(format!("http://{addr}/api/profiles/stream"))
         .timeout(Duration::from_secs(3))
         .send()
@@ -583,7 +641,8 @@ async fn profiles_api_roundtrip() {
         .expect("json");
     assert_eq!(load["payload"]["translation"]["enabled"], true);
 
-    let delete: serde_json::Value = client
+    let delete: serde_json::Value = runtime
+        .authed(&client)
         .delete(format!("http://{addr}/api/profiles/stream"))
         .timeout(Duration::from_secs(3))
         .send()
@@ -597,7 +656,7 @@ async fn profiles_api_roundtrip() {
     handle.shutdown().await;
 }
 
-/// Automated substitute for Phase 0 manual soak checklist (roadmap §5, PoC report).
+/// Automated substitute for Phase 0 manual soak checklist.
 /// Full 30 min OBS-over-window soak remains a manual operator step.
 #[tokio::test]
 async fn phase0_soak_checklist_automated() {
@@ -650,17 +709,23 @@ async fn phase0_soak_checklist_automated() {
         Message::Text(text) => text.to_string(),
         other => panic!("unexpected events frame: {other:?}"),
     };
-    let hello_json: serde_json::Value = serde_json::from_str(&hello_text).expect("events hello json");
+    let hello_json: serde_json::Value =
+        serde_json::from_str(&hello_text).expect("events hello json");
     assert_eq!(hello_json["type"], "hello");
 
-    let start = client
+    let start = runtime
+        .authed(&client)
         .post(format!("{base}/api/runtime/start"))
         .json(&serde_json::json!({}))
         .timeout(Duration::from_secs(10))
         .send()
         .await
         .expect("runtime start");
-    assert!(start.status().is_success(), "runtime start failed: {}", start.status());
+    assert!(
+        start.status().is_success(),
+        "runtime start failed: {}",
+        start.status()
+    );
 
     let (mut worker, _) = connect_async(format!("ws://{addr}/ws/asr_worker"))
         .await
@@ -696,17 +761,29 @@ async fn phase0_soak_checklist_automated() {
         let Ok(Some(Ok(Message::Text(text)))) = frame else {
             continue;
         };
-        let json: serde_json::Value = serde_json::from_str(&text).unwrap_or(serde_json::Value::Null);
-        let kind = json.get("type").and_then(|value| value.as_str()).unwrap_or("");
+        let json: serde_json::Value =
+            serde_json::from_str(&text).unwrap_or(serde_json::Value::Null);
+        let kind = json
+            .get("type")
+            .and_then(|value| value.as_str())
+            .unwrap_or("");
         if matches!(kind, "transcript_update" | "overlay_update") {
             if kind == "transcript_update" {
                 let payload = json.get("payload").expect("transcript payload");
                 assert!(
-                    payload.get("event_sequence").and_then(|v| v.as_u64()).unwrap_or(0) > 0,
+                    payload
+                        .get("event_sequence")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0)
+                        > 0,
                     "transcript_update must include monotonic event_sequence"
                 );
                 assert!(
-                    payload.get("created_at_ms").and_then(|v| v.as_u64()).unwrap_or(0) > 0,
+                    payload
+                        .get("created_at_ms")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0)
+                        > 0,
                     "transcript_update must include created_at_ms"
                 );
             }
@@ -751,16 +828,22 @@ async fn source_text_replacement_applies_on_asr_final_ingest() {
         "whole_word_only": true,
         "pairs": [{"source": "badword", "target": "REPLACED"}]
     });
-    let save = client
+    let save = runtime
+        .authed(&client)
         .post(format!("http://{addr}/api/settings/save"))
         .json(&serde_json::json!({ "payload": payload }))
         .timeout(Duration::from_secs(5))
         .send()
         .await
         .expect("settings save");
-    assert!(save.status().is_success(), "settings save failed: {}", save.status());
+    assert!(
+        save.status().is_success(),
+        "settings save failed: {}",
+        save.status()
+    );
 
-    let start = client
+    let start = runtime
+        .authed(&client)
         .post(format!("http://{addr}/api/runtime/start"))
         .json(&serde_json::json!({}))
         .timeout(Duration::from_secs(10))
@@ -808,7 +891,8 @@ async fn source_text_replacement_applies_on_asr_final_ingest() {
         let Ok(Some(Ok(Message::Text(text)))) = frame else {
             continue;
         };
-        let json: serde_json::Value = serde_json::from_str(&text).unwrap_or(serde_json::Value::Null);
+        let json: serde_json::Value =
+            serde_json::from_str(&text).unwrap_or(serde_json::Value::Null);
         if json.get("type").and_then(|value| value.as_str()) != Some("transcript_update") {
             continue;
         }

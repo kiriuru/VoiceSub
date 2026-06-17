@@ -1,4 +1,5 @@
 import { normalizeConfigPayload } from "../../src/lib/config-normalize";
+import { apiFetch } from "./loopback-api-client";
 import { getLineCards } from "../../src/lib/translation-helpers";
 import { setLocale } from "../../src/lib/i18n";
 import type { ConfigPayload, LocaleCode } from "../../src/lib/types";
@@ -90,7 +91,7 @@ export function applyDashboardUiPresentation(raw: ConfigPayload): void {
 }
 
 export async function fetchSettingsPayload(): Promise<ConfigPayload> {
-  const response = await fetch("/api/settings/load");
+  const response = await apiFetch("/api/settings/load");
   if (!response.ok) {
     throw new Error(`settings load HTTP ${response.status}`);
   }

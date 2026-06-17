@@ -10,7 +10,7 @@ use tokio_rustls::TlsConnector;
 use tracing::{debug, info, warn};
 
 use crate::error::TwitchError;
-use crate::filter::{to_chat_message, ChatMessageInput};
+use crate::filter::{ChatMessageInput, to_chat_message};
 use crate::service::TwitchLiveState;
 use crate::settings::TwitchChatMessage;
 use crate::trace;
@@ -71,13 +71,10 @@ pub async fn run_session(
     let connector = build_tls_connector()?;
     let server_name = ServerName::try_from(TWITCH_IRC_HOST.to_string())
         .map_err(|err| TwitchError::Tls(err.to_string()))?;
-    let tls = connector
-        .connect(server_name, tcp)
-        .await
-        .map_err(|err| {
-            trace::trace("irc", "tls_failed", json!({ "error": err.to_string() }));
-            TwitchError::Tls(err.to_string())
-        })?;
+    let tls = connector.connect(server_name, tcp).await.map_err(|err| {
+        trace::trace("irc", "tls_failed", json!({ "error": err.to_string() }));
+        TwitchError::Tls(err.to_string())
+    })?;
 
     let (reader, mut writer) = tokio::io::split(tls);
     let mut lines = BufReader::new(reader).lines();
@@ -321,9 +318,7 @@ fn parse_privmsg(line: &str) -> Option<ParsedPrivmsg> {
         .unwrap_or_else(|| login.clone());
     let msg_id = tag_map.get("id").cloned().unwrap_or_default();
     let is_mod = tag_map.get("mod").is_some_and(|v| v == "1");
-    let is_subscriber = tag_map
-        .get("subscriber")
-        .is_some_and(|v| v == "1");
+    let is_subscriber = tag_map.get("subscriber").is_some_and(|v| v == "1");
     let emotes_tag = tag_map.get("emotes").cloned().unwrap_or_default();
 
     Some(ParsedPrivmsg {
@@ -378,9 +373,6 @@ mod tests {
 
     #[test]
     fn redacts_pass_line() {
-        assert_eq!(
-            redact_outbound_line("PASS oauth:secret"),
-            "PASS oauth:***"
-        );
+        assert_eq!(redact_outbound_line("PASS oauth:secret"), "PASS oauth:***");
     }
 }

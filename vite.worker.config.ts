@@ -12,6 +12,7 @@ export default defineConfig({
   base: "/worker-assets/",
   root: "src-worker",
   build: {
+    target: "es2022",
     outDir: "../bin/worker",
     emptyOutDir: true,
   },

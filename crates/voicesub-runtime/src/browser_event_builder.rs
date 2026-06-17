@@ -5,35 +5,30 @@
 //! streaming only — browser partials pass through without that filter.
 
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
     Arc,
+    atomic::{AtomicBool, Ordering},
 };
 
 use tokio::sync::Mutex;
 use voicesub_subtitle::{TranscriptEvent, TranscriptKind, TranscriptSegment};
 
 use crate::http::PartialEmitCoordinator;
-use crate::trace::RuntimePipelineLog;
 
 const BROWSER_PROVIDER: &str = "browser_google";
 
 pub struct BrowserTranscriptEventBuilder {
     runtime_running: Arc<AtomicBool>,
     partial_emit: Arc<Mutex<PartialEmitCoordinator>>,
-    #[allow(dead_code)]
-    pipeline_log: RuntimePipelineLog,
 }
 
 impl BrowserTranscriptEventBuilder {
     pub fn new(
         runtime_running: Arc<AtomicBool>,
         partial_emit: Arc<Mutex<PartialEmitCoordinator>>,
-        pipeline_log: RuntimePipelineLog,
     ) -> Self {
         Self {
             runtime_running,
             partial_emit,
-            pipeline_log,
         }
     }
 
@@ -53,10 +48,9 @@ impl BrowserTranscriptEventBuilder {
         }
 
         let mut partial_emit = self.partial_emit.lock().await;
-        let (segment_id, revision, _started_now, previous_to_clear) =
-            partial_emit
-                .segment_state
-                .assign_segment_tracking(client_segment_id);
+        let (segment_id, revision, _started_now, previous_to_clear) = partial_emit
+            .segment_state
+            .assign_segment_tracking(client_segment_id);
         if let Some(previous) = previous_to_clear.as_deref() {
             partial_emit
                 .segment_state
@@ -91,10 +85,9 @@ impl BrowserTranscriptEventBuilder {
         }
 
         let mut partial_emit = self.partial_emit.lock().await;
-        let (segment_id, revision, _started_now, previous_to_clear) =
-            partial_emit
-                .segment_state
-                .assign_segment_tracking(client_segment_id);
+        let (segment_id, revision, _started_now, previous_to_clear) = partial_emit
+            .segment_state
+            .assign_segment_tracking(client_segment_id);
         if let Some(previous) = previous_to_clear.as_deref() {
             partial_emit
                 .segment_state
@@ -153,7 +146,6 @@ mod tests {
         BrowserTranscriptEventBuilder::new(
             Arc::new(AtomicBool::new(true)),
             Arc::new(Mutex::new(PartialEmitCoordinator::default())),
-            RuntimePipelineLog::new(None),
         )
     }
 

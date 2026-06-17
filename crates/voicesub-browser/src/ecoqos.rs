@@ -10,9 +10,9 @@ pub fn opt_out_chrome_power_throttling(pid: u32) {
 
     use windows::Win32::Foundation::CloseHandle;
     use windows::Win32::System::Threading::{
-        OpenProcess, ProcessPowerThrottling, SetProcessInformation,
-        PROCESS_POWER_THROTTLING_CURRENT_VERSION, PROCESS_POWER_THROTTLING_EXECUTION_SPEED,
-        PROCESS_POWER_THROTTLING_STATE, PROCESS_SET_INFORMATION,
+        OpenProcess, PROCESS_POWER_THROTTLING_CURRENT_VERSION,
+        PROCESS_POWER_THROTTLING_EXECUTION_SPEED, PROCESS_POWER_THROTTLING_STATE,
+        PROCESS_SET_INFORMATION, ProcessPowerThrottling, SetProcessInformation,
     };
 
     unsafe {

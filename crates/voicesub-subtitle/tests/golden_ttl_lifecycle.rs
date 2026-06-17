@@ -28,8 +28,14 @@ struct TtlGoldenScenario {
 #[derive(Debug, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 enum TtlGoldenStep {
-    TranscriptFinal { sequence: u64, text: String },
-    TranscriptPartial { sequence: u64, text: String },
+    TranscriptFinal {
+        sequence: u64,
+        text: String,
+    },
+    TranscriptPartial {
+        sequence: u64,
+        text: String,
+    },
     Translation {
         sequence: u64,
         source_text: String,
@@ -37,7 +43,9 @@ enum TtlGoldenStep {
         #[serde(default = "default_true")]
         is_complete: bool,
     },
-    SleepMs { ms: u64 },
+    SleepMs {
+        ms: u64,
+    },
 }
 
 #[derive(Debug, Deserialize)]
@@ -195,7 +203,10 @@ fn assert_expected(recorder: &RecordingPublisher, expected: &TtlExpected, source
         "{source_test} lifecycle_state"
     );
     if expected.completed_block_visible {
-        assert!(payload.completed_block_visible, "{source_test} completed_block");
+        assert!(
+            payload.completed_block_visible,
+            "{source_test} completed_block"
+        );
     }
     assert_eq!(
         payload.active_partial_text, expected.active_partial_text,

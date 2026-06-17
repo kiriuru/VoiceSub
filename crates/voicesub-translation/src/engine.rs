@@ -10,10 +10,10 @@ use tokio::time::sleep;
 use tracing::instrument;
 use voicesub_subtitle::TranslationItem;
 
-use crate::cache::{cache_key, TranslationCache, DEFAULT_MAX_ENTRIES};
+use crate::cache::{DEFAULT_MAX_ENTRIES, TranslationCache, cache_key};
 use crate::providers::{
-    build_default_registry, canonical_provider_name, normalize_source_lang, SharedHttpClient,
-    StubTranslationProvider, TranslationProvider, DEFAULT_REQUEST_TIMEOUT_SECONDS,
+    DEFAULT_REQUEST_TIMEOUT_SECONDS, SharedHttpClient, StubTranslationProvider,
+    TranslationProvider, build_default_registry, canonical_provider_name, normalize_source_lang,
 };
 
 const DEFAULT_PROVIDER: &str = "google_translate_v2";
@@ -212,11 +212,8 @@ impl TranslationEngine {
         }
         self.settings_signature = Some(signature);
         let cache_cfg = Self::normalized_cache_settings(translation_config);
-        self.cache.update_settings(
-            cache_cfg.enabled,
-            cache_cfg.persist,
-            cache_cfg.max_entries,
-        );
+        self.cache
+            .update_settings(cache_cfg.enabled, cache_cfg.persist, cache_cfg.max_entries);
     }
 
     pub fn prepare_request(&self, translation_config: &Value) -> PreparedRequest {
@@ -328,10 +325,7 @@ impl TranslationEngine {
             .slot_id
             .clone()
             .or_else(|| Some(line.slot_id.clone()));
-        let item_label = options
-            .label
-            .clone()
-            .or_else(|| Some(line.label.clone()));
+        let item_label = options.label.clone().or_else(|| Some(line.label.clone()));
 
         let provider = match self.providers.get(&line.provider_name) {
             Some(provider) => provider.clone(),
@@ -391,26 +385,26 @@ impl TranslationEngine {
             &normalized_target,
             source_text,
         );
-        if self.cache.enabled() {
-            if let Some(cached) = self.cache.get(&key) {
-                let diagnostics = provider.diagnostics(&line.provider_settings);
-                return LineTranslatePlan::Done(
-                    TranslationItem {
-                        target_lang: normalized_target,
-                        text: cached,
-                        provider: line.provider_name.clone(),
-                        slot_id: slot,
-                        label: item_label,
-                        provider_group: Some(line.provider_group.clone()),
-                        experimental: line.experimental,
-                        local_provider: line.local_provider,
-                        success: true,
-                        error: None,
-                        cached: true,
-                    },
-                    diagnostics,
-                );
-            }
+        if self.cache.enabled()
+            && let Some(cached) = self.cache.get(&key)
+        {
+            let diagnostics = provider.diagnostics(&line.provider_settings);
+            return LineTranslatePlan::Done(
+                TranslationItem {
+                    target_lang: normalized_target,
+                    text: cached,
+                    provider: line.provider_name.clone(),
+                    slot_id: slot,
+                    label: item_label,
+                    provider_group: Some(line.provider_group.clone()),
+                    experimental: line.experimental,
+                    local_provider: line.local_provider,
+                    success: true,
+                    error: None,
+                    cached: true,
+                },
+                diagnostics,
+            );
         }
 
         let mut call_settings = line.provider_settings.clone();
@@ -533,28 +527,28 @@ impl TranslationEngine {
 
         for (index, target_lang) in clean_targets.iter().enumerate() {
             let key = cache_key(&provider_name, source_lang, target_lang, source_text);
-            if self.cache.enabled() {
-                if let Some(cached) = self.cache.get(&key) {
-                    let diagnostics = provider.diagnostics(provider_settings);
-                    used_default_prompt |= diagnostics
-                        .get("used_default_prompt")
-                        .and_then(|v| v.as_bool())
-                        .unwrap_or(false);
-                    items[index] = Some(TranslationItem {
-                        target_lang: target_lang.clone(),
-                        text: cached,
-                        provider: provider_name.clone(),
-                        slot_id: None,
-                        label: None,
-                        provider_group: Some(info.group.to_string()),
-                        experimental: info.experimental,
-                        local_provider: info.local_provider,
-                        success: true,
-                        error: None,
-                        cached: true,
-                    });
-                    continue;
-                }
+            if self.cache.enabled()
+                && let Some(cached) = self.cache.get(&key)
+            {
+                let diagnostics = provider.diagnostics(provider_settings);
+                used_default_prompt |= diagnostics
+                    .get("used_default_prompt")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                items[index] = Some(TranslationItem {
+                    target_lang: target_lang.clone(),
+                    text: cached,
+                    provider: provider_name.clone(),
+                    slot_id: None,
+                    label: None,
+                    provider_group: Some(info.group.to_string()),
+                    experimental: info.experimental,
+                    local_provider: info.local_provider,
+                    success: true,
+                    error: None,
+                    cached: true,
+                });
+                continue;
             }
 
             let pseudo_line = PreparedLine {
@@ -622,9 +616,7 @@ impl TranslationEngine {
         }
     }
 
-    async fn translate_with_retry(
-        request: TranslateRetryRequest<'_>,
-    ) -> (TranslationItem, Value) {
+    async fn translate_with_retry(request: TranslateRetryRequest<'_>) -> (TranslationItem, Value) {
         let TranslateRetryRequest {
             provider,
             source_text,
@@ -700,7 +692,8 @@ impl TranslationEngine {
                     if let Some(obj) = last_diagnostics.as_object_mut() {
                         obj.insert("status_message".into(), Value::String(last_error.clone()));
                     }
-                    if attempt < max_attempts && Self::has_remaining_budget(normalized_budget, started_at)
+                    if attempt < max_attempts
+                        && Self::has_remaining_budget(normalized_budget, started_at)
                     {
                         Self::sleep_with_jitter(attempt, normalized_budget, started_at).await;
                         continue;
@@ -937,7 +930,10 @@ impl TranslationEngine {
                     .unwrap_or(DEFAULT_PROVIDER),
             ),
         );
-        for (index, line) in Self::normalized_lines(translation_config).into_iter().enumerate() {
+        for (index, line) in Self::normalized_lines(translation_config)
+            .into_iter()
+            .enumerate()
+        {
             payload.insert(format!("line:{index}:slot_id"), line.slot_id);
             payload.insert(format!("line:{index}:enabled"), line.enabled.to_string());
             payload.insert(format!("line:{index}:target_lang"), line.target_lang);

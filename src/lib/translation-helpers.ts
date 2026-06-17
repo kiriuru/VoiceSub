@@ -184,7 +184,7 @@ export function getLineMap(lines: TranslationLine[] | undefined): Map<string, Tr
 
 export function getSlotNumber(slotId: string): number {
   const match = String(slotId).match(/(\d+)$/);
-  return match ? Number.parseInt(match[1], 10) : 0;
+  return match?.[1] ? Number.parseInt(match[1], 10) : 0;
 }
 
 export function getSlotDisplayLabel(slotId: string, localeCode?: LocaleCode): string {

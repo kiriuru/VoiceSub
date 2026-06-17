@@ -1,5 +1,6 @@
 <script lang="ts">
   import StyleFieldGroup from "../components/StyleFieldGroup.svelte";
+  import SubtitleOutputPreview from "../components/SubtitleOutputPreview.svelte";
   import { locale, t } from "../i18n";
   import { fontOptions } from "../font-catalog";
   import {
@@ -13,7 +14,7 @@
     saveCustomPreset,
     seedSlotOverrideFromBase,
   } from "../style-presets";
-  import type { ConfigPayload, FontCatalog, StylePresetCatalog } from "../types";
+  import type { ConfigPayload, FontCatalog, RuntimeStatus, StylePresetCatalog } from "../types";
 
   const LINE_SLOTS = [
     "source",
@@ -27,6 +28,8 @@
   export let config: ConfigPayload;
   export let subtitleStylePresets: StylePresetCatalog;
   export let fontCatalog: FontCatalog | null;
+  export let runtime: RuntimeStatus | null = null;
+  export let overlayPayload: Record<string, unknown> | null = null;
   export let onChange: (next: ConfigPayload) => void;
 
   let activeSlot: (typeof LINE_SLOTS)[number] = "source";
@@ -130,7 +133,7 @@
   }
 </script>
 
-<section class="glass-panel panel-padding stack">
+<section class="surface-card panel-padding stack">
   <div class="section-heading">
     <div>
       <p class="eyebrow">{tr("style.eyebrow")}</p>
@@ -138,6 +141,13 @@
       <p class="muted">{tr("style.description")}</p>
     </div>
   </div>
+
+  <SubtitleOutputPreview
+    {config}
+    {runtime}
+    {overlayPayload}
+    {subtitleStylePresets}
+  />
 
   <label class="stack-field">
     <span>{tr("style.preset")}</span>

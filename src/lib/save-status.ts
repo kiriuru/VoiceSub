@@ -33,3 +33,20 @@ export function formatSaveStatusDisplay(
       );
   }
 }
+
+export function shouldAutoDismissSaveTone(tone: string): boolean {
+  return tone === "success" || tone === "warn" || tone === "error";
+}
+
+export function saveSnackbarDismissMs(tone: string): number {
+  switch (tone) {
+    case "success":
+      return 4000;
+    case "warn":
+      return 6500;
+    case "error":
+      return 9000;
+    default:
+      return 0;
+  }
+}

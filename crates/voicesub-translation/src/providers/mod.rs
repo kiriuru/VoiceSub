@@ -14,7 +14,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use thiserror::Error;
 
 pub use azure::AzureTranslatorProvider;
@@ -23,10 +23,10 @@ pub use experimental_google_web::{FreeWebTranslateProvider, GoogleWebProvider};
 pub use google_gas::GoogleGasUrlProvider;
 pub use google_v2::GoogleTranslateV2Provider;
 pub use google_v3::GoogleCloudTranslationV3Provider;
+pub use http::{SharedHttpClient, build_translation_http_client};
 pub use libretranslate::LibreTranslateProvider;
 pub use openai_compatible::OpenAICompatibleChatProvider;
 pub use public_mirrors::PublicLibreTranslateMirrorProvider;
-pub use http::{build_translation_http_client, SharedHttpClient};
 pub use stub::StubTranslationProvider;
 
 pub const SUPPORTED_PROVIDERS: &[&str] = &[

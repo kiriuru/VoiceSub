@@ -1,15 +1,17 @@
 use axum::{
+    Json,
     extract::{Query, State},
     http::StatusCode,
     response::IntoResponse,
-    Json,
 };
 use tracing::{debug, warn};
 use voicesub_logging::tts_trace;
-use voicesub_tts::{probe_python_runtime, run_google_tts_fetch, PythonRuntimeKind, PythonRuntimeStatus};
+use voicesub_tts::{
+    PythonRuntimeKind, PythonRuntimeStatus, probe_python_runtime, run_google_tts_fetch,
+};
 
 use super::state::HttpState;
-use super::tts_proxy::{audio_mpeg_response, validate_tts_query, GoogleTtsQuery};
+use super::tts_proxy::{GoogleTtsQuery, audio_mpeg_response, validate_tts_query};
 
 pub async fn python_tts_status(
     State(state): State<std::sync::Arc<HttpState>>,

@@ -8,9 +8,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde::Serialize;
 use serde_json::Value;
 use voicesub_config::ProjectPaths;
-use voicesub_logging::{backbone_log_paths, deep_trace_log_paths, redact_data, BackboneLogs, DEEP_TRACE_LOG_FILES};
-use zip::write::SimpleFileOptions;
+use voicesub_logging::{
+    BackboneLogs, DEEP_TRACE_LOG_FILES, backbone_log_paths, deep_trace_log_paths, redact_data,
+};
 use zip::ZipWriter;
+use zip::write::SimpleFileOptions;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ExportFileInfo {
@@ -157,14 +159,12 @@ impl ExportService {
             "core.log": "backbone application log",
             "runtime-events.log": "runtime events log"
         });
-        if include_deep_traces {
-            if let Some(map) = files.as_object_mut() {
-                for name in DEEP_TRACE_LOG_FILES {
-                    map.insert(
-                        (*name).into(),
-                        Value::String(format!("deep diagnostic JSONL trace ({name})")),
-                    );
-                }
+        if include_deep_traces && let Some(map) = files.as_object_mut() {
+            for name in DEEP_TRACE_LOG_FILES {
+                map.insert(
+                    (*name).into(),
+                    Value::String(format!("deep diagnostic JSONL trace ({name})")),
+                );
             }
         }
         serde_json::json!({

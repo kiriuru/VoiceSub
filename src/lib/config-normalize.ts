@@ -43,9 +43,11 @@ function normalizeTranslationLines(
     const fallbackTargets =
       Array.isArray(targetLanguages) && targetLanguages.length ? targetLanguages : ["en"];
     fallbackTargets.slice(0, CANONICAL_TRANSLATION_SLOTS.length).forEach((targetLang, index) => {
+      const slotId = CANONICAL_TRANSLATION_SLOTS[index];
+      if (!slotId) return;
       const lang = String(targetLang || "").trim().toLowerCase() || "en";
       normalized.push({
-        slot_id: CANONICAL_TRANSLATION_SLOTS[index],
+        slot_id: slotId,
         enabled: true,
         target_lang: lang,
         provider: fallbackProvider,

@@ -204,13 +204,7 @@ pub async fn run_google_tts_fetch(
     let tl = normalize_tts_lang(lang);
     let embedded = embedded_binary_path(tts_module_dir);
     if embedded.is_file() {
-        let bytes = run_fetch_with_retries(
-            &embedded.display().to_string(),
-            &[],
-            &tl,
-            text,
-        )
-        .await?;
+        let bytes = run_fetch_with_retries(&embedded.display().to_string(), &[], &tl, text).await?;
         return Ok((bytes, PythonRuntimeKind::Embedded));
     }
 
@@ -318,9 +312,7 @@ pub async fn probe_python_runtime(tts_module_dir: &Path) -> PythonRuntimeStatus 
         if !output.status.success() {
             continue;
         }
-        let version = String::from_utf8_lossy(&output.stdout)
-            .trim()
-            .to_string();
+        let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
         let version = if version.is_empty() {
             String::from_utf8_lossy(&output.stderr).trim().to_string()
         } else {
@@ -373,7 +365,10 @@ mod tests {
         assert!(parts.windows(3).any(|w| w == ["modules", "tts", "runtime"]));
         assert!(parts.iter().any(|p| p == runtime_platform_dir()));
         #[cfg(windows)]
-        assert_eq!(parts.last().map(String::as_str), Some("google_tts_fetch.exe"));
+        assert_eq!(
+            parts.last().map(String::as_str),
+            Some("google_tts_fetch.exe")
+        );
         #[cfg(not(windows))]
         assert_eq!(parts.last().map(String::as_str), Some("google_tts_fetch"));
     }

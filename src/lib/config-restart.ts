@@ -25,11 +25,13 @@ export function formatReasonList(reasons: string[], locale?: LocaleCode): string
   const tr = (key: string, params?: Record<string, string>) => t(key, params, locale);
   if (reasons.length <= 1) return reasons[0] || "";
   if (reasons.length === 2) {
-    return tr("format.list.two", { first: reasons[0], second: reasons[1] });
+    const first = reasons[0] ?? "";
+    const second = reasons[1] ?? "";
+    return tr("format.list.two", { first, second });
   }
   return tr("format.list.many", {
     head: reasons.slice(0, -1).join(", "),
-    last: reasons[reasons.length - 1],
+    last: reasons[reasons.length - 1] ?? "",
   });
 }
 

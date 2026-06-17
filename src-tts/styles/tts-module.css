@@ -1,8 +1,42 @@
 @import "../../src/lib/styles/global.css";
 
-/* TTS module window — shared VoiceSub shell, slightly narrower max width */
+/* TTS module window — aligned with dashboard M3 shell */
 .tts-module-shell {
-  max-width: 960px;
+  max-width: var(--content-max-width);
+  margin: 0 auto;
+  padding: var(--space-4) var(--space-5) var(--space-3);
+  gap: var(--space-4);
+}
+
+.tts-module-footer {
+  margin-top: auto;
+  padding-inline: 0;
+}
+
+.tts-top-bar {
+  border-radius: var(--radius-lg);
+  flex-wrap: wrap;
+  min-height: auto;
+  padding-top: var(--space-3);
+  padding-bottom: var(--space-3);
+  align-items: flex-start;
+}
+
+.tts-top-bar .tts-chrome__brand {
+  flex: 1 1 320px;
+  min-width: 0;
+}
+
+.tts-top-bar .tts-chrome__actions {
+  margin-left: auto;
+}
+
+.tts-section-nav {
+  margin: 0;
+}
+
+.tts-panel-card {
+  min-width: 0;
 }
 
 .tts-chrome {

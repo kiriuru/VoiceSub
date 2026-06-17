@@ -65,7 +65,7 @@ export async function ensureMicrophonePermission(state: BrowserAsrState, appendL
         monitor.analyser.getByteTimeDomainData(monitor.rmsBuffer as Uint8Array<ArrayBuffer>);
         let sum = 0;
         for (let index = 0; index < monitor.rmsBuffer.length; index += 1) {
-          const centered = (monitor.rmsBuffer[index] - 128) / 128;
+          const centered = ((monitor.rmsBuffer[index] ?? 128) - 128) / 128;
           sum += centered * centered;
         }
         micRms = Math.sqrt(sum / monitor.rmsBuffer.length);
@@ -82,9 +82,6 @@ export async function ensureMicrophonePermission(state: BrowserAsrState, appendL
       state.micActiveRecentMs = Math.max(0, nowMs - state.lastMicActivityAt);
     } else {
       state.micActiveRecentMs = null;
-    }
-    if (state.micRms >= MIC_VOICE_RMS_THRESHOLD && !state.micTrackMuted) {
-      (state as BrowserAsrState & { lastHighRmsAt?: number }).lastHighRmsAt = nowMs;
     }
     state.micHealthUpdatedAt = nowMs;
   };

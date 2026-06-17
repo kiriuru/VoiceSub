@@ -32,4 +32,11 @@ describe("recognition-error-logic", () => {
     expect(classified.kind).toBe("terminal_permission");
     expect(classified.terminalReason).toBe("permission_denied");
   });
+
+  it("maps exhausted language fallback to terminal language reason", () => {
+    const state = createBrowserAsrStateSeed({ webSpeechLanguageSoftFallbackUsed: true });
+    const classified = classifyRecognitionError(errorEvent("language-not-supported"), undefined, state);
+    expect(classified.kind).toBe("terminal_language");
+    expect(classified.terminalReason).toBe("language_not_supported");
+  });
 });

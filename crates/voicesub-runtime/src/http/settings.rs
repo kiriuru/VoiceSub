@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
+use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use axum::Json;
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use voicesub_config::{build_font_catalog, normalize_config_payload, read_full_logging_enabled};
 use voicesub_logging::apply_logging_preferences;
@@ -61,10 +61,7 @@ pub async fn settings_save(
         }
     };
 
-    apply_logging_preferences(
-        &state.paths.logs_dir,
-        read_full_logging_enabled(&payload),
-    );
+    apply_logging_preferences(&state.paths.logs_dir, read_full_logging_enabled(&payload));
     state.translation.lock().await.apply_live_settings();
     state.obs_captions.apply_live_settings().await;
     state.subtitle.republish_latest().await;

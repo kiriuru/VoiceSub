@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use thiserror::Error;
 use tracing::{info, warn};
 
@@ -135,9 +135,7 @@ impl ConfigStore {
         let root = payload
             .as_object_mut()
             .ok_or_else(|| ConfigError::Invalid("config root is not an object".into()))?;
-        let updates = root
-            .entry("updates")
-            .or_insert_with(|| json!({}));
+        let updates = root.entry("updates").or_insert_with(|| json!({}));
         let updates_obj = updates
             .as_object_mut()
             .ok_or_else(|| ConfigError::Invalid("updates is not an object".into()))?;
@@ -150,10 +148,8 @@ impl ConfigStore {
             Value::String(checked_utc.to_string()),
         );
         let normalized = normalize_config_payload(payload);
-        self.document = ConfigDocument::from_payload(
-            normalized,
-            self.document.loaded_from().to_string(),
-        );
+        self.document =
+            ConfigDocument::from_payload(normalized, self.document.loaded_from().to_string());
         self.save()
     }
 

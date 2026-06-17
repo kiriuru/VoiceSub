@@ -8,8 +8,8 @@ use tokio::time::sleep;
 use std::sync::Arc;
 
 use super::{
+    ProviderError, ProviderInfo, TranslateRequest, TranslationProvider, base_diagnostics, http,
     http::SharedHttpClient,
-    base_diagnostics, http, ProviderError, ProviderInfo, TranslateRequest, TranslationProvider,
 };
 
 /// Deterministic provider for dispatcher integration tests (SST `_StubTranslationEngine`).

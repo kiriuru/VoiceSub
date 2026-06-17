@@ -2,11 +2,12 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use axum::{
+    Router,
     extract::{State, WebSocketUpgrade},
-    http::{header, HeaderValue},
+    http::{HeaderValue, header},
+    middleware,
     response::{Html, IntoResponse, Response},
     routing::{get, post},
-    Router,
 };
 use tower_http::services::ServeDir;
 use tower_http::set_header::SetResponseHeaderLayer;
@@ -15,15 +16,16 @@ use voicesub_config::build_project_fonts_stylesheet;
 use super::devices::audio_inputs;
 use super::exports::{export_diagnostics, list_exports};
 use super::logs::{logs_client_event, logs_ui_trace};
+use super::loopback_auth::{LoopbackAuth, loopback_auth_middleware};
 use super::openai::{list_models, recommended_models, usable_models};
 use super::profiles::{delete_profile, list_profiles, load_profile, save_profile};
 use super::runtime::{obs_url, runtime_start, runtime_status, runtime_stop};
 use super::settings::{settings_load, settings_save};
-use super::ui_sync::ui_sync;
 use super::state::HttpState;
 use super::tts_proxy::google_tts_proxy;
 use super::tts_python::{python_tts_proxy, python_tts_status};
 use super::twitch_oauth::{twitch_oauth_complete, twitch_oauth_open, twitch_oauth_pending};
+use super::ui_sync::ui_sync;
 use super::updates::{check_updates, version_info};
 
 pub fn build_router(state: Arc<HttpState>) -> Router {
@@ -46,7 +48,7 @@ pub fn build_router(state: Arc<HttpState>) -> Router {
     let tts_static = ServeDir::new(paths.tts_dist.clone());
     let project_fonts_static = ServeDir::new(paths.fonts_dir.clone());
 
-    Router::new()
+    let protected_api = Router::new()
         .route("/api/health", get(health))
         .route("/api/version", get(version_info_route))
         .route("/api/devices/audio-inputs", get(audio_inputs))
@@ -62,7 +64,10 @@ pub fn build_router(state: Arc<HttpState>) -> Router {
         .route("/api/tts/google", get(google_tts_proxy))
         .route("/api/tts/python", get(python_tts_proxy))
         .route("/api/tts/python/status", get(python_tts_status))
-        .route("/api/tts/twitch/oauth-complete", post(twitch_oauth_complete))
+        .route(
+            "/api/tts/twitch/oauth-complete",
+            post(twitch_oauth_complete),
+        )
         .route("/api/tts/twitch/oauth-open", post(twitch_oauth_open))
         .route("/api/tts/twitch/oauth-pending", get(twitch_oauth_pending))
         .route("/api/exports", get(list_exports))
@@ -76,6 +81,13 @@ pub fn build_router(state: Arc<HttpState>) -> Router {
         .route("/api/runtime/stop", post(runtime_stop))
         .route("/api/runtime/status", get(runtime_status))
         .route("/api/obs/url", get(obs_url))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            loopback_auth_middleware,
+        ));
+
+    let public_routes = Router::new()
+        .route("/live", get(live))
         .route("/", get(dashboard_index))
         .route("/google-asr", get(google_asr_page))
         .route("/google-asr-edge", get(google_asr_edge_page))
@@ -89,10 +101,19 @@ pub fn build_router(state: Arc<HttpState>) -> Router {
         .nest_service("/worker-assets", worker_static)
         .nest_service("/assets", dashboard_assets)
         .nest_service("/tts-assets", tts_static)
-        .nest_service("/project-fonts", project_fonts_static)
+        .nest_service("/project-fonts", project_fonts_static);
+
+    Router::new()
+        .merge(protected_api)
+        .merge(public_routes)
         .layer(csp)
         .layer(no_cache)
         .with_state(state)
+}
+
+/// Public liveness probe for OBS overlay (no session token).
+async fn live() -> impl IntoResponse {
+    axum::Json(serde_json::json!({ "ok": true }))
 }
 
 async fn health(State(state): State<Arc<HttpState>>) -> impl IntoResponse {
@@ -111,22 +132,24 @@ async fn version_info_route(State(state): State<Arc<HttpState>>) -> impl IntoRes
 }
 
 async fn dashboard_index(State(state): State<Arc<HttpState>>) -> impl IntoResponse {
-    serve_html_candidate(
+    serve_trusted_html(
+        &state.loopback_auth,
         state.paths.dashboard_dist.join("index.html"),
         "<!doctype html><html><head><title>VoiceSub</title></head><body><h1>VoiceSub dashboard</h1><p>Run <code>npm run build</code> for Svelte bundle.</p></body></html>",
     )
 }
 
 async fn google_asr_page(State(state): State<Arc<HttpState>>) -> impl IntoResponse {
-    serve_worker_page(&state.paths)
+    serve_trusted_worker_page(&state.paths, &state.loopback_auth)
 }
 
 async fn google_asr_edge_page(State(state): State<Arc<HttpState>>) -> impl IntoResponse {
-    serve_worker_page(&state.paths)
+    serve_trusted_worker_page(&state.paths, &state.loopback_auth)
 }
 
 async fn tts_page(State(state): State<Arc<HttpState>>) -> impl IntoResponse {
-    serve_html_candidate(
+    serve_trusted_html(
+        &state.loopback_auth,
         state.paths.tts_dist.join("index.html"),
         "<!doctype html><html><body><h1>VoiceSub TTS module (run npm run build:tts)</h1></body></html>",
     )
@@ -162,20 +185,32 @@ async fn ws_asr_worker(
     })
 }
 
-fn serve_worker_page(paths: &voicesub_config::ProjectPaths) -> Response {
-    serve_html_candidate(
+fn serve_trusted_worker_page(
+    paths: &voicesub_config::ProjectPaths,
+    auth: &LoopbackAuth,
+) -> Response {
+    serve_trusted_html(
+        auth,
         paths.worker_dist.join("index.html"),
         "<!doctype html><html><body><h1>VoiceSub Web Speech worker (run npm run build)</h1></body></html>",
     )
 }
 
-fn serve_html_candidate(path: PathBuf, fallback: &str) -> Response {
-    if path.is_file() {
-        if let Ok(bytes) = std::fs::read(path) {
-            if let Ok(text) = String::from_utf8(bytes) {
-                return Html(text).into_response();
-            }
-        }
+fn serve_trusted_html(auth: &LoopbackAuth, path: PathBuf, fallback: &str) -> Response {
+    let html = read_html_text(path, fallback);
+    Html(auth.inject_token_script(&html)).into_response()
+}
+
+fn read_html_text(path: PathBuf, fallback: &str) -> String {
+    if path.is_file()
+        && let Ok(bytes) = std::fs::read(path)
+        && let Ok(text) = String::from_utf8(bytes)
+    {
+        return text;
     }
-    Html(fallback.to_string()).into_response()
+    fallback.to_string()
+}
+
+fn serve_html_candidate(path: PathBuf, fallback: &str) -> Response {
+    Html(read_html_text(path, fallback)).into_response()
 }

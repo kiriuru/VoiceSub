@@ -2,7 +2,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use serde_json::json;
-use voicesub_config::{import_sst_json_value, ConfigStore};
+use voicesub_config::{ConfigStore, import_sst_json_value};
 
 #[test]
 fn patch_updates_metadata_persists_only_updates_section() {

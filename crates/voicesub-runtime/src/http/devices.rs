@@ -1,5 +1,5 @@
-use axum::response::{IntoResponse, Response};
 use axum::Json;
+use axum::response::{IntoResponse, Response};
 use serde_json::json;
 
 /// Browser Speech uses Chrome `getUserMedia`; core returns an empty device list for API parity.

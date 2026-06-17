@@ -5,8 +5,8 @@ use reqwest::{Client, Method};
 use serde_json::Value;
 
 use super::{
-    ProviderError, DEFAULT_HTTP_CONNECT_TIMEOUT_SECONDS, DEFAULT_HTTP_KEEPALIVE_EXPIRY_SECONDS,
-    DEFAULT_HTTP_KEEPALIVE_LIMIT, DEFAULT_REQUEST_TIMEOUT_SECONDS,
+    DEFAULT_HTTP_CONNECT_TIMEOUT_SECONDS, DEFAULT_HTTP_KEEPALIVE_EXPIRY_SECONDS,
+    DEFAULT_HTTP_KEEPALIVE_LIMIT, DEFAULT_REQUEST_TIMEOUT_SECONDS, ProviderError,
 };
 
 /// Shared translation HTTP client (SST `TranslationEngine._get_or_create_http_client` parity).
@@ -50,10 +50,10 @@ impl SharedHttpClient {
     }
 
     pub fn client(&self) -> Client {
-        if let Ok(slot) = self.provider.read() {
-            if let Some(provider) = slot.as_ref() {
-                return provider();
-            }
+        if let Ok(slot) = self.provider.read()
+            && let Some(provider) = slot.as_ref()
+        {
+            return provider();
         }
         self.fallback.clone()
     }
@@ -115,20 +115,6 @@ pub async fn request_json(
     Ok(response.json().await?)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn build_translation_http_client_is_reusable() {
-        let client = build_translation_http_client();
-        assert!(client
-            .get("https://translation.googleapis.com")
-            .build()
-            .is_ok());
-    }
-}
-
 pub fn html_unescape(value: &str) -> String {
     let mut out = value.to_string();
     for (entity, ch) in [
@@ -142,4 +128,20 @@ pub fn html_unescape(value: &str) -> String {
         out = out.replace(entity, ch);
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn build_translation_http_client_is_reusable() {
+        let client = build_translation_http_client();
+        assert!(
+            client
+                .get("https://translation.googleapis.com")
+                .build()
+                .is_ok()
+        );
+    }
 }

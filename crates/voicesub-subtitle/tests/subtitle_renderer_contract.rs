@@ -72,7 +72,14 @@ fn renderer_exposes_partial_transition_classifier() {
     let source = subtitle_style_js();
     assert_contains(&source, "classifyPartialTransition", "export");
     assert_contains(&source, "classifyPartialTransition,", "public export list");
-    for label in ["initial", "identical", "extension", "shrink", "revision", "jump"] {
+    for label in [
+        "initial",
+        "identical",
+        "extension",
+        "shrink",
+        "revision",
+        "jump",
+    ] {
         assert_contains(&source, &format!("\"{label}\""), "transition label");
     }
 }
@@ -131,7 +138,11 @@ fn compose_render_rows_marks_completed_with_partial_source_as_transient() {
 fn compose_render_rows_skips_partial_only_shortcut_for_completed_with_partial() {
     let source = subtitle_style_js();
     assert_contains(&source, "isCompletedWithPartial", "composer");
-    assert_contains(&source, "!isCompletedWithPartial", "partial-only shortcut guard");
+    assert_contains(
+        &source,
+        "!isCompletedWithPartial",
+        "partial-only shortcut guard",
+    );
     assert_contains(
         &source,
         "!payload?.completed_block_visible && !isCompletedWithPartial",
@@ -166,7 +177,11 @@ fn renderer_persists_dom_refs_as_weakref_when_supported() {
     let source = subtitle_style_js();
     assert_contains(&source, "function _surfaceRefFor", "weakref helper");
     assert_contains(&source, "function _derefSurfaceRef", "weakref helper");
-    assert_contains(&source, "typeof WeakRef === \"function\"", "weakref feature detect");
+    assert_contains(
+        &source,
+        "typeof WeakRef === \"function\"",
+        "weakref feature detect",
+    );
     assert_contains(
         &source,
         "_surfaceRefsFromElements(nextEntrySurfaces)",
@@ -183,7 +198,11 @@ fn renderer_persists_dom_refs_as_weakref_when_supported() {
 #[test]
 fn slow_path_releases_orphaned_surfaces_before_innerhtml_wipe() {
     let source = subtitle_style_js();
-    assert_contains(&source, "function _releaseOrphanedSurfaces", "orphan cleanup");
+    assert_contains(
+        &source,
+        "function _releaseOrphanedSurfaces",
+        "orphan cleanup",
+    );
     assert_contains(
         &source,
         "const keepSurfaces = new Set(nextEntrySurfaces)",
@@ -194,7 +213,11 @@ fn slow_path_releases_orphaned_surfaces_before_innerhtml_wipe() {
         "_releaseOrphanedSurfaces(previousEntrySurfaces, keepSurfaces)",
         "orphan cleanup call",
     );
-    assert_contains(&source, "delete surface.__sstAppliedStyleMap", "style map cleanup");
+    assert_contains(
+        &source,
+        "delete surface.__sstAppliedStyleMap",
+        "style map cleanup",
+    );
 }
 
 #[test]
@@ -241,7 +264,11 @@ fn renderer_exports_finalization_fast_path_helpers() {
         "surface.removeChild(surface.firstChild)",
         "finalize helper",
     );
-    assert_contains(&helper_body, "surface.textContent = text", "finalize helper");
+    assert_contains(
+        &helper_body,
+        "surface.textContent = text",
+        "finalize helper",
+    );
 }
 
 #[test]

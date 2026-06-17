@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use serde_json::{json, Value};
-use voicesub_logging::{pipeline_trace, StructuredRuntimeLogger};
+use serde_json::{Value, json};
+use voicesub_logging::{StructuredRuntimeLogger, pipeline_trace};
 
 pub type StructuredLogFn = Arc<dyn Fn(&str, &str, Value) + Send + Sync>;
 
@@ -11,9 +11,7 @@ pub const RUNTIME_ORCHESTRATOR_SOURCE: &str = "runtime_orchestrator";
 pub const RUNTIME_STATE_SOURCE: &str = "runtime_state_controller";
 pub const RUNTIME_INGEST_SOURCE: &str = "runtime_ingest";
 
-pub fn structured_log_from_runtime_logger(
-    logger: Arc<StructuredRuntimeLogger>,
-) -> StructuredLogFn {
+pub fn structured_log_from_runtime_logger(logger: Arc<StructuredRuntimeLogger>) -> StructuredLogFn {
     Arc::new(move |source, event, fields| {
         let mut map = BTreeMap::new();
         if let Some(obj) = fields.as_object() {
@@ -169,14 +167,12 @@ mod tests {
     fn structured_callback_receives_runtime_events() {
         let seen = Arc::new(Mutex::new(Vec::new()));
         let seen_cb = seen.clone();
-        let log = RuntimePipelineLog::new(Some(Arc::new(
-            move |source, event, fields| {
-                seen_cb
-                    .lock()
-                    .unwrap()
-                    .push((source.to_string(), event.to_string(), fields));
-            },
-        )));
+        let log = RuntimePipelineLog::new(Some(Arc::new(move |source, event, fields| {
+            seen_cb
+                .lock()
+                .unwrap()
+                .push((source.to_string(), event.to_string(), fields));
+        })));
         log.runtime_status_duplicate_suppressed();
         let guard = seen.lock().unwrap();
         assert_eq!(guard.len(), 1);

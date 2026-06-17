@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 
 use serde_json::Value;
 use tracing::{debug, info};
-use voicesub_audio::{PlaybackFinished, PlaybackHub, CHANNEL_SPEECH, CHANNEL_TWITCH};
+use voicesub_audio::{CHANNEL_SPEECH, CHANNEL_TWITCH, PlaybackFinished, PlaybackHub};
 use voicesub_twitch::TwitchChatMessage;
 
 use crate::channel_orchestrator::{ChannelOrchestrator, CompletionWaiter};
@@ -195,10 +195,7 @@ mod tests {
             "lifecycle_state": "completed_only",
             "visible_items": [{"text": "hello", "kind": "source"}]
         }));
-        assert!(service
-            .queue_snapshot(CHANNEL_SPEECH)
-            .unwrap()
-            .is_empty());
+        assert!(service.queue_snapshot(CHANNEL_SPEECH).unwrap().is_empty());
     }
 
     #[tokio::test]

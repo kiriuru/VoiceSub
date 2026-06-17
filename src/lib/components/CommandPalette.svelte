@@ -85,9 +85,11 @@
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
       selectedIndex = Math.max(selectedIndex - 1, 0);
-    } else if (event.key === "Enter" && filtered[selectedIndex]) {
+    } else if (event.key === "Enter") {
+      const item = filtered[selectedIndex];
+      if (!item) return;
       event.preventDefault();
-      void runItem(filtered[selectedIndex]);
+      void runItem(item);
     }
   }
 
@@ -129,9 +131,11 @@
           bind:value={query}
           on:keydown={(e) => {
             e.stopPropagation();
-            if (e.key === "Enter" && filtered[selectedIndex]) {
+            if (e.key === "Enter") {
+              const item = filtered[selectedIndex];
+              if (!item) return;
               e.preventDefault();
-              void runItem(filtered[selectedIndex]);
+              void runItem(item);
             }
           }}
         />

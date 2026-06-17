@@ -2,7 +2,11 @@ use std::collections::HashMap;
 
 use crate::settings::{TwitchReplacement, TwitchTtsSettings};
 
-pub fn resolve_spoken_nick(settings: &TwitchTtsSettings, login: &str, display_name: &str) -> String {
+pub fn resolve_spoken_nick(
+    settings: &TwitchTtsSettings,
+    login: &str,
+    display_name: &str,
+) -> String {
     let map = replacement_map(&settings.nick_replacements);
     if let Some(hit) = map.get(display_name.trim()) {
         return hit.clone();
@@ -43,5 +47,4 @@ mod tests {
         });
         assert_eq!(resolve_spoken_nick(&settings, "alice", "Alice"), "Алиса");
     }
-
 }

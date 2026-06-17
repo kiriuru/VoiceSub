@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 fn percent_encode_filename(input: &str) -> String {
     // Encode everything except RFC3986 "unreserved" characters.

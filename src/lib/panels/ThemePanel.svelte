@@ -45,8 +45,8 @@
   }
 
   function applyUiPreset(presetId: string) {
-    const preset = UI_THEME_PRESETS.find((item) => item.id === presetId) || UI_THEME_PRESETS[0];
-    if (!preset.theme || !preset.palette) return;
+    const preset = UI_THEME_PRESETS.find((item) => item.id === presetId) ?? UI_THEME_PRESETS[0];
+    if (!preset?.theme || !preset.palette) return;
     const nextPalette = { ...palette, ...preset.palette };
     document.documentElement.dataset.uiTheme = preset.theme;
     applyUiPaletteToDocument(nextPalette);
@@ -65,7 +65,7 @@
   }
 </script>
 
-<section class="glass-panel panel-padding stack">
+<section class="surface-card panel-padding stack">
   <div class="section-heading">
     <div>
       <p class="eyebrow">{tr("tab.theme")}</p>

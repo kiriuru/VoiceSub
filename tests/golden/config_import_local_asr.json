@@ -31,5 +31,5 @@
       "enabled": true
     }
   },
-  "source_test": "voicesub roadmap §9"
+  "source_test": "voicesub config import"
 }

@@ -1,5 +1,5 @@
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use serde_json::Value;
@@ -11,7 +11,7 @@ use crate::presentation::SubtitlePresentation;
 use crate::trace::SubtitleLog;
 use crate::types::{TranscriptEvent, TranscriptKind, TranslationEvent};
 
-use crate::router::{boxed_config_getter, ConfigGetter, PublishCallback};
+use crate::router::{ConfigGetter, PublishCallback, boxed_config_getter};
 
 pub(crate) struct RouterInner {
     pub lifecycle: SubtitleLifecycleCore,
@@ -87,9 +87,7 @@ pub(crate) fn spawn_subtitle_actor(
             let source_tx = source_tx.clone();
             tokio::spawn(async move {
                 sleep(Duration::from_secs_f64(delay_secs)).await;
-                let _ = source_tx
-                    .send(SourceCommand::ExpiryTick(sequence))
-                    .await;
+                let _ = source_tx.send(SourceCommand::ExpiryTick(sequence)).await;
             });
         })
     };
@@ -131,12 +129,7 @@ pub(crate) fn spawn_subtitle_actor(
         translation_tx,
     };
 
-    let task = tokio::spawn(run_actor(
-        source_rx,
-        translation_rx,
-        inner,
-        publish,
-    ));
+    let task = tokio::spawn(run_actor(source_rx, translation_rx, inner, publish));
 
     (handles, task)
 }
@@ -436,12 +429,7 @@ mod tests {
             overlay_publish_in_flight: false,
         };
 
-        let actor = tokio::spawn(run_actor(
-            source_rx,
-            translation_rx,
-            inner,
-            publish,
-        ));
+        let actor = tokio::spawn(run_actor(source_rx, translation_rx, inner, publish));
 
         translation_tx
             .send(TranslationCommand::Translation {

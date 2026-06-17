@@ -22,9 +22,7 @@ pub fn structured_event_level(event: &str) -> &'static str {
         | "asr_ingest_partial_suppressed"
         | "ws_outbound_queue_pressure"
         | "ws_outbound_queue_drop_oldest" => "VRB",
-        "translation_job_error"
-        | "translation_line_error"
-        | "obs_caption_send_failed" => "ERR",
+        "translation_job_error" | "translation_line_error" | "obs_caption_send_failed" => "ERR",
         "browser_onerror" | "browser_degraded" => "WRN",
         "translation_publish_accepted"
         | "browser_external_final"
@@ -129,15 +127,24 @@ mod tests {
     #[test]
     fn classifies_runtime_ws_events() {
         assert_eq!(structured_event_level("ws_connection_open"), "DBG");
-        assert_eq!(structured_event_level("runtime_status_duplicate_suppressed"), "VRB");
+        assert_eq!(
+            structured_event_level("runtime_status_duplicate_suppressed"),
+            "VRB"
+        );
         assert_eq!(structured_event_level("runtime_status_broadcast"), "VRB");
         assert_eq!(structured_event_level("asr_ingest_final_published"), "DBG");
     }
 
     #[test]
     fn classifies_translation_events() {
-        assert_eq!(structured_event_level("translation_queue_depth_changed"), "VRB");
-        assert_eq!(structured_event_level("translation_publish_accepted"), "INF");
+        assert_eq!(
+            structured_event_level("translation_queue_depth_changed"),
+            "VRB"
+        );
+        assert_eq!(
+            structured_event_level("translation_publish_accepted"),
+            "INF"
+        );
         assert_eq!(structured_event_level("translation_line_error"), "ERR");
         assert_eq!(structured_event_level("translation_line_timeout"), "DBG");
     }
@@ -147,7 +154,10 @@ mod tests {
         assert_eq!(structured_event_level("subtitle_payload_published"), "DBG");
         assert_eq!(structured_event_level("subtitle_reset"), "DBG");
         assert_eq!(structured_event_level("overlay_update_published"), "DBG");
-        assert_eq!(structured_event_level("overlay_stale_translation_suppressed"), "DBG");
+        assert_eq!(
+            structured_event_level("overlay_stale_translation_suppressed"),
+            "DBG"
+        );
         assert_eq!(structured_event_level("overlay_payload_mismatch"), "DBG");
         assert_eq!(structured_event_level("overlay_update_deduped"), "DBG");
         assert_eq!(structured_event_level("transcript_partial"), "DBG");
@@ -158,7 +168,10 @@ mod tests {
     fn classifies_obs_events() {
         assert_eq!(structured_event_level("obs_caption_sent"), "DBG");
         assert_eq!(structured_event_level("obs_service_started"), "DBG");
-        assert_eq!(structured_event_level("obs_connection_state_changed"), "DBG");
+        assert_eq!(
+            structured_event_level("obs_connection_state_changed"),
+            "DBG"
+        );
         assert_eq!(structured_event_level("obs_stream_output_inactive"), "DBG");
         assert_eq!(structured_event_level("obs_connection_lost"), "DBG");
         assert_eq!(structured_event_level("obs_caption_send_skipped"), "DBG");
@@ -169,12 +182,27 @@ mod tests {
 
     #[test]
     fn compact_mode_keeps_inf_wrn_err_only() {
-        assert!(should_write_runtime_event("translation_publish_accepted", false));
+        assert!(should_write_runtime_event(
+            "translation_publish_accepted",
+            false
+        ));
         assert!(should_write_runtime_event("translation_line_error", false));
-        assert!(!should_write_runtime_event("translation_job_started", false));
-        assert!(!should_write_runtime_event("subtitle_payload_published", false));
-        assert!(!should_write_runtime_event("runtime_status_broadcast", false));
-        assert!(!should_write_runtime_event("asr_ingest_partial_published", false));
+        assert!(!should_write_runtime_event(
+            "translation_job_started",
+            false
+        ));
+        assert!(!should_write_runtime_event(
+            "subtitle_payload_published",
+            false
+        ));
+        assert!(!should_write_runtime_event(
+            "runtime_status_broadcast",
+            false
+        ));
+        assert!(!should_write_runtime_event(
+            "asr_ingest_partial_published",
+            false
+        ));
         assert!(should_write_runtime_event("translation_job_started", true));
     }
 

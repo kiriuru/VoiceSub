@@ -4,12 +4,10 @@ export function ensureMicrophonePermission(manager: AsrManagerHost): Promise<unk
   if (manager._permissionPromise) {
     return manager._permissionPromise;
   }
-  manager.appendLogInternal("requesting microphone permission");
   manager._permissionPromise = Promise.resolve(manager.options.ensureMicrophonePermission?.())
     .then((result) => {
       manager._permissionPromise = null;
       manager.state.getUserMediaLastError = null;
-      manager.appendLogInternal("microphone permission granted");
       return result;
     })
     .catch((error: unknown) => {

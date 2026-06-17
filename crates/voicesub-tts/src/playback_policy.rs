@@ -18,7 +18,9 @@ pub fn clamp_playback_rate(rate: f32) -> f32 {
 pub fn effective_playback_rate(base_rate: f32, queue_depth: usize, defer_boost: bool) -> f32 {
     let base = clamp_playback_rate(base_rate);
     let depth = if defer_boost {
-        queue_depth.max(SPEECH_QUEUE_BOOST_THRESHOLD).saturating_sub(1)
+        queue_depth
+            .max(SPEECH_QUEUE_BOOST_THRESHOLD)
+            .saturating_sub(1)
     } else {
         queue_depth
     };

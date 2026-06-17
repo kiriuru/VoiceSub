@@ -31,7 +31,7 @@ const CANONICAL_SLOTS = [
 
 function slotNumber(slotId: string): number {
   const match = String(slotId).match(/(\d+)$/);
-  return match ? Number.parseInt(match[1], 10) : 0;
+  return match?.[1] ? Number.parseInt(match[1], 10) : 0;
 }
 
 function normalizeLang(lang: string | undefined | null): string {

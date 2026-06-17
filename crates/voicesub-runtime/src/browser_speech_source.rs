@@ -2,8 +2,8 @@
 
 use std::collections::HashMap;
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
     Arc,
+    atomic::{AtomicBool, Ordering},
 };
 
 use tokio::sync::Mutex;
@@ -13,9 +13,45 @@ use crate::browser_event_builder::BrowserTranscriptEventBuilder;
 use crate::http::RuntimeMetricsCollector;
 use crate::transcript_controller::TranscriptController;
 
-pub struct BrowserSpeechSource {
+#[derive(Debug, Clone, Default)]
+struct SessionGenerationState {
     active_session_id: Option<String>,
     active_generation_id: u64,
+}
+
+/// Mirrors `BrowserAsrService::accept_payload` session/generation rules.
+fn accept_browser_session_generation(
+    state: &mut SessionGenerationState,
+    session_id: Option<&str>,
+    generation_id: u64,
+) -> bool {
+    if let Some(session_id) = session_id {
+        if let Some(active) = state.active_session_id.as_deref() {
+            if active != session_id {
+                if generation_id > 0 && generation_id <= state.active_generation_id {
+                    return false;
+                }
+                state.active_session_id = Some(session_id.to_string());
+                if generation_id > 0 {
+                    state.active_generation_id = generation_id;
+                }
+                return true;
+            }
+        } else {
+            state.active_session_id = Some(session_id.to_string());
+        }
+    }
+    if generation_id > 0 && generation_id < state.active_generation_id {
+        return false;
+    }
+    if generation_id > 0 {
+        state.active_generation_id = generation_id;
+    }
+    true
+}
+
+pub struct BrowserSpeechSource {
+    session: SessionGenerationState,
     sequence_watermark: HashMap<String, i64>,
     runtime_running: Arc<AtomicBool>,
     event_builder: Arc<BrowserTranscriptEventBuilder>,
@@ -35,8 +71,7 @@ impl BrowserSpeechSource {
         metrics: Arc<RuntimeMetricsCollector>,
     ) -> Self {
         Self {
-            active_session_id: None,
-            active_generation_id: 0,
+            session: SessionGenerationState::default(),
             sequence_watermark: HashMap::new(),
             runtime_running,
             event_builder,
@@ -48,9 +83,11 @@ impl BrowserSpeechSource {
     }
 
     pub async fn start(&mut self) {
-        self.active_session_id = None;
-        self.active_generation_id = 0;
+        self.session = SessionGenerationState::default();
         self.sequence_watermark.clear();
+        if let Ok(mut gateway) = self.gateway.lock() {
+            gateway.reset_ingest_session();
+        }
     }
 
     pub async fn stop(&mut self) {
@@ -70,6 +107,12 @@ impl BrowserSpeechSource {
             .to_ascii_lowercase()
     }
 
+    fn note_stale_ignored(&self) {
+        if let Ok(mut gateway) = self.gateway.lock() {
+            gateway.note_stale_worker_event_ignored();
+        }
+    }
+
     pub async fn ingest_external_asr_update(&mut self, update: IngestedAsrUpdate) {
         if !self.runtime_running.load(Ordering::Relaxed) {
             return;
@@ -83,28 +126,18 @@ impl BrowserSpeechSource {
             .filter(|id| !id.is_empty())
             .map(str::to_string);
         let normalized_generation_id = update.generation_id;
+        let previous_session_id = self.session.active_session_id.clone();
 
-        if let Some(session_id) = normalized_session_id.as_deref() {
-            if self
-                .active_session_id
-                .as_deref()
-                .is_some_and(|active| active != session_id)
-            {
-                if let Ok(mut gateway) = self.gateway.lock() {
-                    gateway.note_stale_worker_event_ignored();
-                }
-                return;
-            }
-            self.active_session_id = Some(session_id.to_string());
+        if !accept_browser_session_generation(
+            &mut self.session,
+            normalized_session_id.as_deref(),
+            normalized_generation_id,
+        ) {
+            self.note_stale_ignored();
+            return;
         }
-        if normalized_generation_id > 0 {
-            if normalized_generation_id < self.active_generation_id {
-                if let Ok(mut gateway) = self.gateway.lock() {
-                    gateway.note_stale_worker_event_ignored();
-                }
-                return;
-            }
-            self.active_generation_id = normalized_generation_id;
+        if previous_session_id.as_deref() != self.session.active_session_id.as_deref() {
+            self.sequence_watermark.clear();
         }
 
         if let Some(worker_message_sequence) = update.worker_message_sequence {
@@ -112,6 +145,7 @@ impl BrowserSpeechSource {
             let seq = worker_message_sequence as i64;
             let prev = self.sequence_watermark.get(&key).copied().unwrap_or(-1);
             if seq <= prev {
+                self.note_stale_ignored();
                 return;
             }
             self.sequence_watermark.insert(key, seq);
@@ -180,6 +214,7 @@ impl BrowserSpeechSource {
                     final_text.chars().count(),
                     Some(&normalized_source_lang),
                     Some(event.sequence),
+                    update.forced_final,
                 );
             }
             self.transcript.handle_event(event).await;
@@ -191,6 +226,44 @@ pub struct SharedBrowserSpeechSource {
     inner: Mutex<BrowserSpeechSource>,
 }
 
+/// Serializes browser transcript ingest on a single async task (preserves WS order).
+pub struct OrderedBrowserSpeechIngest {
+    speech: Arc<SharedBrowserSpeechSource>,
+    tx: std::sync::Mutex<Option<tokio::sync::mpsc::UnboundedSender<IngestedAsrUpdate>>>,
+}
+
+impl OrderedBrowserSpeechIngest {
+    pub fn new(speech: Arc<SharedBrowserSpeechSource>) -> Self {
+        Self {
+            speech,
+            tx: std::sync::Mutex::new(None),
+        }
+    }
+
+    pub fn enqueue(&self, update: IngestedAsrUpdate) {
+        let Ok(handle) = tokio::runtime::Handle::try_current() else {
+            tracing::warn!("browser speech ingest skipped: no tokio runtime");
+            return;
+        };
+        let mut guard = self.tx.lock().unwrap_or_else(|e| e.into_inner());
+        if guard.is_none() {
+            let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+            let speech = self.speech.clone();
+            handle.spawn(async move {
+                while let Some(update) = rx.recv().await {
+                    speech.ingest(update).await;
+                }
+            });
+            *guard = Some(tx);
+        }
+        if let Some(tx) = guard.as_ref() {
+            if tx.send(update).is_err() {
+                tracing::warn!("browser speech ingest channel closed");
+            }
+        }
+    }
+}
+
 impl SharedBrowserSpeechSource {
     pub fn new(source: BrowserSpeechSource) -> Arc<Self> {
         Arc::new(Self {
@@ -199,7 +272,11 @@ impl SharedBrowserSpeechSource {
     }
 
     pub async fn ingest(&self, update: IngestedAsrUpdate) {
-        self.inner.lock().await.ingest_external_asr_update(update).await;
+        self.inner
+            .lock()
+            .await
+            .ingest_external_asr_update(update)
+            .await;
     }
 
     pub async fn start(&self) {
@@ -208,5 +285,65 @@ impl SharedBrowserSpeechSource {
 
     pub async fn stop(&self) {
         self.inner.lock().await.stop().await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn session_rollover_accepts_new_session_when_generation_advances() {
+        let mut session = SessionGenerationState::default();
+        assert!(accept_browser_session_generation(
+            &mut session,
+            Some("session-a"),
+            1
+        ));
+        assert!(accept_browser_session_generation(
+            &mut session,
+            Some("session-b"),
+            2
+        ));
+        assert_eq!(session.active_session_id.as_deref(), Some("session-b"));
+        assert_eq!(session.active_generation_id, 2);
+    }
+
+    #[test]
+    fn stale_generation_with_different_session_is_rejected() {
+        let mut session = SessionGenerationState::default();
+        assert!(accept_browser_session_generation(
+            &mut session,
+            Some("session-a"),
+            3
+        ));
+        assert!(!accept_browser_session_generation(
+            &mut session,
+            Some("session-b"),
+            2
+        ));
+        assert_eq!(session.active_session_id.as_deref(), Some("session-a"));
+        assert_eq!(session.active_generation_id, 3);
+    }
+
+    #[test]
+    fn generation_monotonic_within_same_session() {
+        let mut session = SessionGenerationState::default();
+        assert!(accept_browser_session_generation(
+            &mut session,
+            Some("session-a"),
+            2
+        ));
+        assert!(!accept_browser_session_generation(
+            &mut session,
+            Some("session-a"),
+            1
+        ));
+        assert!(accept_browser_session_generation(
+            &mut session,
+            Some("session-a"),
+            4
+        ));
+        assert_eq!(session.active_generation_id, 4);
     }
 }

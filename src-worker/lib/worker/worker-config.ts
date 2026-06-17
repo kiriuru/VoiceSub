@@ -1,4 +1,5 @@
 import type { BrowserLifecycleConfig } from "../asr/types";
+import { apiFetch } from "../loopback-api-client";
 import { applyUiThemeFromConfigPayload } from "../ui-theme";
 import {
   browserLifecycleDefaults,
@@ -163,7 +164,7 @@ export async function buildSettingsSavePayload(
 ): Promise<Record<string, unknown>> {
   let basePayload: Record<string, unknown> | null = null;
   try {
-    const response = await fetch("/api/settings/load", { headers: { Accept: "application/json" } });
+    const response = await apiFetch("/api/settings/load", { headers: { Accept: "application/json" } });
     if (response.ok) {
       const latest = await response.json();
       if (latest && typeof latest === "object" && latest.payload && typeof latest.payload === "object") {

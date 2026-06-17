@@ -13,14 +13,12 @@ mod policy_config;
 mod platform;
 
 pub use error::AudioError;
-pub use playback::{
-    PlaybackFinished, PlaybackHub, CHANNEL_SPEECH, CHANNEL_TWITCH, resolve_output_device,
-};
-pub use process_stats::{
-    collect_resource_telemetry, ProcessResourceSnapshot, ResourceTelemetry,
-};
 #[cfg(windows)]
 pub use platform::is_per_process_routing_enabled;
+pub use playback::{
+    CHANNEL_SPEECH, CHANNEL_TWITCH, PlaybackFinished, PlaybackHub, resolve_output_device,
+};
+pub use process_stats::{ProcessResourceSnapshot, ResourceTelemetry, collect_resource_telemetry};
 
 #[cfg(not(windows))]
 pub fn is_per_process_routing_enabled() -> bool {
@@ -88,7 +86,9 @@ pub fn list_output_devices_on_thread() -> Result<Vec<AudioOutputDevice>, AudioEr
     std::thread::Builder::new()
         .name("voicesub-audio-enum".into())
         .spawn(list_output_devices)
-        .map_err(|err| AudioError::PlaybackFailed(format!("audio enum thread spawn failed: {err}")))?
+        .map_err(|err| {
+            AudioError::PlaybackFailed(format!("audio enum thread spawn failed: {err}"))
+        })?
         .join()
         .map_err(|_| AudioError::PlaybackFailed("audio enum thread panicked".into()))?
 }

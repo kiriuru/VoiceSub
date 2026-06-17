@@ -76,10 +76,10 @@ mod tests {
 
     #[test]
     fn allows_github_release_urls() {
-        assert!(validate_external_https_url(
-            "https://github.com/kiriuru/VoiceSub/releases/tag/v0.5.2"
-        )
-        .is_ok());
+        assert!(
+            validate_external_https_url("https://github.com/kiriuru/VoiceSub/releases/tag/v0.5.2")
+                .is_ok()
+        );
     }
 
     #[test]

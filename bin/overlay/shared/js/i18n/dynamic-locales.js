@@ -115,7 +115,6 @@
   "obs.cc.status.error": "OBS captions are enabled but not connected: {error}",
   "obs.cc.status.waiting": "OBS captions are enabled and waiting for the OBS websocket connection.",
   "help.load_failed": "Failed to load help content.",
-  "diagnostics.local_parakeet.line": "Local Parakeet (saved): preset {preset}, incremental decode {incremental}, partial emit {emitMode}, min new words {minWords}. Engine streaming: {engine}."
 },
     ru: {
   "format.list.two": "{first} и {second}",
@@ -232,7 +231,6 @@
   "obs.cc.status.error": "OBS captions включены, но не подключены: {error}",
   "obs.cc.status.waiting": "OBS captions включены и ждут подключение к OBS websocket.",
   "help.load_failed": "Не удалось загрузить справку.",
-  "diagnostics.local_parakeet.line": "Local Parakeet (saved): preset {preset}, incremental decode {incremental}, partial emit {emitMode}, min new words {minWords}. Engine streaming: {engine}.",
 }
   };
 })();

@@ -1,13 +1,15 @@
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
-use serde_json::{json, Value};
-use tokio::sync::{oneshot, OnceCell};
+use serde_json::{Value, json};
+use tokio::sync::{OnceCell, oneshot};
 
 use crate::trace::{StructuredLogFn, SubtitleLog};
 use crate::types::{SubtitlePayloadEvent, TranscriptEvent, TranscriptKind, TranslationEvent};
 
-use crate::router_actor::{spawn_subtitle_actor, SourceCommand, SubtitleActorHandles, TranslationCommand};
+use crate::router_actor::{
+    SourceCommand, SubtitleActorHandles, TranslationCommand, spawn_subtitle_actor,
+};
 
 pub type ConfigGetter = Arc<dyn Fn() -> Value + Send + Sync>;
 pub type PublishCallback = Arc<dyn Fn(SubtitlePayloadEvent) + Send + Sync>;
@@ -140,7 +142,10 @@ impl SubtitleRouter {
             .actor()
             .await
             .translation_tx
-            .send(TranslationCommand::Translation { event, processed: Some(processed) })
+            .send(TranslationCommand::Translation {
+                event,
+                processed: Some(processed),
+            })
             .await;
         let _ = reply_rx.await;
     }

@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
-use axum::extract::State;
-use axum::Json;
-use serde::Deserialize;
-use serde_json::{json, Value};
-use tracing::info;
 use super::state::HttpState;
+use axum::Json;
+use axum::extract::State;
+use serde::Deserialize;
+use serde_json::{Value, json};
+use tracing::info;
 
 #[derive(Debug, Deserialize)]
 pub struct TwitchOAuthCompleteRequest {

@@ -1,4 +1,4 @@
-use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
+use base64::{Engine as _, engine::general_purpose::STANDARD as B64};
 use sha2::{Digest, Sha256};
 
 pub fn build_auth_response(password: &str, salt: &str, challenge: &str) -> String {

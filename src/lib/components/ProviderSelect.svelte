@@ -10,7 +10,7 @@
 </script>
 
 <select
-  class="control"
+  class="control provider-select"
   {value}
   on:change={(e) => onChange((e.currentTarget as HTMLSelectElement).value)}
 >
@@ -22,3 +22,12 @@
     </optgroup>
   {/each}
 </select>
+
+<style>
+  .provider-select {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+</style>

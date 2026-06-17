@@ -22,6 +22,7 @@
     ConfigPayload,
     DiagnosticsSnapshot,
     FontCatalog,
+    RuntimeStatus,
     StylePresetCatalog,
     TabId,
     TranslationResultState,
@@ -41,6 +42,12 @@
 
   export let overlayUrl: string;
 
+  export let layoutMode: "standard" | "compact" = "standard";
+
+  export let runtime: RuntimeStatus | null = null;
+
+  export let overlayPayload: Record<string, unknown> | null = null;
+
   export let onChange: (next: ConfigPayload) => void;
 
   export let onConfigLoad: (next: ConfigPayload) => void;
@@ -57,7 +64,7 @@
 
   {#if activeTab === "translation"}
 
-    <TranslationPanel {config} {translationResults} onChange={onChange} />
+    <TranslationPanel {config} {translationResults} {layoutMode} onChange={onChange} />
 
   {:else if activeTab === "subtitles"}
 
@@ -65,7 +72,14 @@
 
   {:else if activeTab === "style"}
 
-    <StylePanel {config} {subtitleStylePresets} {fontCatalog} onChange={onChange} />
+    <StylePanel
+      {config}
+      {subtitleStylePresets}
+      {fontCatalog}
+      {runtime}
+      {overlayPayload}
+      onChange={onChange}
+    />
 
   {:else if activeTab === "theme"}
 

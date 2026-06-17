@@ -32,7 +32,7 @@
 </script>
 
 {#if visible && sync?.update_available && latest}
-  <div class="update-banner glass-panel" role="status" aria-live="polite">
+  <div class="update-banner surface-card" role="status" aria-live="polite">
     <p class="update-banner__text">
       {tr("updates.banner.message", { current, latest })}
     </p>

@@ -133,7 +133,11 @@
 
     if (nextIndex < 0 || nextIndex >= items.length) return;
 
-    [items[index], items[nextIndex]] = [items[nextIndex], items[index]];
+    const current = items[index];
+    const next = items[nextIndex];
+    if (!current || !next) return;
+
+    [items[index], items[nextIndex]] = [next, current];
 
     patchOutput({ display_order: normalizeDisplayOrder(items) });
 
@@ -145,9 +149,36 @@
 
 <section class="subtitles-layout bento-root stack">
 
+  <article class="surface-card panel-padding bento-tile subtitles-order-panel stack">
+
+    <p class="muted subtitles-order-label">{tr("subtitles.display_order")}</p>
+
+    <div class="subtitles-order-toolbar">
+      <div class="subtitles-order-actions">
+        <button type="button" class="btn btn-ghost" on:click={() => moveOrderItem(-1)}>
+          {tr("subtitles.move_up")}
+        </button>
+        <button type="button" class="btn btn-ghost" on:click={() => moveOrderItem(1)}>
+          {tr("subtitles.move_down")}
+        </button>
+      </div>
+
+      <ul class="ordered-list subtitles-order-list">
+        {#each displayOrder as code}
+          <li class:active={selectedOrderItem === code}>
+            <button type="button" class="order-item-btn" on:click={() => (selectedOrderItem = code)}>
+              {getSubtitleSlotLabel(code, loc)}
+            </button>
+          </li>
+        {/each}
+      </ul>
+    </div>
+
+  </article>
+
   <div class="subtitles-top bento-grid">
 
-    <article class="glass-panel panel-padding bento-tile stack">
+    <article class="surface-card panel-padding bento-tile stack">
 
       <div class="section-heading">
 
@@ -279,7 +310,7 @@
 
 
 
-    <article class="glass-panel panel-padding bento-tile stack">
+    <article class="surface-card panel-padding bento-tile stack">
 
       <h2>{tr("subtitles.timing.title")}</h2>
 
@@ -435,52 +466,6 @@
 
   </div>
 
-
-
-  <div class="subtitles-bottom bento-grid">
-
-    <article class="glass-panel panel-padding bento-tile">
-
-      <ul class="ordered-list">
-
-        {#each displayOrder as code}
-
-          <li class:active={selectedOrderItem === code}>
-            <button type="button" class="order-item-btn" on:click={() => (selectedOrderItem = code)}>
-              {getSubtitleSlotLabel(code, loc)}
-            </button>
-          </li>
-
-        {/each}
-
-      </ul>
-
-    </article>
-
-
-
-    <article class="glass-panel panel-padding subtitle-actions-panel bento-tile">
-
-      <div class="button-stack">
-
-        <button type="button" class="btn btn-ghost" on:click={() => moveOrderItem(-1)}>
-
-          {tr("subtitles.move_up")}
-
-        </button>
-
-        <button type="button" class="btn btn-ghost" on:click={() => moveOrderItem(1)}>
-
-          {tr("subtitles.move_down")}
-
-        </button>
-
-      </div>
-
-    </article>
-
-  </div>
-
 </section>
 
 
@@ -499,86 +484,57 @@
 
   }
 
-
-
-  .ordered-list {
-
-    list-style: none;
-
-    padding: 0;
-
+  .subtitles-order-label {
     margin: 0;
+    font-size: 13px;
+  }
 
+  .subtitles-order-toolbar {
     display: grid;
+    gap: var(--space-3);
+  }
 
+  .subtitles-order-actions {
+    display: flex;
+    flex-wrap: wrap;
     gap: var(--space-2);
-
   }
 
+  .subtitles-order-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    gap: var(--space-2);
+  }
 
-
-  .ordered-list li {
-
+  .subtitles-order-list li {
     border: 1px solid var(--line-subtle);
-
     border-radius: var(--radius-md);
-
     background: var(--bg-control);
-
-    padding: 11px 12px;
-
+    padding: 9px 10px;
     cursor: pointer;
-
     transition: border-color 140ms ease, background-color 140ms ease;
-
   }
 
-
-
-  .ordered-list li:hover {
-
+  .subtitles-order-list li:hover {
     background: color-mix(in srgb, var(--bg-control) 80%, var(--accent-soft));
-
   }
 
-
-
-  .ordered-list li.active {
-
+  .subtitles-order-list li.active {
     border-color: color-mix(in srgb, var(--accent) 42%, transparent);
-
     background: var(--accent-soft);
-
   }
 
   .order-item-btn {
-
     width: 100%;
-
     padding: 0;
-
     border: 0;
-
     background: transparent;
-
     color: inherit;
-
     font: inherit;
-
     text-align: left;
-
     cursor: pointer;
-
-  }
-
-
-
-  .button-stack {
-
-    display: grid;
-
-    gap: var(--space-2);
-
   }
 
   .subtitles-timing-hint {
@@ -586,7 +542,6 @@
     font-size: 12px;
     line-height: 1.45;
   }
-
 </style>
 
 

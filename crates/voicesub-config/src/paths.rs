@@ -33,18 +33,17 @@ fn scan_for_bin_dir(mut start: PathBuf) -> Option<PathBuf> {
 
 /// Locate shipped static tree (`bin/` or Tauri MSI `resources/bin/`).
 pub fn locate_bin_dir() -> Option<PathBuf> {
-    if let Ok(cwd) = std::env::current_dir() {
-        if let Some(bin_dir) = scan_for_bin_dir(cwd) {
-            return Some(bin_dir);
-        }
+    if let Ok(cwd) = std::env::current_dir()
+        && let Some(bin_dir) = scan_for_bin_dir(cwd)
+    {
+        return Some(bin_dir);
     }
 
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(parent) = exe.parent() {
-            if let Some(bin_dir) = scan_for_bin_dir(parent.to_path_buf()) {
-                return Some(bin_dir);
-            }
-        }
+    if let Ok(exe) = std::env::current_exe()
+        && let Some(parent) = exe.parent()
+        && let Some(bin_dir) = scan_for_bin_dir(parent.to_path_buf())
+    {
+        return Some(bin_dir);
     }
 
     None
@@ -54,10 +53,7 @@ pub fn locate_bin_dir() -> Option<PathBuf> {
 pub fn install_root_from_bin_dir(bin_dir: &Path) -> PathBuf {
     let parent = bin_dir.parent().unwrap_or_else(|| Path::new("."));
     if parent.file_name() == Some(OsStr::new("resources")) {
-        parent
-            .parent()
-            .unwrap_or(parent)
-            .to_path_buf()
+        parent.parent().unwrap_or(parent).to_path_buf()
     } else {
         parent.to_path_buf()
     }
@@ -296,9 +292,17 @@ mod tests {
     fn paths_resolve_under_project_root() {
         let paths = ProjectPaths::discover(Path::new("F:/AI/VoiceSub"));
         assert!(paths.bin_dir.ends_with("bin"));
-        assert!(paths.overlay_root.ends_with("bin/overlay") || paths.overlay_root.ends_with("bin\\overlay"));
-        assert!(paths.worker_dist.ends_with("bin/worker") || paths.worker_dist.ends_with("bin\\worker"));
-        assert!(paths.tts_module_dir().ends_with("bin/modules/tts") || paths.tts_module_dir().ends_with("bin\\modules\\tts"));
+        assert!(
+            paths.overlay_root.ends_with("bin/overlay")
+                || paths.overlay_root.ends_with("bin\\overlay")
+        );
+        assert!(
+            paths.worker_dist.ends_with("bin/worker") || paths.worker_dist.ends_with("bin\\worker")
+        );
+        assert!(
+            paths.tts_module_dir().ends_with("bin/modules/tts")
+                || paths.tts_module_dir().ends_with("bin\\modules\\tts")
+        );
         assert!(paths.config_toml_path().ends_with("user-data/config.toml"));
     }
 }

@@ -2,14 +2,13 @@ use std::collections::HashMap;
 
 use async_trait::async_trait;
 use reqwest::Method;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use std::sync::Arc;
 
 use super::{
-    http::SharedHttpClient,
-    base_diagnostics, http, normalize_source_lang, ProviderError, ProviderInfo, TranslateRequest,
-    TranslationProvider,
+    ProviderError, ProviderInfo, TranslateRequest, TranslationProvider, base_diagnostics, http,
+    http::SharedHttpClient, normalize_source_lang,
 };
 
 pub struct GoogleGasUrlProvider {

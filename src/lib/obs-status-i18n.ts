@@ -98,7 +98,8 @@ export function formatObsConnectionState(
   tr: TranslateFn,
 ): string {
   const key = String(raw || "disabled").trim().toLowerCase() || "disabled";
-  const i18nKey = OBS_CONNECTION_STATE_I18N_KEYS[key] || OBS_CONNECTION_STATE_I18N_KEYS.error;
+  const i18nKey =
+    OBS_CONNECTION_STATE_I18N_KEYS[key] ?? OBS_CONNECTION_STATE_I18N_KEYS.error ?? "obs.cc.connection_state.error";
   const translated = tr(i18nKey);
   return translated !== i18nKey ? translated : key;
 }

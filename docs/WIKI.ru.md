@@ -1,6 +1,6 @@
 # VoiceSub — WIKI
 
-Операционный гайд по интерфейсу VoiceSub `0.5.2`. Формат описания элементов: **что это**, **зачем**, **как работает**, **на что влияет**, **типовые ошибки**.
+Операционный гайд по интерфейсу VoiceSub `0.5.3`. Формат описания элементов: **что это**, **зачем**, **как работает**, **на что влияет**, **типовые ошибки**.
 
 Техническая архитектура: `docs/TECHNICAL_ARCHITECTURE.md`. Предшественник SST `0.4.4` — только reference; поведение core описано здесь для VoiceSub.
 
@@ -9,7 +9,7 @@
 ## 0. О продукте и версии
 
 ### Элемент: VoiceSub vs SST
-- **VoiceSub** — активная линия `0.5.2` (Rust + Tauri + Svelte); baseline первого релиза — `0.5.0`.
+- **VoiceSub** — активная линия `0.5.3` (Rust + Tauri + Svelte); baseline первого релиза — `0.5.0`.
 - **SST** `0.4.4` — frozen reference; настройки импортируются, но режимы Parakeet/Experimental в core не поднимаются.
 - **Overlay URL новый:** `http://127.0.0.1:8765/overlay` — обновите Browser Source в OBS вручную.
 
@@ -20,7 +20,7 @@
 - Микрофон в Chrome worker; интернет — для внешних провайдеров перевода (опционально).
 
 ### Элемент: установка и обновление (NSIS)
-- **Что делает:** `VoiceSub_0.5.2_x64-setup.exe` ставит `VoiceSub.exe` и статические ресурсы (`bin/dashboard`, overlay, worker, tts).
+- **Что делает:** `VoiceSub_0.5.3_x64-setup.exe` ставит `VoiceSub.exe` и статические ресурсы (`bin/dashboard`, overlay, worker, tts).
 - **Для чего:** один установщик без Python/Node в runtime; при отсутствии WebView2 — загрузка через bootstrapper (`downloadBootstrapper` в Tauri).
 - **Обновление:** закройте приложение → запустите новый `setup.exe` поверх → `user-data/` и `logs/` сохраняются рядом с install path / project root.
 - **Разработчикам:** `build-release-msi.bat` → `build-release.ps1` → `F:\AI\VoiceSub - release\v{version}\`.
@@ -81,7 +81,8 @@
 - **Subtitles** → видимость source/translation включена.
 - TTL не слишком короткий (текст может мелькать и исчезать).
 - После reconnect overlay держит последний кадр (stale-guard + backoff 1–10 с) — это нормально.
-- Текст **не исчезает после TTL/Stop** — обновите приложение и перезагрузите Browser Source (`disposeRenderContainer` + `hasVisibleRenderedFrame`, `overlay.js?v=20260610b`).
+- Шум в консоли overlay — `?debug=1` только для отладки; в production hot path не логирует каждый WS-кадр.
+- Текст **не исчезает после TTL/Stop** — обновите приложение и перезагрузите Browser Source (`disposeRenderContainer` + `hasVisibleRenderedFrame`, `overlay.js?v=20260615a`).
 
 ### Сценарий: worker отваливается
 - Проверьте сеть (Web Speech идёт через Google).
@@ -290,10 +291,10 @@
 ## 13. Настройки (Settings)
 
 ### Элемент: язык интерфейса (EN / RU / JA / KO / ZH)
-- Svelte i18n: `src/lib/i18n/locales/*.json`.
+- Svelte i18n: `src/lib/i18n/locales/*.json` (генерируется из `scripts/i18n-source/locales/*.js`).
 - Сохраняется в `ui.language` → Save config.
 - Worker получает `locale` query param при launch.
-- Overlay i18n: `bin/overlay/shared/js/i18n/`.
+- Overlay i18n: `bin/overlay/shared/js/i18n/` (регенерация: `npm run i18n:bundle` после правки source locales).
 - **Подробно:** `TECHNICAL_ARCHITECTURE.md` §23.
 
 ### Элемент: импорт SST config.json

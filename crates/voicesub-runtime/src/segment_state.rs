@@ -63,7 +63,8 @@ impl SegmentStateController {
             return;
         };
         self.last_partial_text_by_segment.remove(segment_id);
-        self.last_partial_emit_monotonic_by_segment.remove(segment_id);
+        self.last_partial_emit_monotonic_by_segment
+            .remove(segment_id);
     }
 
     pub fn get_last_partial_text(&self, segment_id: &str) -> &str {
@@ -74,7 +75,9 @@ impl SegmentStateController {
     }
 
     pub fn get_last_partial_emit_monotonic(&self, segment_id: &str) -> Option<Instant> {
-        self.last_partial_emit_monotonic_by_segment.get(segment_id).copied()
+        self.last_partial_emit_monotonic_by_segment
+            .get(segment_id)
+            .copied()
     }
 
     pub fn mark_partial_emitted(&mut self, segment_id: &str, text: &str) {

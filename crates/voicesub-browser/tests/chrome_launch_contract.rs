@@ -2,16 +2,17 @@
 
 use std::path::Path;
 
+use voicesub_browser::chrome_launch_from_config;
 use voicesub_browser::{
     BrowserChromeLaunchConfig, BrowserWorkerLauncher, CHROME_ANTI_THROTTLE_FLAGS,
     CHROME_DISK_BLOAT_GUARD_FLAGS, DISABLED_CHROME_DISK_BLOAT_FEATURES, DISABLED_CHROME_FEATURES,
     FORBIDDEN_WORKER_LAUNCH_FLAGS, finalize_chrome_launch_config,
 };
-use voicesub_browser::chrome_launch_from_config;
 
 fn flag_present(args: &[String], required: &str) -> bool {
     let key = required.split('=').next().unwrap_or(required);
-    args.iter().any(|arg| arg == required || arg == key || arg.starts_with(&format!("{key}=")))
+    args.iter()
+        .any(|arg| arg == required || arg == key || arg.starts_with(&format!("{key}=")))
 }
 
 #[test]

@@ -1,4 +1,4 @@
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 pub const OBS_CC_OUTPUT_MODES: &[&str] = &[
     "disabled",
@@ -47,8 +47,14 @@ fn clamp_obs_int(section: &Map<String, Value>, key: &str, default: i64) -> i64 {
 
 pub fn normalize_obs_closed_captions(root: &mut Map<String, Value>) {
     let defaults = obs_defaults();
-    let default_connection = defaults["connection"].as_object().cloned().unwrap_or_default();
-    let default_debug = defaults["debug_mirror"].as_object().cloned().unwrap_or_default();
+    let default_connection = defaults["connection"]
+        .as_object()
+        .cloned()
+        .unwrap_or_default();
+    let default_debug = defaults["debug_mirror"]
+        .as_object()
+        .cloned()
+        .unwrap_or_default();
     let default_timing = defaults["timing"].as_object().cloned().unwrap_or_default();
 
     let section_value = root
@@ -126,17 +132,23 @@ pub fn normalize_obs_closed_captions(root: &mut Map<String, Value>) {
     let partial_throttle_ms = clamp_obs_int(
         &timing_map,
         "partial_throttle_ms",
-        default_timing["partial_throttle_ms"].as_i64().unwrap_or(140),
+        default_timing["partial_throttle_ms"]
+            .as_i64()
+            .unwrap_or(140),
     );
     let min_partial_delta_chars = clamp_obs_int(
         &timing_map,
         "min_partial_delta_chars",
-        default_timing["min_partial_delta_chars"].as_i64().unwrap_or(1),
+        default_timing["min_partial_delta_chars"]
+            .as_i64()
+            .unwrap_or(1),
     );
     let final_replace_delay_ms = clamp_obs_int(
         &timing_map,
         "final_replace_delay_ms",
-        default_timing["final_replace_delay_ms"].as_i64().unwrap_or(0),
+        default_timing["final_replace_delay_ms"]
+            .as_i64()
+            .unwrap_or(0),
     );
     let clear_after_ms = clamp_obs_int(
         &timing_map,
@@ -193,6 +205,9 @@ mod tests {
         );
         normalize_obs_closed_captions(&mut root);
         assert_eq!(root["obs_closed_captions"]["output_mode"], "disabled");
-        assert_eq!(root["obs_closed_captions"]["timing"]["partial_throttle_ms"], 140);
+        assert_eq!(
+            root["obs_closed_captions"]["timing"]["partial_throttle_ms"],
+            140
+        );
     }
 }

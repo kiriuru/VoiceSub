@@ -1,3 +1,4 @@
+import { apiFetch } from "../loopback-api-client";
 import { getLocale } from "../../../src/lib/i18n/index";
 import type { SpeechRecognitionConstructor } from "../asr/speech-types";
 import { createBrowserAsrStateSeed } from "../asr/session-state";
@@ -76,11 +77,6 @@ export function createWorkerController(ui: WorkerUiStore): WorkerController {
 
   function updateCounters(): void {
     ui.updateCountersFromState({
-      approxCount: state.approxCount,
-      finalCount: state.finalCount,
-      missingFinalCount: state.missingFinalCount,
-      forcedCount: state.forcedCount,
-      appSendCount: state.appSendCount,
       onSound: state.onSound,
       websocketReady: state.websocketReady,
       configuredLanguage: state.configuredLanguage,
@@ -117,7 +113,7 @@ export function createWorkerController(ui: WorkerUiStore): WorkerController {
   async function loadSettings(): Promise<void> {
     const storedWorkerSettings = readWorkerSettingsFromLocalStorage();
     try {
-      const response = await fetch("/api/settings/load");
+      const response = await apiFetch("/api/settings/load");
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
@@ -171,7 +167,7 @@ export function createWorkerController(ui: WorkerUiStore): WorkerController {
       .catch(() => undefined)
       .then(async () => {
         const savePayload = await buildSettingsSavePayload(nextWorkerSettings, state.currentConfigPayload);
-        const response = await fetch("/api/settings/save", {
+        const response = await apiFetch("/api/settings/save", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ payload: savePayload }),
@@ -233,6 +229,14 @@ export function createWorkerController(ui: WorkerUiStore): WorkerController {
   updateCounters();
   ui.updateVisibilityWarning();
   appendLog("worker initialized");
+
+  void apiFetch("/api/version")
+    .then(async (response) => {
+      if (!response.ok) return;
+      const body = (await response.json()) as { version?: string };
+      if (body.version) ui.setAppVersion(body.version);
+    })
+    .catch(() => {});
 
   void autoLoadAndApplyUiTheme();
 

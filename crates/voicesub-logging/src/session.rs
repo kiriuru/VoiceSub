@@ -293,15 +293,12 @@ mod tests {
 
     #[test]
     fn compact_mode_filters_tts_client_log() {
+        let _guard = crate::env_test::lock();
+        crate::env_test::reset_compact_logging_env();
         let dir = std::env::temp_dir().join(format!("vs-session-tts-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         let logger = SessionLogManager::new(&dir);
-        let result = logger.log(
-            "tts",
-            "engine.speak_end",
-            Some("tts-window"),
-            None,
-        );
+        let result = logger.log("tts", "engine.speak_end", Some("tts-window"), None);
         assert!(!result.logged);
         assert_eq!(result.reason.as_deref(), Some("compact_mode_filtered"));
         let _ = fs::remove_dir_all(dir);

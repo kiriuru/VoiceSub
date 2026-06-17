@@ -14,8 +14,8 @@ pub fn installed_webview2_version() -> Option<String> {
 
 #[cfg(windows)]
 fn installed_webview2_version_from_registry() -> Option<String> {
-    use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE};
     use winreg::RegKey;
+    use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE};
 
     let client_key = format!("{EDGE_CLIENTS_SUBKEY}\\{WEBVIEW2_APP_GUID}");
     let client_key_wow64 = format!("{EDGE_CLIENTS_SUBKEY_WOW64}\\{WEBVIEW2_APP_GUID}");
@@ -34,7 +34,9 @@ fn installed_webview2_version_from_registry() -> Option<String> {
 
 #[cfg(windows)]
 fn read_registry_pv(root: winreg::RegKey, subkey: &str) -> Option<String> {
-    let key = root.open_subkey_with_flags(subkey, winreg::enums::KEY_READ).ok()?;
+    let key = root
+        .open_subkey_with_flags(subkey, winreg::enums::KEY_READ)
+        .ok()?;
     let value = key.get_value::<String, _>("pv").ok()?;
     let trimmed = value.trim();
     if trimmed.is_empty() {
@@ -55,7 +57,9 @@ fn installed_webview2_version_from_disk() -> Option<String> {
         std::env::var_os("LOCALAPPDATA"),
     ];
     for root in roots.into_iter().flatten() {
-        let base = std::path::PathBuf::from(root).join("Microsoft").join("EdgeWebView");
+        let base = std::path::PathBuf::from(root)
+            .join("Microsoft")
+            .join("EdgeWebView");
         if !base.is_dir() {
             continue;
         }

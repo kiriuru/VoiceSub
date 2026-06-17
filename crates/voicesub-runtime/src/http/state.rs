@@ -18,6 +18,8 @@ use voicesub_ws::{AsrWorkerHub, EventsHub, WsEventPublisher};
 
 use crate::trace::RuntimePipelineLog;
 
+use super::background_tasks::BackgroundTaskRegistry;
+use super::loopback_auth::LoopbackAuth;
 use super::metrics::RuntimeMetricsCollector;
 use super::runtime::RuntimeOrchestrator;
 use super::runtime_state::RuntimeStatusBroadcaster;
@@ -50,6 +52,8 @@ pub struct HttpState {
     pub ws_publisher: WsEventPublisher,
     pub overlay_broadcaster: Arc<OverlayBroadcaster>,
     pub last_subtitle_payload: Arc<Mutex<Option<Value>>>,
+    pub loopback_auth: Arc<LoopbackAuth>,
+    pub background_tasks: Arc<BackgroundTaskRegistry>,
 }
 
 impl HttpState {
@@ -101,6 +105,8 @@ impl HttpState {
         ws_publisher: WsEventPublisher,
         overlay_broadcaster: Arc<OverlayBroadcaster>,
         last_subtitle_payload: Arc<Mutex<Option<Value>>>,
+        loopback_auth: Arc<LoopbackAuth>,
+        background_tasks: Arc<BackgroundTaskRegistry>,
     ) -> Arc<Self> {
         Arc::new(Self {
             paths,
@@ -129,6 +135,8 @@ impl HttpState {
             ws_publisher,
             overlay_broadcaster,
             last_subtitle_payload,
+            loopback_auth,
+            background_tasks,
         })
     }
 }

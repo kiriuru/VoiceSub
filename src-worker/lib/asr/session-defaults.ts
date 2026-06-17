@@ -22,9 +22,6 @@ export const INSTANCE_DEFAULTS = {
   minimumReconnectIntervalMs: 500,
   maxBrowserSessionAgeMs: 180000,
   prepareCycleBeforeMs: 15000,
-  forceFinalOnInterruption: true,
-  forceFinalMinChars: 3,
-  forceFinalMinStableMs: 700,
   voiceBelowRecognitionRmsThreshold: 0.025,
   voiceBelowRecognitionGraceMs: 8000,
   voiceBelowRecognitionMicWindowMs: 2000,
@@ -35,5 +32,3 @@ export const INSTANCE_DEFAULTS = {
   networkPreflightCooldownMs: 30000,
   recognitionStartLogMinGapMs: 4200,
 } as const;
-
-export type InstanceDefaults = typeof INSTANCE_DEFAULTS;

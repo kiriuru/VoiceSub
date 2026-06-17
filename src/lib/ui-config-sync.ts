@@ -1,4 +1,6 @@
 import type { ConfigPayload, LocaleCode } from "./types";
+import { apiFetch } from "./loopback-api-client";
+import { loopbackApiToken } from "./loopback-api";
 
 export const UI_CONFIG_CHANNEL = "voicesub:ui-config";
 export const UI_LOCALE_CHANNEL = "voicesub:ui-locale";
@@ -59,8 +61,11 @@ function scheduleUiConfigServerSync(payload: ConfigPayload): void {
 }
 
 async function pushUiConfigToServer(payload: ConfigPayload): Promise<void> {
+  if (!loopbackApiToken()) {
+    return;
+  }
   try {
-    await fetch("/api/ui/sync", {
+    await apiFetch("/api/ui/sync", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ui: payload.ui || {} }),
@@ -213,7 +218,7 @@ export function mergeUiConfigPatch(base: ConfigPayload, partial: ConfigPayload):
 }
 
 /** @internal Test helper — flush debounced server sync immediately. */
-export function flushUiConfigServerSyncForTests(): void {
+export async function flushUiConfigServerSyncForTests(): Promise<void> {
   if (uiConfigServerSyncTimer) {
     clearTimeout(uiConfigServerSyncTimer);
     uiConfigServerSyncTimer = null;
@@ -221,6 +226,6 @@ export function flushUiConfigServerSyncForTests(): void {
   const next = uiConfigServerSyncPayload;
   uiConfigServerSyncPayload = null;
   if (next) {
-    void pushUiConfigToServer(next);
+    await pushUiConfigToServer(next);
   }
 }

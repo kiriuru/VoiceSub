@@ -56,6 +56,8 @@
 
   export let translationResults: TranslationResultState | null = null;
 
+  export let layoutMode: "standard" | "compact" = "standard";
+
   export let onChange: (next: ConfigPayload) => void;
 
 
@@ -486,11 +488,14 @@
 
 
 
-<section class="translation-layout bento-root stack">
+<section class="translation-layout bento-root stack" class:translation-layout--compact={layoutMode === "compact"}>
 
-  <div class="translation-top bento-grid">
+  <div class="translation-top translation-sections stack">
 
-    <article class="glass-panel panel-padding translation-lines-panel bento-tile stack">
+    <article
+      id="translation-section-lines"
+      class="surface-card panel-padding translation-lines-panel bento-tile stack panel-section-anchor"
+    >
 
       <div class="section-heading">
 
@@ -624,7 +629,10 @@
         </div>
       {/if}
 
-      <ul class="ordered-list translation-line-list">
+      <ul
+        class="translation-line-list"
+        class:translation-line-list--compact={layoutMode === "compact"}
+      >
 
         {#each lineCards as line}
 
@@ -790,7 +798,10 @@
 
 
 
-    <article class="glass-panel panel-padding translation-provider-panel stack">
+    <article
+      id="translation-section-provider"
+      class="surface-card panel-padding translation-provider-panel stack panel-section-anchor"
+    >
 
       <div class="section-heading translation-provider-heading">
 
@@ -1022,7 +1033,7 @@
 
     <div class="translation-bottom bento-span-full">
 
-      <article class="glass-panel panel-padding bento-tile">
+      <article id="translation-section-results" class="surface-card panel-padding bento-tile panel-section-anchor">
 
         <TranslationResults
           results={translationResults}
@@ -1050,10 +1061,18 @@
 
 <style>
 
+  .translation-lines-panel {
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .translation-layout--compact .translation-bottom {
+    width: 100%;
+    min-width: 0;
+  }
+
   .translation-top {
-
-    align-items: start;
-
+    align-items: stretch;
   }
 
   .translation-provider-heading {
@@ -1193,22 +1212,26 @@
 
 
   .translation-line-list {
-
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-
-    gap: var(--space-3);
-
+    display: grid;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-2);
   }
 
+  .translation-line-list--compact {
+    grid-template-columns: minmax(0, 1fr);
+  }
 
+  .translation-line-list > li {
+    min-width: 0;
+  }
 
   .translation-line-card {
-
     display: grid;
-
-    gap: var(--space-3);
-
-    padding: var(--space-4);
+    gap: var(--space-2);
+    padding: var(--space-3);
 
     border: 1px solid var(--line-subtle);
 
@@ -1294,9 +1317,7 @@
 
 
   .translation-line-title {
-
-    font-size: 16px;
-
+    font-size: 14px;
   }
 
 
@@ -1338,14 +1359,10 @@
 
 
   .translation-line-badge {
-
     border: 1px solid var(--line-strong, var(--line-subtle));
-
     border-radius: 999px;
-
-    padding: 6px 10px;
-
-    font-size: 11px;
+    padding: 4px 8px;
+    font-size: 10px;
 
     line-height: 1;
 
@@ -1396,13 +1413,23 @@
 
 
   .translation-line-fields {
-
     display: grid;
+    gap: var(--space-2);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 
-    gap: var(--space-3);
+  .translation-line-list--compact .translation-line-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
 
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  .translation-line-fields .stack-field {
+    min-width: 0;
+  }
 
+  .translation-line-fields :global(.control) {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
   }
 
 

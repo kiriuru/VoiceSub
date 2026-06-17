@@ -1,4 +1,4 @@
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 /// TOML has no `null`; drop null object fields and array elements before persisting.
 pub(crate) fn strip_null_values(value: Value) -> Value {
@@ -25,11 +25,11 @@ pub(crate) fn strip_null_values(value: Value) -> Value {
 }
 
 use crate::defaults::CURRENT_CONFIG_VERSION;
-use crate::logging_preferences::normalize_logging_config;
 use crate::defaults::default_config_payload;
+use crate::logging_preferences::normalize_logging_config;
 use crate::obs_normalize::normalize_obs_closed_captions;
-use voicesub_types::{DEFAULT_GITHUB_REPO, LEGACY_GITHUB_REPO};
 use crate::translation_normalize::normalize_translation_config;
+use voicesub_types::{DEFAULT_GITHUB_REPO, LEGACY_GITHUB_REPO};
 
 fn as_object_mut(value: &mut Value) -> &mut Map<String, Value> {
     if !value.is_object() {
@@ -89,14 +89,9 @@ pub(crate) fn canonical_translation_provider(raw: &str, fallback: &str) -> Strin
 }
 
 fn normalize_ui_config(root: &mut Map<String, Value>) {
-    let ui_value = root
-        .entry("ui".to_string())
-        .or_insert_with(|| json!({}));
+    let ui_value = root.entry("ui".to_string()).or_insert_with(|| json!({}));
     let ui = as_object_mut(ui_value);
-    let lang = ui
-        .get("language")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
+    let lang = ui.get("language").and_then(|v| v.as_str()).unwrap_or("");
     ui.insert("language".into(), json!(normalize_ui_language(lang)));
 }
 
@@ -163,15 +158,15 @@ fn normalize_asr_browser_config(root: &mut Map<String, Value>) {
                 chrome.entry(key.clone()).or_insert_with(|| value.clone());
             }
         }
-        if let Some(args) = chrome.get_mut("launch_args") {
-            if args.as_array().is_none_or(|items| items.is_empty()) {
-                *args = chrome_defaults["launch_args"].clone();
-            }
+        if let Some(args) = chrome.get_mut("launch_args")
+            && args.as_array().is_none_or(|items| items.is_empty())
+        {
+            *args = chrome_defaults["launch_args"].clone();
         }
-        if let Some(features) = chrome.get_mut("disabled_features") {
-            if features.as_array().is_none_or(|items| items.is_empty()) {
-                *features = chrome_defaults["disabled_features"].clone();
-            }
+        if let Some(features) = chrome.get_mut("disabled_features")
+            && features.as_array().is_none_or(|items| items.is_empty())
+        {
+            *features = chrome_defaults["disabled_features"].clone();
         }
     }
 }
@@ -186,10 +181,7 @@ fn normalize_translation_section(root: &mut Map<String, Value>) {
         .and_then(|v| v.get("target_languages"))
         .cloned()
         .unwrap_or_else(|| json!(["en"]));
-    let current = root
-        .get("translation")
-        .cloned()
-        .unwrap_or(Value::Null);
+    let current = root.get("translation").cloned().unwrap_or(Value::Null);
     let normalized = normalize_translation_config(&current, &defaults, &fallback_targets);
     root.insert("translation".into(), normalized);
 }
@@ -213,7 +205,11 @@ fn normalize_subtitle_lifecycle(root: &mut Map<String, Value>) {
         .or_insert_with(|| json!({}));
     let lifecycle = as_object_mut(lifecycle_value);
 
-    let block_ttl = clamp_i64(int_or(lifecycle.get("completed_block_ttl_ms"), 4500), 500, 3_600_000);
+    let block_ttl = clamp_i64(
+        int_or(lifecycle.get("completed_block_ttl_ms"), 4500),
+        500,
+        3_600_000,
+    );
     let source_ttl = clamp_i64(
         int_or(lifecycle.get("completed_source_ttl_ms"), block_ttl),
         500,
@@ -243,11 +239,15 @@ fn normalize_subtitle_lifecycle(root: &mut Map<String, Value>) {
 
     lifecycle.insert(
         "allow_early_replace_on_next_final".into(),
-        json!(bool_default_true(lifecycle.get("allow_early_replace_on_next_final"))),
+        json!(bool_default_true(
+            lifecycle.get("allow_early_replace_on_next_final")
+        )),
     );
     lifecycle.insert(
         "sync_source_and_translation_expiry".into(),
-        json!(bool_default_true(lifecycle.get("sync_source_and_translation_expiry"))),
+        json!(bool_default_true(
+            lifecycle.get("sync_source_and_translation_expiry")
+        )),
     );
     lifecycle.insert(
         "keep_completed_translation_during_active_partial".into(),
@@ -291,16 +291,14 @@ fn enabled_slot_ids(translation_lines: &[Value]) -> Vec<String> {
                 return None;
             }
             let slot = obj.get("slot_id")?.as_str()?.trim().to_ascii_lowercase();
-            if slot.is_empty() {
-                None
-            } else {
-                Some(slot)
-            }
+            if slot.is_empty() { None } else { Some(slot) }
         })
         .collect()
 }
 
-fn legacy_language_to_slot(translation_lines: &[Value]) -> std::collections::HashMap<String, String> {
+fn legacy_language_to_slot(
+    translation_lines: &[Value],
+) -> std::collections::HashMap<String, String> {
     let mut mapping = std::collections::HashMap::new();
     for line in translation_lines {
         let Some(obj) = line.as_object() else {
@@ -335,11 +333,7 @@ pub fn normalize_display_order(display_order: &[Value], translation_lines: &[Val
     let mut normalized: Vec<String> = Vec::new();
 
     for item in display_order {
-        let value = item
-            .as_str()
-            .unwrap_or("")
-            .trim()
-            .to_ascii_lowercase();
+        let value = item.as_str().unwrap_or("").trim().to_ascii_lowercase();
         if value.is_empty() {
             continue;
         }
@@ -355,10 +349,10 @@ pub fn normalize_display_order(display_order: &[Value], translation_lines: &[Val
             }
             continue;
         }
-        if let Some(mapped) = language_to_slot.get(&value) {
-            if !normalized.contains(mapped) {
-                normalized.push(mapped.clone());
-            }
+        if let Some(mapped) = language_to_slot.get(&value)
+            && !normalized.contains(mapped)
+        {
+            normalized.push(mapped.clone());
         }
     }
 
@@ -387,10 +381,18 @@ fn normalize_subtitle_output(root: &mut Map<String, Value>) {
         .or_insert_with(|| json!({}));
     let output = as_object_mut(output_value);
 
-    if output.get("show_source").and_then(|v| v.as_bool()).is_none() {
+    if output
+        .get("show_source")
+        .and_then(|v| v.as_bool())
+        .is_none()
+    {
         output.insert("show_source".into(), json!(true));
     }
-    if output.get("show_translations").and_then(|v| v.as_bool()).is_none() {
+    if output
+        .get("show_translations")
+        .and_then(|v| v.as_bool())
+        .is_none()
+    {
         output.insert("show_translations".into(), json!(true));
     }
     let max_langs = clamp_i64(int_or(output.get("max_translation_languages"), 2), 0, 5);
@@ -413,7 +415,10 @@ pub fn repair_legacy_keep_completed_false(payload: &mut Value, source_version: i
     let Some(root) = payload.as_object_mut() else {
         return;
     };
-    let Some(lifecycle) = root.get_mut("subtitle_lifecycle").and_then(|v| v.as_object_mut()) else {
+    let Some(lifecycle) = root
+        .get_mut("subtitle_lifecycle")
+        .and_then(|v| v.as_object_mut())
+    else {
         return;
     };
     if lifecycle
@@ -545,7 +550,11 @@ fn normalize_source_text_replacement(root: &mut Map<String, Value>) {
         .unwrap_or(true);
     section.insert("include_builtin".into(), json!(include_builtin));
     section.insert("include_builtin_profanity".into(), json!(include_builtin));
-    if section.get("case_insensitive").and_then(|v| v.as_bool()).is_none() {
+    if section
+        .get("case_insensitive")
+        .and_then(|v| v.as_bool())
+        .is_none()
+    {
         section.insert("case_insensitive".into(), json!(true));
     }
     let whole_words = match (
@@ -635,10 +644,7 @@ mod tests {
             "source_lang": "ru"
         }));
         assert_eq!(out["updates"]["enabled"], true);
-        assert_eq!(
-            out["updates"]["github_repo"],
-            DEFAULT_GITHUB_REPO
-        );
+        assert_eq!(out["updates"]["github_repo"], DEFAULT_GITHUB_REPO);
         assert_eq!(out["updates"]["provider"], "github_releases");
     }
 
@@ -807,7 +813,10 @@ mod tests {
             "asr": { "realtime": { "finalization_hold_ms": 100 } }
         }));
         assert_eq!(out["subtitle_lifecycle"]["completed_source_ttl_ms"], 500);
-        assert_eq!(out["subtitle_lifecycle"]["completed_translation_ttl_ms"], 9000);
+        assert_eq!(
+            out["subtitle_lifecycle"]["completed_translation_ttl_ms"],
+            9000
+        );
         assert_eq!(out["asr"]["realtime"]["finalization_hold_ms"], 400);
         assert_eq!(out["asr"]["realtime"]["max_segment_ms"], 5500);
     }

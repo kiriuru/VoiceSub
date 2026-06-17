@@ -1,6 +1,6 @@
 //! SST `backend/config/normalizers/translation.py` parity.
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::secrets::{
     normalize_google_translate_api_key, normalize_provider_secret, normalize_provider_text_value,
@@ -356,7 +356,10 @@ fn normalize_provider(raw_provider: Option<&Value>, fallback: &str) -> String {
     }
 }
 
-fn normalize_target_languages(raw_target_languages: &Value, fallback_targets: &Value) -> Vec<String> {
+fn normalize_target_languages(
+    raw_target_languages: &Value,
+    fallback_targets: &Value,
+) -> Vec<String> {
     let target_languages = if raw_target_languages.is_array() {
         raw_target_languages
     } else {
@@ -635,7 +638,10 @@ mod tests {
                 "region": "eu"
             }
         }));
-        assert_eq!(out["google_cloud_translation_v3"]["access_token"], "token-1");
+        assert_eq!(
+            out["google_cloud_translation_v3"]["access_token"],
+            "token-1"
+        );
         assert_eq!(out["google_cloud_translation_v3"]["project_id"], "proj-1");
         assert_eq!(out["google_cloud_translation_v3"]["location"], "eu");
         assert!(out["google_cloud_translation_v3"].get("api_key").is_none());

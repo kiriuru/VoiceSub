@@ -17,7 +17,9 @@ use crate::profile_bloat_guard::prepare_worker_profile_dir;
 /// in those harnesses (see `voicesub-http/tests/common.rs`).
 pub fn browser_worker_launch_skipped() -> bool {
     if matches!(
-        std::env::var("VOICESUB_FORCE_BROWSER_WORKER").ok().as_deref(),
+        std::env::var("VOICESUB_FORCE_BROWSER_WORKER")
+            .ok()
+            .as_deref(),
         Some("1") | Some("true") | Some("yes")
     ) {
         return false;
@@ -26,7 +28,9 @@ pub fn browser_worker_launch_skipped() -> bool {
         return true;
     }
     matches!(
-        std::env::var("VOICESUB_SKIP_BROWSER_WORKER").ok().as_deref(),
+        std::env::var("VOICESUB_SKIP_BROWSER_WORKER")
+            .ok()
+            .as_deref(),
         Some("1") | Some("true") | Some("yes")
     )
 }
@@ -92,7 +96,8 @@ impl BrowserWorkerLauncher {
                 worker_url,
                 "browser worker launch skipped (test build or VOICESUB_SKIP_BROWSER_WORKER)"
             );
-            let chrome_path = find_chrome_executable().unwrap_or_else(|| PathBuf::from("chrome.exe"));
+            let chrome_path =
+                find_chrome_executable().unwrap_or_else(|| PathBuf::from("chrome.exe"));
             let profile_dir = self.profile_dir(worker_url, &chrome_path);
             prepare_worker_profile_dir(&profile_dir).map_err(BrowserLaunchError::ProfileDir)?;
             return Ok(LaunchResult {
@@ -111,7 +116,8 @@ impl BrowserWorkerLauncher {
         let mut args = vec![chrome_path.display().to_string()];
         args.extend(chrome_args.clone());
 
-        let child = spawn_chrome_process(&chrome_path, &chrome_args, chrome_launch.use_high_priority)?;
+        let child =
+            spawn_chrome_process(&chrome_path, &chrome_args, chrome_launch.use_high_priority)?;
         let pid = child.id();
 
         opt_out_chrome_power_throttling(pid);
@@ -169,7 +175,10 @@ fn spawn_chrome_process(
 ) -> Result<std::process::Child, BrowserLaunchError> {
     match try_spawn_chrome(chrome_path, chrome_args, use_high_priority) {
         Ok(child) => Ok(child),
-        Err(err) if use_high_priority && matches!(&err, BrowserLaunchError::Spawn(io) if is_access_denied(io)) => {
+        Err(err)
+            if use_high_priority
+                && matches!(&err, BrowserLaunchError::Spawn(io) if is_access_denied(io)) =>
+        {
             warn!(
                 "chrome launch: HIGH_PRIORITY_CLASS denied (ERROR_ACCESS_DENIED); retrying without priority boost"
             );
@@ -219,18 +228,18 @@ fn find_chrome_executable() -> Option<PathBuf> {
 
 #[cfg(windows)]
 fn find_chrome_from_registry() -> Option<PathBuf> {
-    use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_READ};
     use winreg::RegKey;
+    use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_READ};
 
     const SUBKEY: &str = r"Software\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe";
     for hive in [HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE] {
         let root = RegKey::predef(hive);
-        if let Ok(key) = root.open_subkey_with_flags(SUBKEY, KEY_READ) {
-            if let Ok(value) = key.get_value::<String, _>("") {
-                let candidate = PathBuf::from(value.trim().trim_matches('"'));
-                if is_supported_chrome(&candidate) {
-                    return Some(candidate);
-                }
+        if let Ok(key) = root.open_subkey_with_flags(SUBKEY, KEY_READ)
+            && let Ok(value) = key.get_value::<String, _>("")
+        {
+            let candidate = PathBuf::from(value.trim().trim_matches('"'));
+            if is_supported_chrome(&candidate) {
+                return Some(candidate);
             }
         }
     }
@@ -261,10 +270,7 @@ fn probe_common_install_paths() -> Option<PathBuf> {
         std::env::var_os("ProgramFiles"),
         std::env::var_os("ProgramFiles(x86)"),
     ];
-    let relatives = [
-        ["Google", "Chrome", "Application", "chrome.exe"],
-        ["Google", "Chrome", "Application", "chrome.exe"],
-    ];
+    let relatives = [["Google", "Chrome", "Application", "chrome.exe"]];
     for root in roots.into_iter().flatten() {
         for parts in &relatives {
             let mut candidate = PathBuf::from(&root);
@@ -309,9 +315,11 @@ mod tests {
     #[test]
     fn launch_args_include_configured_flags() {
         let config = BrowserChromeLaunchConfig::default();
-        assert!(config
-            .launch_args
-            .contains(&"--disable-background-timer-throttling".to_string()));
+        assert!(
+            config
+                .launch_args
+                .contains(&"--disable-background-timer-throttling".to_string())
+        );
     }
 
     #[test]

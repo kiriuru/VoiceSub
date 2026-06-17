@@ -56,7 +56,7 @@ export function classifyRecognitionError(
     };
   }
   if (isLanguageUnsupported(errorKind, policy)) {
-    return { kind: "terminal_language", errorKind, errorMessage, terminalReason: "permission_denied" };
+    return { kind: "terminal_language", errorKind, errorMessage, terminalReason: "language_not_supported" };
   }
   return { kind: "unknown", errorKind, errorMessage };
 }

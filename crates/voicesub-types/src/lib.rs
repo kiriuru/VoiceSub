@@ -6,7 +6,8 @@ pub mod ws;
 
 pub use asr::ExternalAsrUpdate;
 pub use version::{
+    DEFAULT_GITHUB_REPO, LEGACY_GITHUB_REPO, PROJECT_VERSION, RELEASE_TRACK,
     build_version_info_payload, extract_latest_github_release, is_remote_version_newer,
-    release_url_for, DEFAULT_GITHUB_REPO, LEGACY_GITHUB_REPO, PROJECT_VERSION, RELEASE_TRACK,
+    release_url_for,
 };
-pub use ws::{parse_worker_message_type, AsrWorkerHello, EventsHello, WsMessage, WsMessageType};
+pub use ws::{AsrWorkerHello, EventsHello, WsMessage, WsMessageType, parse_worker_message_type};

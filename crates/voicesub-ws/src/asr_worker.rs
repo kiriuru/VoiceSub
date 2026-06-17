@@ -6,13 +6,13 @@ use futures_util::{SinkExt, StreamExt};
 
 use serde_json::Value;
 
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::{RwLock, mpsc};
 
 use tracing::{info, instrument, warn};
 
 use voicesub_browser::BrowserAsrService;
 
-use voicesub_types::{parse_worker_message_type, AsrWorkerHello, WsMessageType};
+use voicesub_types::{AsrWorkerHello, WsMessageType, parse_worker_message_type};
 
 #[derive(Debug, Clone, Default)]
 
@@ -94,7 +94,14 @@ impl AsrWorkerHub {
 
         let hello = AsrWorkerHello::new(transport_id);
 
-        let hello_json = serde_json::to_string(&hello).unwrap_or_default();
+        let hello_json = match serde_json::to_string(&hello) {
+            Ok(json) => json,
+            Err(err) => {
+                warn!(transport_id, error = %err, "asr worker hello serialization failed");
+                self.service.disconnect(transport_id).await;
+                return;
+            }
+        };
 
         if ws_tx.send(Message::Text(hello_json.into())).await.is_err() {
             self.service.disconnect(transport_id).await;
@@ -175,26 +182,35 @@ impl AsrWorkerHub {
 
     async fn handle_text(&self, transport_id: u64, text: &str) {
         let Ok(value) = serde_json::from_str::<Value>(text) else {
+            warn!(transport_id, "asr worker message is not valid JSON");
             return;
         };
 
         let Some(kind) = value.get("type").and_then(|v| v.as_str()) else {
+            warn!(transport_id, "asr worker message missing type");
             return;
         };
 
         match parse_worker_message_type(kind) {
             WsMessageType::ExternalAsrUpdate => {
-                let _ = self
+                if !self
                     .service
                     .handle_external_update(transport_id, &value)
-                    .await;
+                    .await
+                {
+                    warn!(transport_id, "asr external update rejected");
+                }
             }
 
             WsMessageType::BrowserAsrStatus | WsMessageType::BrowserAsrHeartbeat => {
-                let _ = self.service.handle_status(transport_id, &value).await;
+                if !self.service.handle_status(transport_id, &value).await {
+                    warn!(transport_id, "asr status update rejected");
+                }
             }
 
-            _ => {}
+            _ => {
+                warn!(transport_id, kind, "asr worker ignored unknown message type");
+            }
         }
     }
 }

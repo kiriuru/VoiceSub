@@ -359,7 +359,6 @@ export class BrowserAsrSessionManager implements AsrManagerHost {
       const clientSegmentId = this.ensureClientSegmentIdInternal();
       if (this.shouldSuppressFinalInternal(finalText, { forcedFinal: true })) {
         this.state.currentPartial = "";
-        this.state.hasOpenSentence = false;
         this.options.setPartialText?.("");
         return;
       }
@@ -382,7 +381,6 @@ export class BrowserAsrSessionManager implements AsrManagerHost {
         at_ms: this.now(),
       };
       this.state.currentPartial = "";
-      this.state.hasOpenSentence = false;
       this.options.setFinalText?.(finalText);
       this.options.setPartialText?.("");
       this.setStatusInternal("forced-finalized");
@@ -484,7 +482,7 @@ export class BrowserAsrSessionManager implements AsrManagerHost {
     this.setHealthDegradedReasonInternal(reason || null);
   }
 
-  stripWebSpeechExperimentalHints(recognition: WorkerSpeechRecognition): void {
+  stripChromeOnDeviceHints(recognition: WorkerSpeechRecognition): void {
     webSpeechRecognitionPolicy.stripChromeOnDeviceHints(recognition);
   }
 
@@ -492,7 +490,7 @@ export class BrowserAsrSessionManager implements AsrManagerHost {
     if (!recognition || !this.state.webSpeechPhraseHintsSuppressed) {
       return;
     }
-    this.stripWebSpeechExperimentalHints(recognition);
+    this.stripChromeOnDeviceHints(recognition);
   }
 
   wireRecognitionHandlers(
@@ -594,6 +592,8 @@ export class BrowserAsrSessionManager implements AsrManagerHost {
     this.initialNoSpeechDelayMs = this.state.noSpeechRestartDelayMs;
     this.initialNetworkBackoffMs = this.state.networkReconnectInitialMs;
     this.maxNetworkBackoffMs = this.state.networkReconnectMaxMs;
+    this.maxBrowserSessionAgeMs = this.state.maxBrowserSessionAgeMs;
+    this.prepareCycleBeforeMs = this.state.prepareCycleBeforeMs;
     this.maxStoppingMs = Math.max(
       500,
       Number(settings.stuckStoppingTimeoutMs || this.state.stuckStoppingTimeoutMs || this.maxStoppingMs)
@@ -707,7 +707,6 @@ export class BrowserAsrSessionManager implements AsrManagerHost {
     this.clearAllTimersInternal();
     this.state.currentPartial = "";
     this.state.currentPartialStableSinceMs = 0;
-    this.state.hasOpenSentence = false;
     this.state.stoppingSinceMs = this.now();
     this.state.pendingRestartReason = null;
     this.state.noSpeechBackoffMs = 0;
@@ -806,8 +805,8 @@ export class BrowserAsrSessionManager implements AsrManagerHost {
       state: this.state,
       nowMs: now,
       limits: {
-        maxBrowserSessionAgeMs: this.maxBrowserSessionAgeMs,
-        prepareCycleBeforeMs: this.prepareCycleBeforeMs,
+        maxBrowserSessionAgeMs: this.state.maxBrowserSessionAgeMs,
+        prepareCycleBeforeMs: this.state.prepareCycleBeforeMs,
         maxStoppingMs: this.maxStoppingMs,
         hiddenIdleRestartMs: this.hiddenIdleRestartMs,
         visibleIdleRestartMs: this.visibleIdleRestartMs,

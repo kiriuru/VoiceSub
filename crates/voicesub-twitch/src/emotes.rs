@@ -203,80 +203,73 @@ async fn fetch_sets_for_login(
     oauth_token: &str,
     sources: &TwitchEmoteSources,
 ) -> Result<EmoteSets, String> {
-        let login = channel_login.trim().trim_start_matches('#').to_lowercase();
-        if login.is_empty() {
-            return Err("channel login is empty".into());
+    let login = channel_login.trim().trim_start_matches('#').to_lowercase();
+    if login.is_empty() {
+        return Err("channel login is empty".into());
+    }
+
+    let mut twitch = HashSet::new();
+    let mut bttv = HashSet::new();
+    let mut seventv = HashSet::new();
+
+    let bearer = normalize_bearer(oauth_token);
+    let mut broadcaster_id: Option<String> = None;
+
+    if sources.twitch || sources.bttv || sources.seventv {
+        broadcaster_id = fetch_broadcaster_id(client, &login, client_id, &bearer).await;
+        if broadcaster_id.is_none() {
+            broadcaster_id = fetch_broadcaster_id_fallback(client, &login).await;
         }
-
-        let mut twitch = HashSet::new();
-        let mut bttv = HashSet::new();
-        let mut seventv = HashSet::new();
-
-        let bearer = normalize_bearer(oauth_token);
-        let mut broadcaster_id: Option<String> = None;
-
-        if sources.twitch || sources.bttv || sources.seventv {
-            broadcaster_id = fetch_broadcaster_id(client, &login, client_id, &bearer).await;
-            if broadcaster_id.is_none() {
-                broadcaster_id = fetch_broadcaster_id_fallback(client, &login).await;
-            }
-            if broadcaster_id.is_none() {
-                warn!(
-                    target: "voicesub.twitch.emotes",
-                    channel = %login,
-                    "broadcaster id lookup failed — channel BTTV/7TV emotes unavailable"
-                );
-            }
+        if broadcaster_id.is_none() {
+            warn!(
+                target: "voicesub.twitch.emotes",
+                channel = %login,
+                "broadcaster id lookup failed — channel BTTV/7TV emotes unavailable"
+            );
         }
+    }
 
-        if sources.twitch {
-            if let Err(err) = fetch_twitch_emotes(
-                client,
-                client_id,
-                &bearer,
-                broadcaster_id.as_deref(),
-                &mut twitch,
-            )
-            .await
-            {
-                warn!(target: "voicesub.twitch.emotes", error = %err, "twitch emote fetch failed");
-            }
-        }
+    if sources.twitch
+        && let Err(err) = fetch_twitch_emotes(
+            client,
+            client_id,
+            &bearer,
+            broadcaster_id.as_deref(),
+            &mut twitch,
+        )
+        .await
+    {
+        warn!(target: "voicesub.twitch.emotes", error = %err, "twitch emote fetch failed");
+    }
 
-        if sources.bttv {
-            if let Some(id) = broadcaster_id.as_deref() {
-                if let Err(err) =
-                    fetch_bttv_emotes(client, id, &mut bttv).await
-                {
-                    warn!(target: "voicesub.twitch.emotes", error = %err, "bttv emote fetch failed");
-                }
-            }
-        }
+    if sources.bttv
+        && let Some(id) = broadcaster_id.as_deref()
+        && let Err(err) = fetch_bttv_emotes(client, id, &mut bttv).await
+    {
+        warn!(target: "voicesub.twitch.emotes", error = %err, "bttv emote fetch failed");
+    }
 
-        if sources.seventv {
-            if let Some(id) = broadcaster_id.as_deref() {
-                if let Err(err) =
-                    fetch_seventv_emotes(client, id, &mut seventv).await
-                {
-                    warn!(target: "voicesub.twitch.emotes", error = %err, "7tv emote fetch failed");
-                }
-            }
-        }
+    if sources.seventv
+        && let Some(id) = broadcaster_id.as_deref()
+        && let Err(err) = fetch_seventv_emotes(client, id, &mut seventv).await
+    {
+        warn!(target: "voicesub.twitch.emotes", error = %err, "7tv emote fetch failed");
+    }
 
-        let mut snapshot = EmoteSets {
-            twitch,
-            bttv,
-            seventv,
-            channel_login: login.clone(),
-            twitch_count: 0,
-            bttv_count: 0,
-            seventv_count: 0,
-            last_refresh: Some(Instant::now()),
-        };
-        snapshot.twitch_count = snapshot.twitch.len();
-        snapshot.bttv_count = snapshot.bttv.len();
-        snapshot.seventv_count = snapshot.seventv.len();
-        Ok(snapshot)
+    let mut snapshot = EmoteSets {
+        twitch,
+        bttv,
+        seventv,
+        channel_login: login.clone(),
+        twitch_count: 0,
+        bttv_count: 0,
+        seventv_count: 0,
+        last_refresh: Some(Instant::now()),
+    };
+    snapshot.twitch_count = snapshot.twitch.len();
+    snapshot.bttv_count = snapshot.bttv.len();
+    snapshot.seventv_count = snapshot.seventv.len();
+    Ok(snapshot)
 }
 
 fn normalize_bearer(token: &str) -> String {
@@ -330,13 +323,14 @@ async fn fetch_twitch_emotes(
         req
     };
 
-    let global: HelixEmotesResponse = headers(client.get("https://api.twitch.tv/helix/chat/emotes/global"))
-        .send()
-        .await
-        .map_err(|err| err.to_string())?
-        .json()
-        .await
-        .map_err(|err| err.to_string())?;
+    let global: HelixEmotesResponse =
+        headers(client.get("https://api.twitch.tv/helix/chat/emotes/global"))
+            .send()
+            .await
+            .map_err(|err| err.to_string())?
+            .json()
+            .await
+            .map_err(|err| err.to_string())?;
     for emote in global.data {
         out.insert(emote.name.to_ascii_lowercase());
     }
@@ -433,17 +427,16 @@ async fn fetch_seventv_emotes(
 
     if let Some(set) = user.emote_set {
         collect_seventv_set_emotes(out, &set.emotes);
-        if set.emotes.is_empty() {
-            if let Some(set_id) = user.emote_set_id.as_deref().or(Some(set.id.as_str())) {
-                if let Err(err) = fetch_seventv_emote_set_by_id(client, set_id, out).await {
-                    warn!(
-                        target: "voicesub.twitch.emotes",
-                        set_id = %set_id,
-                        error = %err,
-                        "7tv emote set fetch by id failed"
-                    );
-                }
-            }
+        if set.emotes.is_empty()
+            && let Some(set_id) = user.emote_set_id.as_deref().or(Some(set.id.as_str()))
+            && let Err(err) = fetch_seventv_emote_set_by_id(client, set_id, out).await
+        {
+            warn!(
+                target: "voicesub.twitch.emotes",
+                set_id = %set_id,
+                error = %err,
+                "7tv emote set fetch by id failed"
+            );
         }
     } else if let Some(set_id) = user.emote_set_id.as_deref() {
         fetch_seventv_emote_set_by_id(client, set_id, out).await?;
@@ -455,15 +448,15 @@ async fn fetch_seventv_emotes(
                 collect_seventv_set_emotes(out, &set_ref.emotes);
                 continue;
             }
-            if let Some(set_id) = set_ref.id.as_deref() {
-                if let Err(err) = fetch_seventv_emote_set_by_id(client, set_id, out).await {
-                    warn!(
-                        target: "voicesub.twitch.emotes",
-                        set_id = %set_id,
-                        error = %err,
-                        "7tv supplemental emote set fetch failed"
-                    );
-                }
+            if let Some(set_id) = set_ref.id.as_deref()
+                && let Err(err) = fetch_seventv_emote_set_by_id(client, set_id, out).await
+            {
+                warn!(
+                    target: "voicesub.twitch.emotes",
+                    set_id = %set_id,
+                    error = %err,
+                    "7tv supplemental emote set fetch failed"
+                );
             }
         }
     }
@@ -496,7 +489,12 @@ fn collect_seventv_set_emotes(out: &mut HashSet<String>, emotes: &[SevenTvEmote]
 
 /// Index both the active set name (channel alias) and canonical `data.name`.
 fn insert_seventv_emote(out: &mut HashSet<String>, emote: &SevenTvEmote) {
-    if let Some(name) = emote.name.as_deref().map(str::trim).filter(|name| !name.is_empty()) {
+    if let Some(name) = emote
+        .name
+        .as_deref()
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+    {
         insert_third_party_code(out, name);
     }
     if let Some(base) = emote
@@ -505,10 +503,9 @@ fn insert_seventv_emote(out: &mut HashSet<String>, emote: &SevenTvEmote) {
         .and_then(|data| data.name.as_deref())
         .map(str::trim)
         .filter(|name| !name.is_empty())
+        && emote.name.as_deref().map(str::trim) != Some(base)
     {
-        if emote.name.as_deref().map(str::trim) != Some(base) {
-            insert_third_party_code(out, base);
-        }
+        insert_third_party_code(out, base);
     }
 }
 
@@ -657,6 +654,7 @@ struct SevenTvEmoteData {
 }
 
 #[cfg(test)]
+#[allow(clippy::field_reassign_with_default)]
 mod tests {
     use super::*;
 

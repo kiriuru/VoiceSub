@@ -1,7 +1,7 @@
 //! Windows WASAPI enumeration and per-process endpoint routing.
 
 use tracing::{debug, info, warn};
-use wasapi::{get_default_device, DeviceCollection, Direction};
+use wasapi::{DeviceCollection, Direction, get_default_device};
 
 use crate::policy_config::set_persisted_process_endpoint;
 use crate::trace;
@@ -11,7 +11,9 @@ pub fn list_output_devices() -> Result<Vec<AudioOutputDevice>, AudioError> {
     debug!(target: "voicesub.tts.audio", "wasapi CoInitializeEx");
     unsafe {
         use windows::Win32::Foundation::RPC_E_CHANGED_MODE;
-        use windows::Win32::System::Com::{CoInitializeEx, COINIT_APARTMENTTHREADED, COINIT_MULTITHREADED};
+        use windows::Win32::System::Com::{
+            COINIT_APARTMENTTHREADED, COINIT_MULTITHREADED, CoInitializeEx,
+        };
         let hr = CoInitializeEx(None, COINIT_MULTITHREADED);
         if hr.is_err() && hr != RPC_E_CHANGED_MODE {
             let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
@@ -104,7 +106,10 @@ pub fn set_process_output_device(pid: u32, device_id: &str) -> Result<(), AudioE
 
 fn validate_device_id(device_id: &str) -> Result<(), AudioError> {
     let devices = list_output_devices()?;
-    if devices.iter().any(|d| !d.id.is_empty() && d.id == device_id) {
+    if devices
+        .iter()
+        .any(|d| !d.id.is_empty() && d.id == device_id)
+    {
         Ok(())
     } else {
         warn!(
@@ -155,7 +160,9 @@ mod tests {
     #[test]
     fn skips_unknown_device_when_routing_disabled() {
         let _guard = env_test_lock();
-        std::env::remove_var("VOICESUB_TTS_PER_PROCESS_ROUTING");
+        unsafe {
+            std::env::remove_var("VOICESUB_TTS_PER_PROCESS_ROUTING");
+        }
         set_process_output_device(1234, "{not-a-real-endpoint}").expect("routing disabled");
     }
 
@@ -163,13 +170,17 @@ mod tests {
     fn validate_rejects_unknown_device_id_when_routing_enabled() {
         let _guard = env_test_lock();
         let _prev = std::env::var("VOICESUB_TTS_PER_PROCESS_ROUTING").ok();
-        std::env::set_var("VOICESUB_TTS_PER_PROCESS_ROUTING", "1");
+        unsafe {
+            std::env::set_var("VOICESUB_TTS_PER_PROCESS_ROUTING", "1");
+        }
         let err = set_process_output_device(1234, "{not-a-real-endpoint}").unwrap_err();
         assert!(matches!(err, AudioError::DeviceNotFound(_)));
-        if let Some(value) = _prev {
-            std::env::set_var("VOICESUB_TTS_PER_PROCESS_ROUTING", value);
-        } else {
-            std::env::remove_var("VOICESUB_TTS_PER_PROCESS_ROUTING");
+        unsafe {
+            if let Some(value) = _prev {
+                std::env::set_var("VOICESUB_TTS_PER_PROCESS_ROUTING", value);
+            } else {
+                std::env::remove_var("VOICESUB_TTS_PER_PROCESS_ROUTING");
+            }
         }
     }
 }

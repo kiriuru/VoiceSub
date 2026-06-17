@@ -93,7 +93,11 @@ impl SpeechQueue {
     }
 
     /// Returns items removed by adaptive drop before enqueueing `item`.
-    pub fn enqueue_with_cap(&mut self, item: SpeechQueueItem, max_items: u32) -> Vec<SpeechQueueItem> {
+    pub fn enqueue_with_cap(
+        &mut self,
+        item: SpeechQueueItem,
+        max_items: u32,
+    ) -> Vec<SpeechQueueItem> {
         let cap = max_items.max(1) as usize;
         let dropped = adaptive_drop_for_enqueue(&mut self.items, cap);
         debug!(
@@ -278,7 +282,10 @@ mod tests {
         q.enqueue(item("a", "one"));
         q.enqueue(item("b", "two"));
         let _ = q.begin_next();
-        assert_eq!(q.mark_finished("wrong"), MarkFinishedOutcome::MismatchForcedIdle);
+        assert_eq!(
+            q.mark_finished("wrong"),
+            MarkFinishedOutcome::MismatchForcedIdle
+        );
         assert_eq!(q.state(), SpeechQueueState::Idle);
         assert_eq!(q.begin_next().unwrap().id, "b");
     }

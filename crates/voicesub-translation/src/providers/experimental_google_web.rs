@@ -2,14 +2,13 @@ use std::collections::HashMap;
 
 use async_trait::async_trait;
 use reqwest::Method;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use std::sync::Arc;
 
 use super::{
-    http::SharedHttpClient,
-    base_diagnostics, http, normalize_source_lang, ProviderError, ProviderInfo, TranslateRequest,
-    TranslationProvider,
+    ProviderError, ProviderInfo, TranslateRequest, TranslationProvider, base_diagnostics, http,
+    http::SharedHttpClient, normalize_source_lang,
 };
 
 fn build_google_translate_url(text: &str, source_lang: &str, target_lang: &str) -> String {
@@ -23,14 +22,14 @@ fn build_google_translate_url(text: &str, source_lang: &str, target_lang: &str) 
 
 fn extract_google_translation_text(payload: &Value) -> String {
     let mut translated_parts = Vec::new();
-    if let Some(first) = payload.as_array().and_then(|items| items.first()) {
-        if let Some(chunks) = first.as_array() {
-            for item in chunks {
-                if let Some(parts) = item.as_array() {
-                    if let Some(text) = parts.first().and_then(|value| value.as_str()) {
-                        translated_parts.push(text);
-                    }
-                }
+    if let Some(first) = payload.as_array().and_then(|items| items.first())
+        && let Some(chunks) = first.as_array()
+    {
+        for item in chunks {
+            if let Some(parts) = item.as_array()
+                && let Some(text) = parts.first().and_then(|value| value.as_str())
+            {
+                translated_parts.push(text);
             }
         }
     }

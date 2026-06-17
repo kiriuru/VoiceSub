@@ -4,9 +4,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
-use crate::log_rotation::{rotate_if_needed, DEFAULT_BACKUP_COUNT, DEFAULT_MAX_BYTES};
+use crate::log_rotation::{DEFAULT_BACKUP_COUNT, DEFAULT_MAX_BYTES, rotate_if_needed};
 
 pub struct JsonlTraceLog {
     path: PathBuf,
@@ -50,7 +50,11 @@ impl JsonlTraceLog {
         };
         let _guard = self.write_lock.lock().unwrap_or_else(|e| e.into_inner());
         rotate_if_needed(&self.path, DEFAULT_MAX_BYTES, DEFAULT_BACKUP_COUNT);
-        if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(&self.path) {
+        if let Ok(mut file) = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&self.path)
+        {
             let _ = writeln!(file, "{line}");
         }
     }

@@ -5,13 +5,19 @@ use voicesub_config::{AppConfig, HttpBindConfig};
 use voicesub_runtime::{RuntimeHandle, RuntimeService};
 use voicesub_tts::TwitchOAuthBridge;
 
+#[path = "../../voicesub-runtime/tests/authed_api.rs"]
+mod authed_api;
+pub use authed_api::AuthedApi;
+
 static INTEGRATION_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 static ENSURE_SKIP_BROWSER: Once = Once::new();
 
 fn ensure_skip_browser_worker_in_tests() {
     ENSURE_SKIP_BROWSER.call_once(|| {
         if matches!(
-            std::env::var("VOICESUB_FORCE_BROWSER_WORKER").ok().as_deref(),
+            std::env::var("VOICESUB_FORCE_BROWSER_WORKER")
+                .ok()
+                .as_deref(),
             Some("1") | Some("true") | Some("yes")
         ) {
             return;
@@ -75,5 +81,9 @@ impl EphemeralRuntime {
 
     pub async fn start(&self) -> RuntimeHandle {
         self.service.start().await.expect("start runtime")
+    }
+
+    pub fn authed<'a>(&'a self, client: &'a reqwest::Client) -> AuthedApi<'a> {
+        AuthedApi::new(client, &self.service)
     }
 }

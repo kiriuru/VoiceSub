@@ -10,8 +10,8 @@ mod trace;
 mod transcript_controller;
 
 pub use http::{
-    build_router, partial_emit_settings_from_config, HttpState, PartialEmitCoordinator,
-    RuntimeMetricsCollector, StylePresetsFn,
+    BackgroundTaskRegistry, HttpState, LOOPBACK_TOKEN_HEADER, LoopbackAuth, PartialEmitCoordinator,
+    RuntimeMetricsCollector, StylePresetsFn, build_router, partial_emit_settings_from_config,
 };
 pub use service::{RuntimeError, RuntimeHandle, RuntimeService, SubtitlePayloadListener};
 pub use voicesub_ws::RuntimeStateSnapshot;

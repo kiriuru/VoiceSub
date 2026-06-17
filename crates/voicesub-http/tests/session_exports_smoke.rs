@@ -4,7 +4,7 @@ mod common;
 
 use std::time::Duration;
 
-use common::{integration_lock, EphemeralRuntime};
+use common::{EphemeralRuntime, integration_lock};
 
 #[tokio::test]
 async fn client_event_returns_json_logged_true() {
@@ -14,7 +14,8 @@ async fn client_event_returns_json_logged_true() {
     let addr = handle.bind_addr;
 
     let client = reqwest::Client::new();
-    let response = client
+    let response = runtime
+        .authed(&client)
         .post(format!("http://{addr}/api/logs/client-event"))
         .json(&serde_json::json!({
             "channel": "dashboard",
@@ -39,7 +40,8 @@ async fn list_exports_returns_array() {
     let addr = handle.bind_addr;
 
     let client = reqwest::Client::new();
-    let response = client
+    let response = runtime
+        .authed(&client)
         .get(format!("http://{addr}/api/exports"))
         .timeout(Duration::from_secs(3))
         .send()
@@ -61,7 +63,8 @@ async fn diagnostics_export_returns_zip() {
     let addr = handle.bind_addr;
 
     let client = reqwest::Client::new();
-    let response = client
+    let response = runtime
+        .authed(&client)
         .get(format!("http://{addr}/api/exports/diagnostics"))
         .timeout(Duration::from_secs(3))
         .send()
@@ -89,7 +92,8 @@ async fn settings_roundtrip_preserves_payload_shape() {
     let addr = handle.bind_addr;
 
     let client = reqwest::Client::new();
-    let load = client
+    let load = runtime
+        .authed(&client)
         .get(format!("http://{addr}/api/settings/load"))
         .timeout(Duration::from_secs(3))
         .send()
@@ -102,7 +106,8 @@ async fn settings_roundtrip_preserves_payload_shape() {
     assert!(loaded.get("subtitle_style_presets").is_some());
     assert!(loaded.get("font_catalog").is_some());
 
-    let save = client
+    let save = runtime
+        .authed(&client)
         .post(format!("http://{addr}/api/settings/save"))
         .json(&serde_json::json!({
             "payload": loaded["payload"]
@@ -127,7 +132,8 @@ async fn settings_save_accepts_libretranslate_provider() {
     let addr = handle.bind_addr;
 
     let client = reqwest::Client::new();
-    let load = client
+    let load = runtime
+        .authed(&client)
         .get(format!("http://{addr}/api/settings/load"))
         .timeout(Duration::from_secs(3))
         .send()
@@ -149,7 +155,8 @@ async fn settings_save_accepts_libretranslate_provider() {
         "api_url": "https://libretranslate.com/translate"
     });
 
-    let save = client
+    let save = runtime
+        .authed(&client)
         .post(format!("http://{addr}/api/settings/save"))
         .json(&serde_json::json!({ "payload": payload }))
         .timeout(Duration::from_secs(5))
@@ -179,7 +186,8 @@ async fn settings_save_accepts_public_libretranslate_mirror_provider() {
     let addr = handle.bind_addr;
 
     let client = reqwest::Client::new();
-    let load = client
+    let load = runtime
+        .authed(&client)
         .get(format!("http://{addr}/api/settings/load"))
         .timeout(Duration::from_secs(3))
         .send()
@@ -205,13 +213,13 @@ async fn settings_save_accepts_public_libretranslate_mirror_provider() {
             "label": "EN"
         }
     ]);
-    payload["translation"]["provider_settings"]["public_libretranslate_mirror"] =
-        serde_json::json!({
-            "api_url": "https://translate.fedilab.app/translate"
-        });
+    payload["translation"]["provider_settings"]["public_libretranslate_mirror"] = serde_json::json!({
+        "api_url": "https://translate.fedilab.app/translate"
+    });
     payload["obs_closed_captions"]["enabled"] = serde_json::json!(true);
 
-    let save = client
+    let save = runtime
+        .authed(&client)
         .post(format!("http://{addr}/api/settings/save"))
         .json(&serde_json::json!({ "payload": payload }))
         .timeout(Duration::from_secs(5))

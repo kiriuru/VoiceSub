@@ -1,8 +1,8 @@
 use serde_json::Value;
 
 use crate::chrome_flags::{
-    default_anti_throttle_args, default_disabled_chrome_features, finalize_chrome_launch_config,
-    BrowserChromeLaunchConfig,
+    BrowserChromeLaunchConfig, default_anti_throttle_args, default_disabled_chrome_features,
+    finalize_chrome_launch_config,
 };
 use crate::launch_stability::apply_launch_stability_overrides;
 
@@ -15,9 +15,7 @@ pub fn chrome_launch_from_config(config: &Value) -> BrowserChromeLaunchConfig {
     let Some(browser) = browser else {
         return BrowserChromeLaunchConfig::default();
     };
-    let chrome = browser
-        .get("chrome_launch")
-        .and_then(Value::as_object);
+    let chrome = browser.get("chrome_launch").and_then(Value::as_object);
     let Some(chrome) = chrome else {
         return BrowserChromeLaunchConfig::default();
     };
@@ -53,7 +51,12 @@ fn string_array(value: Option<&Value>) -> Option<Vec<String>> {
     let items = value?.as_array()?;
     let parsed: Vec<String> = items
         .iter()
-        .filter_map(|item| item.as_str().map(str::trim).filter(|s| !s.is_empty()).map(str::to_string))
+        .filter_map(|item| {
+            item.as_str()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+        })
         .collect();
     if parsed.is_empty() {
         None
@@ -71,9 +74,10 @@ mod tests {
     fn uses_defaults_when_section_missing() {
         let cfg = chrome_launch_from_config(&json!({ "asr": { "browser": {} } }));
         assert!(cfg.use_high_priority);
-        assert!(cfg
-            .launch_args
-            .contains(&"--disable-background-timer-throttling".to_string()));
+        assert!(
+            cfg.launch_args
+                .contains(&"--disable-background-timer-throttling".to_string())
+        );
     }
 
     #[test]
@@ -104,17 +108,24 @@ mod tests {
                 }
             }
         }));
-        assert!(cfg
-            .launch_args
-            .contains(&"--disable-background-timer-throttling".to_string()));
-        assert!(cfg.disabled_features.iter().any(|f| f == "CalculateNativeWinOcclusion"));
+        assert!(
+            cfg.launch_args
+                .contains(&"--disable-background-timer-throttling".to_string())
+        );
+        assert!(
+            cfg.disabled_features
+                .iter()
+                .any(|f| f == "CalculateNativeWinOcclusion")
+        );
     }
 
     #[test]
     fn stability_profile_from_config() {
-        std::env::remove_var("VOICESUB_BROWSER_STABILITY");
-        std::env::remove_var("VOICESUB_BROWSER_HIGH_PRIORITY");
-        std::env::remove_var("VOICESUB_BROWSER_DISABLE_GPU");
+        unsafe {
+            std::env::remove_var("VOICESUB_BROWSER_STABILITY");
+            std::env::remove_var("VOICESUB_BROWSER_HIGH_PRIORITY");
+            std::env::remove_var("VOICESUB_BROWSER_DISABLE_GPU");
+        }
         let cfg = chrome_launch_from_config(&json!({
             "asr": {
                 "browser": {

@@ -3,9 +3,9 @@
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
-use crate::trace::{BrowserAsrLog, StructuredLogFn, BROWSER_LOG_CHANNEL};
+use crate::trace::{BROWSER_LOG_CHANNEL, BrowserAsrLog, StructuredLogFn};
 
 const ROUTINE_RESTART_EVENTS: &[&str] = &[
     "browser_recognition_started",
@@ -114,6 +114,17 @@ impl BrowserAsrGateway {
         }
     }
 
+    pub fn reset_ingest_session(&mut self) {
+        self.state.stale_worker_events_ignored = 0;
+        self.state.session_id = None;
+        self.state.generation_id = 0;
+        self.state.client_segment_id = None;
+        self.state.forced_final = false;
+        self.state.last_partial_age_ms = None;
+        self.state.last_final_age_ms = None;
+        self.heartbeat_counter_baseline = counter_snapshot(&self.state);
+    }
+
     pub fn reset(&mut self) {
         self.state = GatewayDiagnostics::default();
         self.last_status_heartbeat = Instant::now();
@@ -156,12 +167,24 @@ impl BrowserAsrGateway {
         );
     }
 
-    pub fn note_partial(&mut self, text_len: usize, source_lang: Option<&str>, sequence: Option<u64>) {
+    pub fn note_partial(
+        &mut self,
+        text_len: usize,
+        source_lang: Option<&str>,
+        sequence: Option<u64>,
+    ) {
         let _ = (text_len, source_lang, sequence);
         self.state.last_partial_age_ms = Some(0);
     }
 
-    pub fn note_final(&mut self, text_len: usize, source_lang: Option<&str>, sequence: Option<u64>) {
+    pub fn note_final(
+        &mut self,
+        text_len: usize,
+        source_lang: Option<&str>,
+        sequence: Option<u64>,
+        forced_final: bool,
+    ) {
+        self.state.forced_final = forced_final;
         self.state.last_final_age_ms = Some(0);
         self.log_event(
             "browser_external_final",
@@ -171,6 +194,7 @@ impl BrowserAsrGateway {
                 "text_len": text_len,
                 "source_lang": source_lang,
                 "is_final": true,
+                "forced_final": forced_final,
             }),
         );
     }
@@ -205,20 +229,25 @@ impl BrowserAsrGateway {
             self.last_browser_worker_status_log = Instant::now();
             self.mark_status_activity();
         } else if should_log_status_heartbeat(&self.state, self.last_status_heartbeat) {
-            self.log_event("browser_worker_heartbeat", heartbeat_payload(&self.state, &self.heartbeat_counter_baseline));
+            self.log_event(
+                "browser_worker_heartbeat",
+                heartbeat_payload(&self.state, &self.heartbeat_counter_baseline),
+            );
             self.mark_status_activity();
         }
 
-        if let Some(event) = mapped_event {
-            if should_log_mapped_event(event, &self.state) {
-                self.log_event(event, structured_mapped_event_log_summary(&self.state));
-            }
+        if let Some(event) = mapped_event
+            && should_log_mapped_event(event, &self.state)
+        {
+            self.log_event(event, structured_mapped_event_log_summary(&self.state));
         }
 
         if self.state.last_error.is_some()
             && (matches!(
                 reason.as_deref(),
-                Some("recognition-error") | Some("terminal-error") | Some("microphone-permission-failed")
+                Some("recognition-error")
+                    | Some("terminal-error")
+                    | Some("microphone-permission-failed")
             ) || previous.last_error != self.state.last_error)
             && should_log_error_event(&self.state)
         {
@@ -311,44 +340,66 @@ fn counter_snapshot(state: &GatewayDiagnostics) -> CounterSnapshot {
 }
 
 fn apply_status_payload(state: &mut GatewayDiagnostics, payload: &serde_json::Map<String, Value>) {
-    apply_bool(state, payload, "desired_running", |s, v| s.desired_running = v);
+    apply_bool(state, payload, "desired_running", |s, v| {
+        s.desired_running = v
+    });
     apply_bool(state, payload, "pending_start", |s, v| s.pending_start = v);
-    apply_bool(state, payload, "recognition_running", |s, v| s.recognition_running = v);
-    apply_bool(state, payload, "recognition_continuous", |s, v| s.recognition_continuous = v);
-    apply_bool(state, payload, "websocket_ready", |s, v| s.websocket_ready = v);
+    apply_bool(state, payload, "recognition_running", |s, v| {
+        s.recognition_running = v
+    });
+    apply_bool(state, payload, "recognition_continuous", |s, v| {
+        s.recognition_continuous = v
+    });
+    apply_bool(state, payload, "websocket_ready", |s, v| {
+        s.websocket_ready = v
+    });
     apply_bool(state, payload, "forced_final", |s, v| s.forced_final = v);
-    apply_bool(state, payload, "active_recognition", |s, v| s.active_recognition = v);
-    apply_bool(state, payload, "active_media_stream", |s, v| s.active_media_stream = v);
-    apply_bool(state, payload, "browser_cycle_pending", |s, v| s.browser_cycle_pending = v);
-    apply_bool(state, payload, "mic_stream_active", |s, v| s.mic_stream_active = v);
-    apply_bool(state, payload, "mic_track_muted", |s, v| s.mic_track_muted = v);
+    apply_bool(state, payload, "active_recognition", |s, v| {
+        s.active_recognition = v
+    });
+    apply_bool(state, payload, "active_media_stream", |s, v| {
+        s.active_media_stream = v
+    });
+    apply_bool(state, payload, "browser_cycle_pending", |s, v| {
+        s.browser_cycle_pending = v
+    });
+    apply_bool(state, payload, "mic_stream_active", |s, v| {
+        s.mic_stream_active = v
+    });
+    apply_bool(state, payload, "mic_track_muted", |s, v| {
+        s.mic_track_muted = v
+    });
 
     apply_str(state, payload, "browser_mode", |s, v| s.browser_mode = v);
     apply_str(state, payload, "start_mode", |s, v| s.start_mode = v);
-    apply_str(state, payload, "recognition_state", |s, v| s.recognition_state = v);
-    apply_str(
-        state,
-        payload,
-        "browser_supervisor_state",
-        |s, v| s.supervisor_state = v,
-    );
-    apply_str(state, payload, "supervisor_state", |s, v| s.supervisor_state = v);
-    apply_str(
-        state,
-        payload,
-        "effective_continuous_mode",
-        |s, v| s.effective_continuous_mode = v,
-    );
+    apply_str(state, payload, "recognition_state", |s, v| {
+        s.recognition_state = v
+    });
+    apply_str(state, payload, "browser_supervisor_state", |s, v| {
+        s.supervisor_state = v
+    });
+    apply_str(state, payload, "supervisor_state", |s, v| {
+        s.supervisor_state = v
+    });
+    apply_str(state, payload, "effective_continuous_mode", |s, v| {
+        s.effective_continuous_mode = v
+    });
     apply_str(state, payload, "provider_name", |s, v| s.provider_name = v);
     apply_str(state, payload, "last_error", |s, v| s.last_error = v);
     apply_str(state, payload, "get_user_media_last_error", |s, v| {
         s.get_user_media_last_error = v
     });
-    apply_str(state, payload, "degraded_reason", |s, v| s.degraded_reason = v);
-    apply_str(state, payload, "visibility_state", |s, v| s.visibility_state = v);
+    apply_str(state, payload, "degraded_reason", |s, v| {
+        s.degraded_reason = v
+    });
+    apply_str(state, payload, "visibility_state", |s, v| {
+        s.visibility_state = v
+    });
     apply_str(state, payload, "error_type", |s, v| s.error_type = v);
     apply_str(state, payload, "session_id", |s, v| s.session_id = v);
-    apply_str(state, payload, "client_segment_id", |s, v| s.client_segment_id = v);
+    apply_str(state, payload, "client_segment_id", |s, v| {
+        s.client_segment_id = v
+    });
     apply_str(state, payload, "mic_track_ready_state", |s, v| {
         s.mic_track_ready_state = v
     });
@@ -356,44 +407,43 @@ fn apply_status_payload(state: &mut GatewayDiagnostics, payload: &serde_json::Ma
 
     apply_u64(state, payload, "rearm_count", |s, v| s.rearm_count = v);
     apply_u64(state, payload, "restart_count", |s, v| s.restart_count = v);
-    apply_u64(state, payload, "watchdog_rearm_count", |s, v| s.watchdog_rearm_count = v);
-    apply_u64(state, payload, "rearm_delay_ms", |s, v| s.last_rearm_delay_ms = Some(v));
-    apply_u64(state, payload, "last_partial_age_ms", |s, v| s.last_partial_age_ms = Some(v));
-    apply_u64(state, payload, "last_final_age_ms", |s, v| s.last_final_age_ms = Some(v));
+    apply_u64(state, payload, "watchdog_rearm_count", |s, v| {
+        s.watchdog_rearm_count = v
+    });
+    apply_u64(state, payload, "rearm_delay_ms", |s, v| {
+        s.last_rearm_delay_ms = Some(v)
+    });
+    apply_u64(state, payload, "last_partial_age_ms", |s, v| {
+        s.last_partial_age_ms = Some(v)
+    });
+    apply_u64(state, payload, "last_final_age_ms", |s, v| {
+        s.last_final_age_ms = Some(v)
+    });
     apply_u64(state, payload, "generation_id", |s, v| s.generation_id = v);
-    apply_u64(state, payload, "no_speech_count", |s, v| s.no_speech_count = v);
-    apply_u64(state, payload, "network_error_count", |s, v| s.network_error_count = v);
-    apply_u64(
-        state,
-        payload,
-        "last_result_index",
-        |s, v| s.last_result_index = Some(v),
-    );
-    apply_u64(
-        state,
-        payload,
-        "last_result_at_ms",
-        |s, v| s.last_result_at_ms = Some(v),
-    );
-    apply_u64(
-        state,
-        payload,
-        "last_session_started_at_ms",
-        |s, v| s.last_session_started_at_ms = Some(v),
-    );
-    apply_u64(
-        state,
-        payload,
-        "last_session_ended_at_ms",
-        |s, v| s.last_session_ended_at_ms = Some(v),
-    );
-    apply_u64(
-        state,
-        payload,
-        "browser_session_age_ms",
-        |s, v| s.browser_session_age_ms = Some(v),
-    );
-    apply_u64(state, payload, "browser_cycle_count", |s, v| s.browser_cycle_count = v);
+    apply_u64(state, payload, "no_speech_count", |s, v| {
+        s.no_speech_count = v
+    });
+    apply_u64(state, payload, "network_error_count", |s, v| {
+        s.network_error_count = v
+    });
+    apply_u64(state, payload, "last_result_index", |s, v| {
+        s.last_result_index = Some(v)
+    });
+    apply_u64(state, payload, "last_result_at_ms", |s, v| {
+        s.last_result_at_ms = Some(v)
+    });
+    apply_u64(state, payload, "last_session_started_at_ms", |s, v| {
+        s.last_session_started_at_ms = Some(v)
+    });
+    apply_u64(state, payload, "last_session_ended_at_ms", |s, v| {
+        s.last_session_ended_at_ms = Some(v)
+    });
+    apply_u64(state, payload, "browser_session_age_ms", |s, v| {
+        s.browser_session_age_ms = Some(v)
+    });
+    apply_u64(state, payload, "browser_cycle_count", |s, v| {
+        s.browser_cycle_count = v
+    });
     apply_u64(
         state,
         payload,
@@ -406,91 +456,87 @@ fn apply_status_payload(state: &mut GatewayDiagnostics, payload: &serde_json::Ma
         "browser_forced_final_on_interruption_count",
         |s, v| s.browser_forced_final_on_interruption_count = v,
     );
-    apply_u64(
-        state,
-        payload,
-        "duplicate_partial_suppressed",
-        |s, v| s.duplicate_partial_suppressed = v,
-    );
-    apply_u64(
-        state,
-        payload,
-        "duplicate_final_suppressed",
-        |s, v| s.duplicate_final_suppressed = v,
-    );
-    apply_u64(
-        state,
-        payload,
-        "late_forced_final_suppressed",
-        |s, v| s.late_forced_final_suppressed = v,
-    );
-    apply_u64(
-        state,
-        payload,
-        "mic_active_recent_ms",
-        |s, v| s.mic_active_recent_ms = Some(v),
-    );
-    apply_u64(
-        state,
-        payload,
-        "last_mic_activity_at",
-        |s, v| s.last_mic_activity_at = Some(v),
-    );
-    apply_u64(state, payload, "get_user_media_count", |s, v| s.get_user_media_count = v);
-    apply_u64(
-        state,
-        payload,
-        "media_tracks_stopped_count",
-        |s, v| s.media_tracks_stopped_count = v,
-    );
-    apply_u64(
-        state,
-        payload,
-        "media_track_leak_guard_count",
-        |s, v| s.media_track_leak_guard_count = v,
-    );
-    apply_u64(state, payload, "stopping_since_ms", |s, v| s.stopping_since_ms = Some(v));
-    apply_u64(state, payload, "last_seen_at_ms", |s, v| s.last_seen_at_ms = Some(v));
-    apply_u64(
-        state,
-        payload,
-        "stale_worker_events_ignored",
-        |s, v| s.stale_worker_events_ignored = v,
-    );
+    apply_u64(state, payload, "duplicate_partial_suppressed", |s, v| {
+        s.duplicate_partial_suppressed = v
+    });
+    apply_u64(state, payload, "duplicate_final_suppressed", |s, v| {
+        s.duplicate_final_suppressed = v
+    });
+    apply_u64(state, payload, "late_forced_final_suppressed", |s, v| {
+        s.late_forced_final_suppressed = v
+    });
+    apply_u64(state, payload, "mic_active_recent_ms", |s, v| {
+        s.mic_active_recent_ms = Some(v)
+    });
+    apply_u64(state, payload, "last_mic_activity_at", |s, v| {
+        s.last_mic_activity_at = Some(v)
+    });
+    apply_u64(state, payload, "get_user_media_count", |s, v| {
+        s.get_user_media_count = v
+    });
+    apply_u64(state, payload, "media_tracks_stopped_count", |s, v| {
+        s.media_tracks_stopped_count = v
+    });
+    apply_u64(state, payload, "media_track_leak_guard_count", |s, v| {
+        s.media_track_leak_guard_count = v
+    });
+    apply_u64(state, payload, "stopping_since_ms", |s, v| {
+        s.stopping_since_ms = Some(v)
+    });
+    apply_u64(state, payload, "last_seen_at_ms", |s, v| {
+        s.last_seen_at_ms = Some(v)
+    });
+    apply_u64(state, payload, "stale_worker_events_ignored", |s, v| {
+        s.stale_worker_events_ignored = v
+    });
 
     if let Some(value) = payload.get("mic_rms").and_then(|v| v.as_f64()) {
         state.mic_rms = Some(value.max(0.0));
     }
 
-    apply_bool(state, payload, "overlap_mode_desired", |s, v| s.overlap_mode_desired = v);
-    apply_bool(state, payload, "overlap_active", |s, v| s.overlap_active = v);
-    apply_bool(state, payload, "overlap_prestarted", |s, v| s.overlap_prestarted = v);
-    apply_bool(state, payload, "overlap_active_listening", |s, v| s.overlap_active_listening = v);
-    apply_bool(state, payload, "overlap_buddy_listening", |s, v| s.overlap_buddy_listening = v);
-    apply_bool(
-        state,
-        payload,
-        "overlap_speech_prestart_done",
-        |s, v| s.overlap_speech_prestart_done = v,
-    );
-    apply_bool(
-        state,
-        payload,
-        "overlap_prestart_timer_armed",
-        |s, v| s.overlap_prestart_timer_armed = v,
-    );
-    apply_opt_u64(state, payload, "overlap_active_slot", |s, v| s.overlap_active_slot = v);
-    apply_opt_u64(state, payload, "overlap_buddy_slot", |s, v| s.overlap_buddy_slot = v);
+    apply_bool(state, payload, "overlap_mode_desired", |s, v| {
+        s.overlap_mode_desired = v
+    });
+    apply_bool(state, payload, "overlap_active", |s, v| {
+        s.overlap_active = v
+    });
+    apply_bool(state, payload, "overlap_prestarted", |s, v| {
+        s.overlap_prestarted = v
+    });
+    apply_bool(state, payload, "overlap_active_listening", |s, v| {
+        s.overlap_active_listening = v
+    });
+    apply_bool(state, payload, "overlap_buddy_listening", |s, v| {
+        s.overlap_buddy_listening = v
+    });
+    apply_bool(state, payload, "overlap_speech_prestart_done", |s, v| {
+        s.overlap_speech_prestart_done = v
+    });
+    apply_bool(state, payload, "overlap_prestart_timer_armed", |s, v| {
+        s.overlap_prestart_timer_armed = v
+    });
+    apply_opt_u64(state, payload, "overlap_active_slot", |s, v| {
+        s.overlap_active_slot = v
+    });
+    apply_opt_u64(state, payload, "overlap_buddy_slot", |s, v| {
+        s.overlap_buddy_slot = v
+    });
 
-    if let Some(mode) = state.browser_mode.as_deref() {
-        if mode == "browser_google" {
-            state.provider_name.get_or_insert_with(|| "browser_google".into());
-        }
+    if let Some(mode) = state.browser_mode.as_deref()
+        && mode == "browser_google"
+    {
+        state
+            .provider_name
+            .get_or_insert_with(|| "browser_google".into());
     }
 }
 
-fn apply_bool<F>(state: &mut GatewayDiagnostics, payload: &serde_json::Map<String, Value>, key: &str, set: F)
-where
+fn apply_bool<F>(
+    state: &mut GatewayDiagnostics,
+    payload: &serde_json::Map<String, Value>,
+    key: &str,
+    set: F,
+) where
     F: FnOnce(&mut GatewayDiagnostics, bool),
 {
     if let Some(value) = payload.get(key).and_then(|v| v.as_bool()) {
@@ -498,8 +544,12 @@ where
     }
 }
 
-fn apply_str<F>(state: &mut GatewayDiagnostics, payload: &serde_json::Map<String, Value>, key: &str, set: F)
-where
+fn apply_str<F>(
+    state: &mut GatewayDiagnostics,
+    payload: &serde_json::Map<String, Value>,
+    key: &str,
+    set: F,
+) where
     F: FnOnce(&mut GatewayDiagnostics, Option<String>),
 {
     if !payload.contains_key(key) {
@@ -522,8 +572,12 @@ where
     set(state, normalized);
 }
 
-fn apply_u64<F>(state: &mut GatewayDiagnostics, payload: &serde_json::Map<String, Value>, key: &str, set: F)
-where
+fn apply_u64<F>(
+    state: &mut GatewayDiagnostics,
+    payload: &serde_json::Map<String, Value>,
+    key: &str,
+    set: F,
+) where
     F: FnOnce(&mut GatewayDiagnostics, u64),
 {
     if let Some(value) = payload.get(key) {
@@ -668,7 +722,10 @@ fn should_log_status_snapshot(
     }
     if matches!(
         reason,
-        Some("socket-open") | Some("user-stop") | Some("terminal-error") | Some("microphone-permission-failed")
+        Some("socket-open")
+            | Some("user-stop")
+            | Some("terminal-error")
+            | Some("microphone-permission-failed")
     ) {
         return true;
     }
@@ -712,8 +769,10 @@ fn core_status_snapshot(state: &GatewayDiagnostics) -> CoreStatusSnapshot {
         last_session_ended_at_ms: state.last_session_ended_at_ms,
         browser_cycle_pending: state.browser_cycle_pending,
         browser_cycle_count: state.browser_cycle_count,
-        browser_minimum_reconnect_suppressed_count: state.browser_minimum_reconnect_suppressed_count,
-        browser_forced_final_on_interruption_count: state.browser_forced_final_on_interruption_count,
+        browser_minimum_reconnect_suppressed_count: state
+            .browser_minimum_reconnect_suppressed_count,
+        browser_forced_final_on_interruption_count: state
+            .browser_forced_final_on_interruption_count,
         mic_track_ready_state: state.mic_track_ready_state.clone().unwrap_or_default(),
         mic_track_muted: state.mic_track_muted,
         get_user_media_last_error: state.get_user_media_last_error.clone().unwrap_or_default(),
@@ -791,10 +850,10 @@ fn structured_status_log_summary(state: &GatewayDiagnostics, reason: Option<&str
         "last_error": state.last_error,
         "degraded_reason": state.degraded_reason,
     });
-    if let Some(obj) = summary.as_object_mut() {
-        if let Some(overlap) = overlap_status_fields(state).as_object() {
-            obj.extend(overlap.clone());
-        }
+    if let Some(obj) = summary.as_object_mut()
+        && let Some(overlap) = overlap_status_fields(state).as_object()
+    {
+        obj.extend(overlap.clone());
     }
     summary
 }
@@ -810,10 +869,10 @@ fn structured_mapped_event_log_summary(state: &GatewayDiagnostics) -> Value {
         "error_type": state.error_type,
         "visibility_state": state.visibility_state,
     });
-    if let Some(obj) = summary.as_object_mut() {
-        if let Some(overlap) = overlap_status_fields(state).as_object() {
-            obj.extend(overlap.clone());
-        }
+    if let Some(obj) = summary.as_object_mut()
+        && let Some(overlap) = overlap_status_fields(state).as_object()
+    {
+        obj.extend(overlap.clone());
     }
     summary
 }
@@ -821,8 +880,14 @@ fn structured_mapped_event_log_summary(state: &GatewayDiagnostics) -> Value {
 fn heartbeat_payload(state: &GatewayDiagnostics, baseline: &CounterSnapshot) -> Value {
     let current = counter_snapshot(state);
     let counters_delta = [
-        ("rearm_count", current.rearm_count.saturating_sub(baseline.rearm_count)),
-        ("restart_count", current.restart_count.saturating_sub(baseline.restart_count)),
+        (
+            "rearm_count",
+            current.rearm_count.saturating_sub(baseline.rearm_count),
+        ),
+        (
+            "restart_count",
+            current.restart_count.saturating_sub(baseline.restart_count),
+        ),
         (
             "watchdog_rearm_count",
             current
@@ -831,7 +896,9 @@ fn heartbeat_payload(state: &GatewayDiagnostics, baseline: &CounterSnapshot) -> 
         ),
         (
             "no_speech_count",
-            current.no_speech_count.saturating_sub(baseline.no_speech_count),
+            current
+                .no_speech_count
+                .saturating_sub(baseline.no_speech_count),
         ),
         (
             "network_error_count",

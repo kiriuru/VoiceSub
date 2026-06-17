@@ -102,34 +102,9 @@ body.voicesub-layout-compact .compact-save-btn {
   font-size: 13px;
 }
 
-body.voicesub-layout-compact .compact-save-status {
-  margin: 0;
-  font-size: 11px;
-  line-height: 1.35;
-}
-
-body.voicesub-layout-compact .runtime-shell {
-  border-radius: var(--radius-md);
-  border: 1px solid var(--line-subtle);
-  box-shadow: none;
-  padding: 10px;
-}
-
-body.voicesub-layout-compact .runtime-shell-main {
-  flex-direction: column;
-  align-items: stretch;
-  gap: 10px;
-}
-
-body.voicesub-layout-compact .runtime-actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-
-body.voicesub-layout-compact .runtime-actions .btn {
-  width: 100%;
-  min-height: 44px;
+body.voicesub-layout-compact .runtime-mini-strip {
+  margin: 0 12px 8px;
+  padding: 8px 10px;
 }
 
 body.voicesub-layout-compact .badges {
@@ -149,6 +124,7 @@ body.voicesub-layout-compact .compact-content-scroll {
   overflow: auto;
   padding: 10px 12px 12px;
   -webkit-overflow-scrolling: touch;
+  position: relative;
 }
 
 body.voicesub-layout-compact .compact-content-scroll > .tab-panel.active {
@@ -158,39 +134,37 @@ body.voicesub-layout-compact .compact-content-scroll > .tab-panel.active {
   min-height: min-content;
 }
 
-/* Live overview — strict single column */
+/* Live overview — compact single column */
 body.voicesub-layout-compact .compact-overview.overview-section-root {
   display: flex !important;
   flex-direction: column;
   gap: 10px;
   padding: 0;
   margin: 0;
-  border: 0;
-  background: transparent;
-  box-shadow: none;
 }
 
-body.voicesub-layout-compact .compact-overview .overview-grid,
-body.voicesub-layout-compact .compact-overview .overview-bento-main {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+body.voicesub-layout-compact .compact-overview .overview-main-body {
+  grid-template-columns: 1fr;
+  margin-top: var(--space-2);
 }
 
-body.voicesub-layout-compact .compact-overview .overview-recognition-aside {
-  width: 100%;
+body.voicesub-layout-compact .compact-overview .overview-recognition-panel,
+body.voicesub-layout-compact .compact-overview .overview-preview-card {
+  display: none;
 }
 
-body.voicesub-layout-compact .compact-overview .preview-surface {
-  --preview-surface-height: 160px;
+body.voicesub-layout-compact .compact-overview .overview-transcript-cols {
+  grid-template-columns: 1fr;
 }
 
-body.voicesub-layout-compact .compact-overview .transcript-box--compact {
-  max-height: 88px;
+body.voicesub-layout-compact .compact-overview .transcript-box--live {
+  min-height: 88px;
+  max-height: 120px;
   font-size: 12px;
 }
 
-body.voicesub-layout-compact .compact-overview .section-heading h2 {
+body.voicesub-layout-compact .compact-overview .section-heading h2,
+body.voicesub-layout-compact .compact-overview .overview-main-header h2 {
   font-size: 16px;
 }
 
@@ -351,8 +325,79 @@ body.voicesub-layout-compact .btn {
   min-height: 44px;
 }
 
-body.voicesub-layout-compact .tab-panel[data-tab-panel="translation"] .line-card-list {
+body.voicesub-layout-compact .url-row {
+  flex-direction: column;
+  align-items: stretch;
+  min-width: 0;
+}
+
+body.voicesub-layout-compact .url-row input {
+  min-width: 0;
+  width: 100%;
+}
+
+body.voicesub-layout-compact .url-row .btn {
+  width: 100%;
+  justify-content: center;
+}
+
+body.voicesub-layout-compact .tab-panel[data-tab-panel="translation"] .translation-line-list {
   grid-template-columns: 1fr;
+}
+
+body.voicesub-layout-compact .tab-panel[data-tab-panel="translation"] .translation-layout,
+body.voicesub-layout-compact .tab-panel[data-tab-panel="translation"] .translation-bottom,
+body.voicesub-layout-compact .tab-panel[data-tab-panel="translation"] .translation-results {
+  min-width: 0;
+  width: 100%;
+}
+
+body.voicesub-layout-compact .tab-panel[data-tab-panel="subtitles"] .subtitles-layout {
+  gap: var(--space-2);
+}
+
+body.voicesub-layout-compact .tab-panel[data-tab-panel="subtitles"] .subtitles-order-toolbar {
+  gap: var(--space-2);
+}
+
+body.voicesub-layout-compact .tab-panel[data-tab-panel="subtitles"] .subtitles-order-list li {
+  min-width: 0;
+}
+
+body.voicesub-layout-compact .tab-panel[data-tab-panel="subtitles"] .order-item-btn {
+  width: 100%;
+  text-align: left;
+}
+
+body.voicesub-layout-compact .tab-panel[data-tab-panel="subtitles"] .surface-card.panel-padding {
+  padding: var(--space-3);
+}
+
+body.voicesub-layout-compact .tab-panel[data-tab-panel="style"] .style-surface {
+  padding: var(--space-2);
+}
+
+body.voicesub-layout-compact .tab-panel[data-tab-panel="style"] .slot-surface-header {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+body.voicesub-layout-compact .tab-panel[data-tab-panel="style"] .slot-enable-row {
+  white-space: normal;
+  width: 100%;
+}
+
+body.voicesub-layout-compact .tab-panel[data-tab-panel="style"] .preview-surface {
+  --preview-surface-height: 140px;
+}
+
+body.voicesub-layout-compact .tab-panel[data-tab-panel="style"] .style-color-strip {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+body.voicesub-layout-compact .tab-panel[data-tab-panel="style"] .badges .tab-btn {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 body.voicesub-layout-compact .tab-panel[data-tab-panel="style"] .grid-2 {

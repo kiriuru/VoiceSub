@@ -76,94 +76,14 @@
     });
   }
 
-  function sendUiTracePayload(payload) {
-    const body = JSON.stringify(payload);
-    fetch("/api/logs/ui-trace", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body,
-    }).catch(() => {
-      if (typeof navigator?.sendBeacon === "function") {
-        try {
-          navigator.sendBeacon("/api/logs/ui-trace", new Blob([body], { type: "application/json" }));
-        } catch (_error) {
-          // ignore fallback errors
-        }
-      }
-    });
-  }
-
-  function postOverlayUiTrace(event, fields) {
-    sendUiTracePayload({
-      surface: "overlay",
-      phase: "overlay",
-      event: event || "visual_state",
-      fields: fields && typeof fields === "object" ? fields : undefined,
-    });
-  }
-
-  function sendClientLogPayload(payload) {
-    const body = JSON.stringify(payload);
-    fetch("/api/logs/client-event", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body,
-    }).catch(() => {
-      if (typeof navigator?.sendBeacon === "function") {
-        try {
-          navigator.sendBeacon(
-            "/api/logs/client-event",
-            new Blob([body], { type: "application/json" })
-          );
-        } catch (_error) {
-          // ignore fallback errors
-        }
-      }
-    });
-  }
-
-  function postOverlayLog(message, details) {
-    const payload = {
-      channel: "overlay",
-      source: "overlay",
-      message: String(message || "").trim(),
-    };
-    if (!payload.message) {
-      return;
-    }
-    if (details != null) {
-      payload.details = typeof details === "object" ? details : { details: String(details) };
-    }
-    sendClientLogPayload(payload);
-  }
-
-  function shouldPersistOverlayLog(message) {
-    if (!debugMode) {
-      return false;
-    }
-    const normalized = String(message || "").trim().toLowerCase();
-    return [
-      "overlay boot",
-      "overlay payload",
-      "ws connected",
-      "ws disconnected",
-      "text shown",
-      "text hidden",
-      "text updated",
-    ].includes(normalized);
-  }
-
   function writeDebug(message, details) {
     const timestamp = new Date().toLocaleTimeString();
     const suffix = details
       ? ` | ${typeof details === "string" ? details : JSON.stringify(details)}`
       : "";
     const line = `[${timestamp}] ${message}${suffix}`;
-    console.log(`[overlay] ${line}`);
-    if (shouldPersistOverlayLog(message)) {
-      postOverlayLog(message, details);
-    }
     if (debugMode) {
+      console.debug(`[overlay] ${line}`);
       debugEntries.unshift(line);
     }
   }
@@ -206,20 +126,6 @@
           + `since_last_ms=${event.ms_since_last_render} duration_ms=${event.render_duration_ms.toFixed(2)} `
           + `anomalies=${anomalyTags}`
       );
-      // Backend persistence: only summaries (one POST per frame max) and only
-      // when there is something worth investigating. Per-row partial events
-      // would saturate the api-trace log on busy partials.
-      if (event.anomalies && event.anomalies.length) {
-        postOverlayUiTrace("subtitle_render_anomaly", {
-          rows: event.rows,
-          partial_entries: event.partial_entries,
-          completed_entries: event.completed_entries,
-          state_carryover: event.state_carryover,
-          ms_since_last_render: event.ms_since_last_render,
-          render_duration_ms: event.render_duration_ms,
-          anomalies: event.anomalies,
-        });
-      }
     }
   }
 
@@ -291,7 +197,7 @@
 
   async function isRuntimeReachable() {
     try {
-      const response = await fetch("/api/health", { cache: "no-store" });
+      const response = await fetch("/live", { cache: "no-store" });
       return response.ok;
     } catch (_error) {
       return false;

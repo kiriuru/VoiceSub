@@ -18,13 +18,19 @@ fn env_truthy(name: &str) -> Option<bool> {
 }
 
 fn ensure_flag(args: &mut Vec<String>, flag: &str) {
-    if !args.iter().any(|arg| arg == flag || arg.starts_with(&format!("{flag}="))) {
+    if !args
+        .iter()
+        .any(|arg| arg == flag || arg.starts_with(&format!("{flag}=")))
+    {
         args.push(flag.to_string());
     }
 }
 
 /// Apply `asr.browser.chrome_launch.stability_profile` and/or env overrides.
-pub fn apply_launch_stability_overrides(config: &mut BrowserChromeLaunchConfig, stability_profile: bool) {
+pub fn apply_launch_stability_overrides(
+    config: &mut BrowserChromeLaunchConfig,
+    stability_profile: bool,
+) {
     let stability = stability_profile || env_truthy(ENV_STABILITY) == Some(true);
 
     if stability {
@@ -49,9 +55,11 @@ mod tests {
     use crate::chrome_flags::BrowserChromeLaunchConfig;
 
     fn clear_stability_env() {
-        std::env::remove_var(ENV_STABILITY);
-        std::env::remove_var(ENV_HIGH_PRIORITY);
-        std::env::remove_var(ENV_DISABLE_GPU);
+        unsafe {
+            std::env::remove_var(ENV_STABILITY);
+            std::env::remove_var(ENV_HIGH_PRIORITY);
+            std::env::remove_var(ENV_DISABLE_GPU);
+        }
     }
 
     #[test]
@@ -65,13 +73,17 @@ mod tests {
 
         clear_stability_env();
         let mut config = BrowserChromeLaunchConfig::default();
-        std::env::set_var(ENV_HIGH_PRIORITY, "0");
+        unsafe {
+            std::env::set_var(ENV_HIGH_PRIORITY, "0");
+        }
         apply_launch_stability_overrides(&mut config, false);
         assert!(!config.use_high_priority);
 
         clear_stability_env();
         let mut config = BrowserChromeLaunchConfig::default();
-        std::env::set_var(ENV_DISABLE_GPU, "1");
+        unsafe {
+            std::env::set_var(ENV_DISABLE_GPU, "1");
+        }
         apply_launch_stability_overrides(&mut config, false);
         assert!(config.use_high_priority);
         assert!(config.extra_args.iter().any(|arg| arg == "--disable-gpu"));

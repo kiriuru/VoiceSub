@@ -6,7 +6,6 @@
     downloadDiagnostics,
     listProfiles,
     loadProfile,
-    openTtsModule,
     saveProfile,
   } from "../api";
   import { normalizeConfigPayload } from "../config-normalize";
@@ -104,19 +103,6 @@
     }
   }
 
-  async function handleOpenTts() {
-    busy = true;
-    status = "";
-    try {
-      await openTtsModule();
-      status = tr("tools.tts.opened");
-    } catch (err) {
-      error = err instanceof Error ? err.message : String(err);
-    } finally {
-      busy = false;
-    }
-  }
-
   async function handleExportDiagnostics() {
     busy = true;
     status = "";
@@ -197,7 +183,7 @@
   </div>
 
   <div class="tools-bento bento-grid">
-  <article class="glass-panel panel-padding bento-tile stack">
+  <article class="surface-card panel-padding bento-tile stack">
   <div class="section-heading section-heading--stacked">
     <p class="eyebrow">{tr("tools.profiles.eyebrow")}</p>
     <h3>{tr("tools.profiles.title")}</h3>
@@ -224,18 +210,7 @@
   </div>
   </article>
 
-  <article class="glass-panel panel-padding bento-tile stack">
-  <div class="section-heading section-heading--stacked">
-    <p class="eyebrow">{tr("tools.tts.eyebrow")}</p>
-    <h3>{tr("tools.tts.title")}</h3>
-  </div>
-  <p class="muted">{tr("tools.tts.description")}</p>
-  <div class="tools-action-row">
-    <button class="btn btn-sm" disabled={busy} on:click={handleOpenTts}>{tr("tools.tts.open")}</button>
-  </div>
-  </article>
-
-  <article class="glass-panel panel-padding bento-tile stack">
+  <article class="surface-card panel-padding bento-tile stack">
   <div class="section-heading section-heading--stacked">
     <p class="eyebrow">{tr("tools.config.eyebrow")}</p>
     <h3>{tr("tools.config.title")}</h3>
@@ -255,7 +230,7 @@
   </div>
   </article>
 
-  <article class="glass-panel panel-padding bento-tile bento-span-full stack">
+  <article class="surface-card panel-padding bento-tile bento-span-full stack">
   <div class="section-heading section-heading--stacked">
     <p class="eyebrow">{tr("tools.runtime.eyebrow")}</p>
     <h3>{tr("tools.runtime.title")}</h3>

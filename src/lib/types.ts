@@ -218,5 +218,4 @@ export type TabId =
   | "settings"
   | "help";
 
-/** Compact sidebar panes: live overview or a settings tab. */
-export type CompactPaneId = "live" | TabId;
+export type { CompactPaneId, NavDestinationId, NavTarget } from "./navigation";

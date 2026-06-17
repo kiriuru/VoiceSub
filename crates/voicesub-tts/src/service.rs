@@ -1,48 +1,37 @@
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-
-
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use tracing::{debug, info, warn};
 
-use voicesub_audio::{list_output_devices, set_process_output_device, AudioOutputDevice};
+use voicesub_audio::{AudioOutputDevice, list_output_devices, set_process_output_device};
 use voicesub_twitch::{
-    normalize_twitch_settings, EventBroadcaster, SourceTextReplacementSettings, TwitchChatService,
-    TwitchConnectionStatus, TwitchTtsSettings,
+    EventBroadcaster, SourceTextReplacementSettings, TwitchChatService, TwitchConnectionStatus,
+    TwitchTtsSettings, normalize_twitch_settings,
 };
-
-
 
 use crate::async_runtime::shared_handle;
 use crate::config::{
-    normalize_playback_mode, normalize_tts_provider, TtsConfig, TtsConfigStore,
-    PLAYBACK_MODE_NATIVE,
+    PLAYBACK_MODE_NATIVE, TtsConfig, TtsConfigStore, normalize_playback_mode,
+    normalize_tts_provider,
 };
 use crate::oauth_bridge::TwitchOAuthBridge;
 
-use crate::channel_queue::{DualChannelSpeechQueue, CHANNEL_SPEECH, CHANNEL_TWITCH};
+use crate::channel_queue::{CHANNEL_SPEECH, CHANNEL_TWITCH, DualChannelSpeechQueue};
 use crate::queue::{ChannelEnqueueResult, MarkFinishedOutcome, SpeechQueueItem};
 
 use crate::subtitle_speech::{SubtitleSpeechPlanner, TtsSpeechSettings};
 
 use crate::trace;
 
-
-
 #[derive(Debug, thiserror::Error)]
 
 pub enum TtsServiceError {
-
     #[error("config error: {0}")]
-
     Config(#[from] crate::config::TtsConfigError),
 
-
-
     #[error("audio error: {0}")]
-
     Audio(#[from] voicesub_audio::AudioError),
 
     #[error("invalid tts provider: {0}")]
@@ -50,13 +39,9 @@ pub enum TtsServiceError {
 
     #[error("twitch error: {0}")]
     Twitch(#[from] voicesub_twitch::TwitchError),
-
 }
 
-
-
 pub struct TtsModuleService {
-
     config_store: TtsConfigStore,
 
     queues: DualChannelSpeechQueue,
@@ -68,13 +53,9 @@ pub struct TtsModuleService {
     twitch: TwitchChatService,
 
     oauth_bridge: Arc<TwitchOAuthBridge>,
-
 }
 
-
-
 impl TtsModuleService {
-
     pub fn new(user_data_dir: impl Into<PathBuf>) -> Self {
         Self::with_broadcaster(
             user_data_dir,
@@ -121,15 +102,10 @@ impl TtsModuleService {
     }
 
     pub fn config_path(&self) -> &std::path::Path {
-
         self.config_store.path()
-
     }
 
-
-
     pub fn load_config(&self) -> Result<TtsConfig, TtsServiceError> {
-
         let config = self.config_store.load()?;
 
         debug!(
@@ -153,57 +129,45 @@ impl TtsModuleService {
         );
 
         Ok(config)
-
     }
-
-
 
     pub fn save_config(&self, config: &TtsConfig) -> Result<(), TtsServiceError> {
-
         Ok(self.config_store.save(config)?)
-
     }
 
-
-
     pub fn list_output_devices(&self) -> Result<Vec<AudioOutputDevice>, TtsServiceError> {
-
         debug!(target: "voicesub.tts", "list_output_devices requested");
 
         Ok(list_output_devices()?)
-
     }
-
-
 
     pub fn set_tts_provider(&self, provider: &str) -> Result<TtsConfig, TtsServiceError> {
         let provider = normalize_tts_provider(provider)
             .ok_or_else(|| TtsServiceError::InvalidProvider(provider.to_string()))?;
         info!(target: "voicesub.tts", provider = %provider, "tts provider updated");
-        trace::trace("service", "set_tts_provider", json!({ "provider": provider }));
-        Ok(self.config_store.update(|cfg| cfg.tts_provider = provider)?)
+        trace::trace(
+            "service",
+            "set_tts_provider",
+            json!({ "provider": provider }),
+        );
+        Ok(self
+            .config_store
+            .update(|cfg| cfg.tts_provider = provider)?)
     }
 
     pub fn set_enabled(&self, enabled: bool) -> Result<TtsConfig, TtsServiceError> {
-
         info!(target: "voicesub.tts", enabled, "tts enabled flag updated");
 
         trace::trace("service", "set_enabled", json!({ "enabled": enabled }));
 
         Ok(self.config_store.update(|cfg| cfg.enabled = enabled)?)
-
     }
 
-
-
     pub fn update_speech_settings(
-
         &self,
 
         settings: TtsSpeechSettings,
-
     ) -> Result<TtsConfig, TtsServiceError> {
-
         info!(
 
             target: "voicesub.tts",
@@ -220,25 +184,26 @@ impl TtsModuleService {
 
         );
 
-        trace::trace("service", "update_speech_settings", json!({
+        trace::trace(
+            "service",
+            "update_speech_settings",
+            json!({
 
-            "speak_source": settings.speak_source,
+                "speak_source": settings.speak_source,
 
-            "speak_translations": settings.speak_translations,
+                "speak_translations": settings.speak_translations,
 
-            "translation_slots": settings.translation_slots,
+                "translation_slots": settings.translation_slots,
 
-            "min_chars": settings.min_chars,
+                "min_chars": settings.min_chars,
 
-            "max_queue_items": settings.max_queue_items,
+                "max_queue_items": settings.max_queue_items,
 
-        }));
+            }),
+        );
 
         Ok(self.config_store.update(|cfg| cfg.speech = settings)?)
-
     }
-
-
 
     pub fn update_voice_settings(
         &self,
@@ -253,10 +218,14 @@ impl TtsModuleService {
             speech_volume = volume,
             "voice settings updated"
         );
-        trace::trace("service", "update_voice_settings", json!({
-            "speech_rate": rate,
-            "speech_volume": volume,
-        }));
+        trace::trace(
+            "service",
+            "update_voice_settings",
+            json!({
+                "speech_rate": rate,
+                "speech_volume": volume,
+            }),
+        );
         Ok(self.config_store.update(|cfg| {
             if cfg.playback_mode == PLAYBACK_MODE_NATIVE {
                 cfg.speech_rate = 1.0;
@@ -266,8 +235,6 @@ impl TtsModuleService {
             cfg.speech_volume = volume;
         })?)
     }
-
-
 
     pub fn plan_subtitle_speech(&self, payload: &Value) -> Vec<SpeechQueueItem> {
         let config = match self.load_config() {
@@ -288,25 +255,16 @@ impl TtsModuleService {
         };
 
         let sequence = payload
-
             .get("sequence")
-
             .and_then(|v| v.as_u64())
-
             .unwrap_or(0);
 
         let lifecycle = payload
-
             .get("lifecycle_state")
-
             .and_then(|v| v.as_str())
-
             .unwrap_or("idle");
 
-
-
         if !config.enabled {
-
             debug!(
 
                 target: "voicesub.tts",
@@ -320,25 +278,19 @@ impl TtsModuleService {
             );
 
             return Vec::new();
-
         }
 
-
-
-        let mut planner = self.subtitle_planner.lock().expect("tts subtitle planner lock");
+        let mut planner = self
+            .subtitle_planner
+            .lock()
+            .expect("tts subtitle planner lock");
 
         let planned = planner.plan(payload, &config.speech);
 
-
-
         if planned.is_empty() {
-
             trace::trace(
-
                 "planner",
-
                 "plan_empty",
-
                 json!({
 
                     "sequence": sequence,
@@ -346,11 +298,8 @@ impl TtsModuleService {
                     "lifecycle": lifecycle,
 
                 }),
-
             );
-
         } else {
-
             info!(
 
                 target: "voicesub.tts",
@@ -364,11 +313,8 @@ impl TtsModuleService {
             );
 
             trace::trace(
-
                 "planner",
-
                 "plan_ready",
-
                 json!({
 
                     "sequence": sequence,
@@ -388,36 +334,22 @@ impl TtsModuleService {
                     })).collect::<Vec<_>>(),
 
                 }),
-
             );
-
         }
 
-
-
         planned
-
     }
 
-
-
     pub fn reset_subtitle_planner(&self) {
-
         info!(target: "voicesub.tts", "subtitle speech planner reset");
 
         trace::trace("planner", "reset", json!({}));
 
         self.subtitle_planner
-
             .lock()
-
             .expect("tts subtitle planner lock")
-
             .reset();
-
     }
-
-
 
     pub fn set_audio_device(
         &self,
@@ -453,10 +385,10 @@ impl TtsModuleService {
             }
         })?;
 
-        if voicesub_audio::is_per_process_routing_enabled() {
-            if let Some(pid) = *self.bound_pid.lock().expect("tts pid lock") {
-                self.apply_audio_route(pid, &config.audio_output_device_id)?;
-            }
+        if voicesub_audio::is_per_process_routing_enabled()
+            && let Some(pid) = *self.bound_pid.lock().expect("tts pid lock")
+        {
+            self.apply_audio_route(pid, &config.audio_output_device_id)?;
         }
 
         Ok(config)
@@ -489,7 +421,9 @@ impl TtsModuleService {
                     cfg.twitch.audio_output_device_id = device_id.to_string();
                     match device_label {
                         Some(label) => cfg.twitch.audio_output_device_label = label.to_string(),
-                        None if device_id.is_empty() => cfg.twitch.audio_output_device_label.clear(),
+                        None if device_id.is_empty() => {
+                            cfg.twitch.audio_output_device_label.clear()
+                        }
                         None => {}
                     }
                 })?)
@@ -504,7 +438,11 @@ impl TtsModuleService {
         let normalized = normalize_playback_mode(mode)
             .ok_or_else(|| TtsServiceError::InvalidProvider(mode.to_string()))?;
         info!(target: "voicesub.tts", playback_mode = %normalized, "playback mode updated");
-        trace::trace("service", "set_playback_mode", json!({ "mode": normalized }));
+        trace::trace(
+            "service",
+            "set_playback_mode",
+            json!({ "mode": normalized }),
+        );
         Ok(self.config_store.update(|cfg| {
             cfg.playback_mode = normalized.clone();
             if normalized == PLAYBACK_MODE_NATIVE {
@@ -537,10 +475,10 @@ impl TtsModuleService {
         if device_id.trim().is_empty() {
             return String::new();
         }
-        if let Ok(devices) = list_output_devices() {
-            if let Some(device) = devices.iter().find(|entry| entry.id == device_id) {
-                return device.label.clone();
-            }
+        if let Ok(devices) = list_output_devices()
+            && let Some(device) = devices.iter().find(|entry| entry.id == device_id)
+        {
+            return device.label.clone();
         }
         String::new()
     }
@@ -586,10 +524,7 @@ impl TtsModuleService {
         Ok(config)
     }
 
-
-
     pub fn apply_audio_route(&self, pid: u32, device_id: &str) -> Result<(), TtsServiceError> {
-
         debug!(
 
             target: "voicesub.tts",
@@ -605,10 +540,7 @@ impl TtsModuleService {
         set_process_output_device(pid, device_id)?;
 
         Ok(())
-
     }
-
-
 
     fn max_queue_items_for_channel(&self, channel: &str) -> u32 {
         let Ok(cfg) = self.config_store.load() else {
@@ -672,14 +604,10 @@ impl TtsModuleService {
         })
     }
 
-    /// Deprecated: use [`Self::enqueue_channel`] with `speech`.
-    pub fn enqueue_speech(&self, item: SpeechQueueItem) -> usize {
-        self.enqueue_channel(CHANNEL_SPEECH, item)
-            .map(|result| result.queue_len)
-            .unwrap_or(0)
-    }
-
-    pub fn queue_begin_next(&self, channel: &str) -> Result<Option<SpeechQueueItem>, TtsServiceError> {
+    pub fn queue_begin_next(
+        &self,
+        channel: &str,
+    ) -> Result<Option<SpeechQueueItem>, TtsServiceError> {
         let next = self
             .queues
             .begin_next(channel)
@@ -698,21 +626,19 @@ impl TtsModuleService {
                     "text": trace::text_fields(&item.text),
 
                 }),
-
             );
-
         }
 
         Ok(next)
     }
 
-    pub fn queue_mark_finished(
-        &self,
-        channel: &str,
-        item_id: &str,
-    ) -> Result<(), TtsServiceError> {
+    pub fn queue_mark_finished(&self, channel: &str, item_id: &str) -> Result<(), TtsServiceError> {
         debug!(target: "voicesub.tts", channel, item_id, "queue mark finished");
-        trace::trace("queue", "mark_finished", json!({ "channel": channel, "id": item_id }));
+        trace::trace(
+            "queue",
+            "mark_finished",
+            json!({ "channel": channel, "id": item_id }),
+        );
         let outcome = self
             .queues
             .mark_finished(channel, item_id)
@@ -768,10 +694,7 @@ impl TtsModuleService {
 
     pub fn queue_clear_all(&self) {
         let speech_waiting = self.queues.snapshot(CHANNEL_SPEECH).unwrap_or_default();
-        let twitch_waiting = self
-            .queues
-            .snapshot(CHANNEL_TWITCH)
-            .unwrap_or_default();
+        let twitch_waiting = self.queues.snapshot(CHANNEL_TWITCH).unwrap_or_default();
         self.release_speech_dedupe_keys(&speech_waiting);
         if speech_waiting.is_empty() && twitch_waiting.is_empty() {
             debug!(target: "voicesub.tts", "all channel queues already empty");
@@ -782,10 +705,7 @@ impl TtsModuleService {
         self.queues.clear_all();
     }
 
-    pub fn queue_snapshot(
-        &self,
-        channel: &str,
-    ) -> Result<Vec<SpeechQueueItem>, TtsServiceError> {
+    pub fn queue_snapshot(&self, channel: &str) -> Result<Vec<SpeechQueueItem>, TtsServiceError> {
         self.queues
             .snapshot(channel)
             .map_err(|e| TtsServiceError::InvalidProvider(e.to_string()))
@@ -810,14 +730,9 @@ impl TtsModuleService {
         let _ = self.queue_clear_channel(CHANNEL_SPEECH);
     }
 
-
-
     pub fn validate_device_id(&self, device_id: &str) -> bool {
-
         if device_id.is_empty() {
-
             return true;
-
         }
 
         if !voicesub_audio::is_per_process_routing_enabled() {
@@ -825,31 +740,24 @@ impl TtsModuleService {
         }
 
         match list_output_devices() {
-
             Ok(devices) => {
-
-                let valid = devices.iter().any(|d| !d.id.is_empty() && d.id == device_id);
+                let valid = devices
+                    .iter()
+                    .any(|d| !d.id.is_empty() && d.id == device_id);
 
                 if !valid {
-
                     warn!(target: "voicesub.tts", device_id, "device validation failed");
-
                 }
 
                 valid
-
             }
 
             Err(err) => {
-
                 warn!(target: "voicesub.tts", error = %err, "device validation skipped");
 
                 true
-
             }
-
         }
-
     }
 
     pub fn twitch_status(&self) -> TwitchConnectionStatus {
@@ -941,7 +849,4 @@ impl TtsModuleService {
         self.queues.clear_all();
         self.twitch.disconnect();
     }
-
 }
-
-

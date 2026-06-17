@@ -73,7 +73,7 @@
   }
 </script>
 
-<section class="glass-panel panel-padding stack">
+<section class="surface-card panel-padding stack">
   <div class="section-heading">
     <div>
       <p class="eyebrow">{tr("tools.source_replacement.eyebrow")}</p>

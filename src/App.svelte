@@ -16,16 +16,15 @@
     startRuntime,
     stopRuntime,
   } from "./lib/api";
-  import AppChrome from "./lib/components/AppChrome.svelte";
   import CommandPalette from "./lib/components/CommandPalette.svelte";
+  import SaveSnackbar from "./lib/components/SaveSnackbar.svelte";
   import UpdateBanner from "./lib/components/UpdateBanner.svelte";
   import CompactShell from "./lib/components/CompactShell.svelte";
-  import RuntimeBar from "./lib/components/RuntimeBar.svelte";
-  import TabNav from "./lib/components/TabNav.svelte";
-  import DashboardPanels from "./lib/components/DashboardPanels.svelte";
-  import OverviewSection from "./lib/components/OverviewSection.svelte";
+  import StandardShell from "./lib/components/StandardShell.svelte";
   import { applyDashboardWindowSize } from "./lib/compact-window";
   import type { CommandPaletteHandlers } from "./lib/command-palette";
+  import { isMoreTab, tabToNavDestination } from "./lib/navigation";
+  import type { NavDestinationId, NavTarget } from "./lib/navigation";
   import { applyUiPaletteToDocument } from "./lib/ui-theme-css";
   import { publishUiConfigSync } from "./lib/ui-config-sync";
   import { isUpdateBannerDismissedForVersion, shouldShowUpdateBanner } from "./lib/update-banner-state";
@@ -34,14 +33,14 @@
     formatTranslationConfigError,
     getTranslationConfigErrors,
   } from "./lib/translation-helpers";
-  import { formatSaveStatusDisplay } from "./lib/save-status";
   import { normalizeConfigPayload } from "./lib/config-normalize";
   import { mergeFontCatalogPreservingSystem } from "./lib/font-catalog";
   import { mergeStylePresetCatalog } from "./lib/style-presets";
   import { appStore, handleWsEvent, patchApp } from "./lib/stores/app";
+  import { initLoopbackApiToken } from "./lib/loopback-api";
   import { startRuntimeEventChannel } from "./lib/runtime-events";
   import { EventsSocket } from "./lib/ws";
-  import type { CompactPaneId, ConfigPayload, LocaleCode, TabId, VersionInfo } from "./lib/types";
+  import type { ConfigPayload, LocaleCode, TabId, VersionInfo } from "./lib/types";
 
   const UPDATE_BANNER_DISMISS_KEY = "voicesub:update-banner-dismissed";
 
@@ -54,25 +53,19 @@
   $: isCompact = snapshot.config.ui?.layout === "compact";
   $: tr = (key: string) => t(key, undefined, loc);
   $: overlayUrl = snapshot.overlayUrl || snapshot.runtime.overlay?.overlay_url || "";
-  $: saveStatusText = formatSaveStatusDisplay(snapshot.saveStatus, snapshot.runtime, loc);
 
   let socketUnlisten: (() => void) | null = null;
   let eventsSocket: EventsSocket | null = null;
-  let compactPane: CompactPaneId = "live";
+  let compactNav: NavDestinationId = "live";
+  let standardNav: NavDestinationId = "live";
+  let moreHubOpen = false;
+  let subtitlesHubOpen = false;
   let commandPaletteOpen = false;
   /** Last config persisted to disk — baseline for restart-required diff on save. */
   let lastSavedConfig: ConfigPayload | null = null;
 
   const commandPaletteHandlers: CommandPaletteHandlers = {
-    navigate: (pane) => {
-      if (pane === "live") {
-        if (isCompact) {
-          selectCompactPane("live");
-        }
-        return;
-      }
-      selectTab(pane);
-    },
+    navigate: (target) => navigateTo(target),
     start: () => handleStart(),
     stop: () => handleStop(),
     save: () => handleSave(),
@@ -85,7 +78,9 @@
       const ui = snapshot.config.ui || {};
       const nextLayout = ui.layout === "compact" ? "standard" : "compact";
       if (nextLayout === "compact") {
-        compactPane = "live";
+        compactNav = "live";
+        moreHubOpen = false;
+        subtitlesHubOpen = false;
       }
       updateConfig({ ...snapshot.config, ui: { ...ui, layout: nextLayout } });
     },
@@ -161,6 +156,7 @@
 
   async function bootstrap() {
     try {
+      await initLoopbackApiToken();
       const [settings, version, obs, runtime] = await Promise.all([
         loadSettings(),
         fetchVersion(),
@@ -228,7 +224,7 @@
       patchApp({
         saveStatus: {
           tone: "error",
-          message: formatTranslationConfigError(validationErrors[0], (key, vars) =>
+          message: formatTranslationConfigError(validationErrors[0] ?? "", (key, vars) =>
             t(key, vars, loc),
           ),
         },
@@ -313,7 +309,9 @@
     const wasCompact = snapshot.config.ui?.layout === "compact";
     const nextCompact = next.ui?.layout === "compact";
     if (nextCompact && !wasCompact) {
-      compactPane = "live";
+      compactNav = "live";
+      moreHubOpen = false;
+      subtitlesHubOpen = false;
     }
     patchApp({
       config: next,
@@ -338,17 +336,169 @@
     patchApp({ fontCatalog: catalog });
   }
 
-  function selectTab(tab: TabId) {
+  function patchActiveTab(tab: TabId) {
     patchApp({ activeTab: tab });
-    if (isCompact) {
-      compactPane = tab;
-    }
   }
 
-  function selectCompactPane(pane: CompactPaneId) {
-    compactPane = pane;
-    if (pane !== "live") {
-      patchApp({ activeTab: pane });
+  function navigateTo(target: NavTarget) {
+    if (target === "live") {
+      if (isCompact) {
+        compactNav = "live";
+        moreHubOpen = false;
+        subtitlesHubOpen = false;
+      } else {
+        standardNav = "live";
+        moreHubOpen = false;
+        subtitlesHubOpen = false;
+      }
+      return;
+    }
+
+    if (target === "modules") {
+      if (isCompact) {
+        compactNav = "modules";
+        moreHubOpen = false;
+        subtitlesHubOpen = false;
+      } else {
+        standardNav = "modules";
+        moreHubOpen = false;
+        subtitlesHubOpen = false;
+      }
+      return;
+    }
+
+    const tab = target as TabId;
+    if (tab === "style" || tab === "subtitles") {
+      if (isCompact) {
+        compactNav = "subtitles";
+        subtitlesHubOpen = false;
+      } else {
+        standardNav = "subtitles";
+        subtitlesHubOpen = false;
+      }
+      moreHubOpen = false;
+      patchActiveTab(tab);
+      return;
+    }
+
+    if (isMoreTab(tab)) {
+      if (isCompact) {
+        compactNav = "more";
+        moreHubOpen = false;
+        subtitlesHubOpen = false;
+      } else {
+        standardNav = "more";
+        moreHubOpen = false;
+        subtitlesHubOpen = false;
+      }
+      patchActiveTab(tab);
+      return;
+    }
+
+    const dest = tabToNavDestination(tab);
+    if (isCompact) {
+      compactNav = dest;
+      moreHubOpen = false;
+      subtitlesHubOpen = false;
+    } else {
+      standardNav = dest;
+      moreHubOpen = false;
+      subtitlesHubOpen = false;
+    }
+    patchActiveTab(tab);
+  }
+
+  function selectStandardNav(dest: NavDestinationId) {
+    standardNav = dest;
+    if (dest === "live") {
+      moreHubOpen = false;
+      subtitlesHubOpen = false;
+      return;
+    }
+    if (dest === "more") {
+      moreHubOpen = true;
+      subtitlesHubOpen = false;
+      return;
+    }
+    if (dest === "subtitles") {
+      moreHubOpen = false;
+      subtitlesHubOpen = false;
+      patchActiveTab("subtitles");
+      return;
+    }
+    if (dest === "modules") {
+      moreHubOpen = false;
+      subtitlesHubOpen = false;
+      return;
+    }
+    moreHubOpen = false;
+    subtitlesHubOpen = false;
+    if (dest === "translation") patchActiveTab("translation");
+    else if (dest === "obs") patchActiveTab("obs");
+  }
+
+  function selectCompactNav(dest: NavDestinationId) {
+    compactNav = dest;
+    if (dest === "live") {
+      moreHubOpen = false;
+      subtitlesHubOpen = false;
+      return;
+    }
+    if (dest === "more") {
+      moreHubOpen = true;
+      subtitlesHubOpen = false;
+      return;
+    }
+    if (dest === "subtitles") {
+      moreHubOpen = false;
+      subtitlesHubOpen = false;
+      patchActiveTab("subtitles");
+      return;
+    }
+    if (dest === "modules") {
+      moreHubOpen = false;
+      subtitlesHubOpen = false;
+      return;
+    }
+    moreHubOpen = false;
+    subtitlesHubOpen = false;
+    if (dest === "translation") patchActiveTab("translation");
+    else if (dest === "obs") patchActiveTab("obs");
+  }
+
+  function selectMoreTab(tab: TabId) {
+    moreHubOpen = false;
+    if (tab === "style") {
+      if (isCompact) compactNav = "subtitles";
+      else standardNav = "subtitles";
+      subtitlesHubOpen = false;
+      patchActiveTab("style");
+      return;
+    }
+    subtitlesHubOpen = false;
+    if (isCompact) compactNav = "more";
+    else standardNav = "more";
+    patchActiveTab(tab);
+  }
+
+  function selectSubtitlesTab(tab: TabId) {
+    subtitlesHubOpen = false;
+    if (isCompact) compactNav = "subtitles";
+    else standardNav = "subtitles";
+    patchActiveTab(tab);
+  }
+
+  function openMoreHub() {
+    moreHubOpen = true;
+  }
+
+  function openSubtitlesHub() {
+    subtitlesHubOpen = true;
+  }
+
+  function dismissSaveSnackbar() {
+    if (snapshot.saveStatus.tone !== "default") {
+      patchApp({ saveStatus: { tone: "default" } });
     }
   }
 
@@ -391,6 +541,12 @@
   });
 </script>
 
+<SaveSnackbar
+  saveStatus={snapshot.saveStatus}
+  runtime={snapshot.runtime}
+  onDismiss={dismissSaveSnackbar}
+/>
+
 <CommandPalette bind:open={commandPaletteOpen} handlers={commandPaletteHandlers} />
 
 <UpdateBanner
@@ -410,13 +566,15 @@
 <main class="app-shell">
   {#if isCompact}
     <CompactShell
-      {compactPane}
+      compactNav={compactNav}
+      {moreHubOpen}
+      {subtitlesHubOpen}
+      activeTab={snapshot.activeTab}
       version={snapshot.version}
       config={snapshot.config}
       runtime={snapshot.runtime}
       wsConnected={snapshot.wsConnected}
       busy={snapshot.busy}
-      saveStatus={snapshot.saveStatus}
       transcript={snapshot.transcript}
       overlayPayload={snapshot.overlayPayload}
       subtitleStylePresets={snapshot.subtitleStylePresets}
@@ -424,7 +582,12 @@
       fontCatalog={snapshot.fontCatalog}
       translationResults={snapshot.translation}
       {overlayUrl}
-      onSelectPane={selectCompactPane}
+      onSelectNav={selectCompactNav}
+      onSelectMoreTab={selectMoreTab}
+      onSelectSubtitlesTab={selectSubtitlesTab}
+      onActiveTabChange={patchActiveTab}
+      onOpenMoreHub={openMoreHub}
+      onOpenSubtitlesHub={openSubtitlesHub}
       onStart={handleStart}
       onStop={handleStop}
       onSave={handleSave}
@@ -432,81 +595,45 @@
         commandPaletteOpen = true;
       }}
       onConfigChange={updateConfig}
-      onLanguageChange={handleUiLanguageChange}
       onConfigLoad={loadConfigFromTools}
       onFontCatalogChange={updateFontCatalog}
     />
   {:else}
-    <AppChrome version={snapshot.version} />
-
-    <RuntimeBar
-      runtime={snapshot.runtime}
-      obsDiagnostics={snapshot.diagnostics.obs}
-      wsConnected={snapshot.wsConnected}
-      busy={snapshot.busy}
-      onStart={handleStart}
-      onStop={handleStop}
-    />
-
-    <OverviewSection
-      transcript={snapshot.transcript}
-      overlayPayload={snapshot.overlayPayload}
+    <StandardShell
+      {standardNav}
+      {moreHubOpen}
+      {subtitlesHubOpen}
+      activeTab={snapshot.activeTab}
+      version={snapshot.version}
       config={snapshot.config}
       runtime={snapshot.runtime}
+      wsConnected={snapshot.wsConnected}
+      busy={snapshot.busy}
+      transcript={snapshot.transcript}
+      overlayPayload={snapshot.overlayPayload}
       subtitleStylePresets={snapshot.subtitleStylePresets}
+      diagnostics={snapshot.diagnostics}
+      fontCatalog={snapshot.fontCatalog}
+      translationResults={snapshot.translation}
+      {overlayUrl}
+      localeCode={$locale}
+      onSelectNav={selectStandardNav}
+      onSelectMoreTab={selectMoreTab}
+      onSelectSubtitlesTab={selectSubtitlesTab}
+      onActiveTabChange={patchActiveTab}
+      onOpenMoreHub={openMoreHub}
+      onOpenSubtitlesHub={openSubtitlesHub}
+      onStart={handleStart}
+      onStop={handleStop}
+      onSave={handleSave}
+      onOpenCommandPalette={() => {
+        commandPaletteOpen = true;
+      }}
       onConfigChange={updateConfig}
+      onConfigLoad={loadConfigFromTools}
+      onFontCatalogChange={updateFontCatalog}
+      onLanguageChange={handleUiLanguageChange}
     />
-
-    <section class="glass-panel panel-padding stack">
-      <div class="url-row" style="margin-bottom: 8px;">
-        <TabNav variant="standard" activeTab={snapshot.activeTab} onSelect={selectTab} />
-        <label class="stack-field" style="min-width: 160px; margin-left: auto;">
-          <span>{tr("language.label")}</span>
-          <select
-            class="control"
-            value={$locale}
-            on:change={(e) => {
-              handleUiLanguageChange((e.currentTarget as HTMLSelectElement).value as LocaleCode);
-            }}
-          >
-            {#each UI_LOCALES as item}
-              <option value={item.code}>{tr(item.labelKey)}</option>
-            {/each}
-          </select>
-        </label>
-      </div>
-      <div class="stack" style="margin-top: 8px;">
-        <div class="url-row">
-          <button class="btn" disabled={snapshot.busy} on:click={handleSave}>{tr("common.save")}</button>
-          <p
-            class="muted save-status"
-            class:success={snapshot.saveStatus.tone === "success"}
-            class:warn={snapshot.saveStatus.tone === "warn"}
-            class:error={snapshot.saveStatus.tone === "error"}
-            class:busy={snapshot.saveStatus.tone === "busy"}
-          >
-            {saveStatusText}
-          </p>
-        </div>
-
-        <DashboardPanels
-          activeTab={snapshot.activeTab}
-          config={snapshot.config}
-          diagnostics={snapshot.diagnostics}
-          subtitleStylePresets={snapshot.subtitleStylePresets}
-          fontCatalog={snapshot.fontCatalog}
-          translationResults={snapshot.translation}
-          {overlayUrl}
-          onChange={updateConfig}
-          onConfigLoad={loadConfigFromTools}
-          onFontCatalogChange={updateFontCatalog}
-        />
-      </div>
-    </section>
-
-    <footer class="app-footer">
-      <span>Powered by Kiriuru</span>
-    </footer>
   {/if}
 </main>
 {/key}

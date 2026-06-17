@@ -12,6 +12,7 @@ export default defineConfig({
   base: "/tts-assets/",
   root: "src-tts",
   build: {
+    target: "es2022",
     outDir: "../bin/tts",
     emptyOutDir: true,
   },

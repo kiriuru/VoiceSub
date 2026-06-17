@@ -40,11 +40,11 @@ impl ConfigDocument {
     }
 
     pub fn merge_save_request(&mut self, incoming: &Value) {
-        if let Some(obj) = incoming.as_object() {
-            if let Some(root) = self.payload.as_object_mut() {
-                for (key, value) in obj {
-                    root.insert(key.clone(), value.clone());
-                }
+        if let Some(obj) = incoming.as_object()
+            && let Some(root) = self.payload.as_object_mut()
+        {
+            for (key, value) in obj {
+                root.insert(key.clone(), value.clone());
             }
         }
     }

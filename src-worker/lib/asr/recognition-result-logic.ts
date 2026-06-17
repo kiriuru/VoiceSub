@@ -14,6 +14,9 @@ export function parseRecognitionResultEvent(event: WorkerSpeechRecognitionEvent)
   }
   for (let index = resultIndex; index < results.length; index += 1) {
     const result = results[index];
+    if (!result) {
+      continue;
+    }
     const transcript = String(result?.[0]?.transcript || "").trim();
     if (!transcript) {
       continue;

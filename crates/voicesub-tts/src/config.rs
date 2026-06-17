@@ -6,7 +6,7 @@ use thiserror::Error;
 use tracing::{debug, info, warn};
 
 use crate::subtitle_speech::TtsSpeechSettings;
-use voicesub_twitch::{normalize_twitch_settings, TwitchTtsSettings};
+use voicesub_twitch::{TwitchTtsSettings, normalize_twitch_settings};
 
 #[derive(Debug, Error)]
 pub enum TtsConfigError {
@@ -194,6 +194,7 @@ impl TtsConfigStore {
 }
 
 #[cfg(test)]
+#[allow(clippy::field_reassign_with_default)]
 mod tests {
     use super::*;
 
@@ -219,10 +220,7 @@ mod tests {
 
     #[test]
     fn migrates_legacy_browser_to_sonic() {
-        let dir = std::env::temp_dir().join(format!(
-            "voicesub-tts-migrate-{}",
-            std::process::id()
-        ));
+        let dir = std::env::temp_dir().join(format!("voicesub-tts-migrate-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         let store = TtsConfigStore::new(&dir);
         let mut twitch = TwitchTtsSettings::default();
@@ -243,10 +241,8 @@ mod tests {
 
     #[test]
     fn native_mode_clamps_rate_on_load() {
-        let dir = std::env::temp_dir().join(format!(
-            "voicesub-tts-native-clamp-{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("voicesub-tts-native-clamp-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         let store = TtsConfigStore::new(&dir);
         let mut twitch = TwitchTtsSettings::default();

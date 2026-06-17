@@ -1,9 +1,9 @@
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
-use std::sync::{mpsc, OnceLock};
+use std::sync::{OnceLock, mpsc};
 
-use crate::event_sequence::SharedEventSequencer;
 use crate::event_bus::RuntimeEventBus;
+use crate::event_sequence::SharedEventSequencer;
 use crate::events::EventsHub;
 
 /// Wraps [`EventsHub`] with SST-compatible payload enrichment.

@@ -50,12 +50,13 @@ pub fn normalize_google_translate_api_key(raw_value: &str) -> String {
         }
     }
 
-    if normalized.starts_with("AIza") && normalized.contains('&') {
-        if let Some(candidate) = normalized.split('&').next() {
-            let candidate = candidate.trim();
-            if !candidate.is_empty() {
-                normalized = candidate.to_string();
-            }
+    if normalized.starts_with("AIza")
+        && normalized.contains('&')
+        && let Some(candidate) = normalized.split('&').next()
+    {
+        let candidate = candidate.trim();
+        if !candidate.is_empty() {
+            normalized = candidate.to_string();
         }
     }
 

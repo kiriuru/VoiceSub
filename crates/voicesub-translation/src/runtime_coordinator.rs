@@ -1,6 +1,6 @@
 //! SST `backend/core/runtime/translation_runtime_coordinator.py` parity.
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 fn int_field(value: Option<&Value>) -> i64 {
     value

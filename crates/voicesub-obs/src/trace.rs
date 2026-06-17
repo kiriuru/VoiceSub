@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use serde_json::{json, Value};
-use voicesub_logging::{obs_trace, StructuredRuntimeLogger};
+use serde_json::{Value, json};
+use voicesub_logging::{StructuredRuntimeLogger, obs_trace};
 
 use crate::diagnostics::ConnectionState;
 
@@ -11,9 +11,7 @@ pub type StructuredLogFn = Arc<dyn Fn(&str, &str, Value) + Send + Sync>;
 const CHANNEL: &str = "obs_caption_output";
 const SOURCE: &str = "obs_caption_output";
 
-pub fn structured_log_from_runtime_logger(
-    logger: Arc<StructuredRuntimeLogger>,
-) -> StructuredLogFn {
+pub fn structured_log_from_runtime_logger(logger: Arc<StructuredRuntimeLogger>) -> StructuredLogFn {
     Arc::new(move |_channel, event, fields| {
         let mut map = BTreeMap::new();
         if let Some(obj) = fields.as_object() {
@@ -70,10 +68,10 @@ impl ObsCaptionLog {
 
     pub(crate) fn connection_state_changed(&self, state: ConnectionState, error: Option<&str>) {
         let mut fields = json!({ "state": state.as_str() });
-        if let Some(err) = error.filter(|s| !s.is_empty()) {
-            if let Some(obj) = fields.as_object_mut() {
-                obj.insert("error".into(), json!(err));
-            }
+        if let Some(err) = error.filter(|s| !s.is_empty())
+            && let Some(obj) = fields.as_object_mut()
+        {
+            obj.insert("error".into(), json!(err));
         }
         self.emit("obs_connection_state_changed", fields);
     }
@@ -94,11 +92,11 @@ impl ObsCaptionLog {
 
     pub(crate) fn send_skipped(&self, reason: &str, fields: Value) {
         let mut body = json!({ "reason": reason });
-        if let Some(obj) = body.as_object_mut() {
-            if let Some(extra) = fields.as_object() {
-                for (key, value) in extra {
-                    obj.insert(key.clone(), value.clone());
-                }
+        if let Some(obj) = body.as_object_mut()
+            && let Some(extra) = fields.as_object()
+        {
+            for (key, value) in extra {
+                obj.insert(key.clone(), value.clone());
             }
         }
         self.emit("obs_caption_send_skipped", body);

@@ -340,15 +340,14 @@ pub fn normalize_twitch_settings(settings: &mut TwitchTtsSettings) {
         .strip_symbols
         .iter()
         .any(|entry| entry.trim() == "_");
-    settings
-        .strip_symbols
-        .retain(|entry| entry.trim() != "_");
+    settings.strip_symbols.retain(|entry| entry.trim() != "_");
     if had_underscore_strip {
         settings.replace_underscore_with_space = true;
     }
 }
 
 #[cfg(test)]
+#[allow(clippy::field_reassign_with_default)]
 mod normalize_twitch_settings_tests {
     use super::*;
 
@@ -366,6 +365,7 @@ mod normalize_twitch_settings_tests {
 }
 
 #[cfg(test)]
+#[allow(clippy::field_reassign_with_default)]
 mod speak_template_tests {
     use super::*;
 
@@ -378,12 +378,7 @@ mod speak_template_tests {
             vec!["legacychan".to_string()]
         );
 
-        settings.channels = vec![
-            "#Alpha".into(),
-            "beta".into(),
-            "ALPHA".into(),
-            "  ".into(),
-        ];
+        settings.channels = vec!["#Alpha".into(), "beta".into(), "ALPHA".into(), "  ".into()];
         assert_eq!(
             settings.resolved_channel_logins(),
             vec!["alpha".to_string(), "beta".to_string()]
@@ -393,20 +388,18 @@ mod speak_template_tests {
     #[test]
     fn caps_channel_list_at_five() {
         let mut settings = TwitchTtsSettings::default();
-        settings.channels = (1..=7)
-            .map(|index| format!("chan{index}"))
-            .collect();
-        assert_eq!(settings.resolved_channel_logins().len(), TWITCH_MAX_CHANNELS);
+        settings.channels = (1..=7).map(|index| format!("chan{index}")).collect();
+        assert_eq!(
+            settings.resolved_channel_logins().len(),
+            TWITCH_MAX_CHANNELS
+        );
     }
 
     #[test]
     fn normalized_channels_label_joins_hash_prefixed_names() {
         let mut settings = TwitchTtsSettings::default();
         settings.channels = vec!["foo".into(), "bar".into()];
-        assert_eq!(
-            settings.normalized_channels_label(),
-            "#foo, #bar"
-        );
+        assert_eq!(settings.normalized_channels_label(), "#foo, #bar");
     }
 
     #[test]

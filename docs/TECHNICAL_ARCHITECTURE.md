@@ -1,10 +1,8 @@
-# VoiceSub 0.5.2 — Технический документ
+# VoiceSub 0.5.3 — Технический документ
 
-Актуально для линии кода, где `voicesub-types::PROJECT_VERSION = "0.5.2"`.
+Актуально для линии кода, где `voicesub-types::PROJECT_VERSION = "0.5.3"`.
 
-Этот документ описывает реальный layout проекта VoiceSub, контракт HTTP/WebSocket/Tauri IPC, схему конфигурации, поток данных через Rust runtime и поверхности frontend. Документ — **канонический полный technical reference** для активной разработки. README — короткий обзор продукта; CHANGELOG — история релизов; roadmap — `docs/plans/voicesub_roadmap.ru.md`.
-
-**Предшественник:** SST Desktop `0.4.4` (`F:\AI\stream-sub-translator`) — read-only reference для parity-порта. SST tech doc **не обновляется**; канон для VoiceSub — **этот файл**.
+Этот документ описывает layout проекта VoiceSub, контракт HTTP/WebSocket/Tauri IPC, схему конфигурации, поток данных через Rust runtime и поверхности frontend. Документ — **канонический technical reference** для активной разработки. README — обзор продукта; CHANGELOG — история релизов; политика агентов — `AGENTS.md`.
 
 **Правило сопровождения:** любое изменение контрактов API/WS/IPC, config schema, subtitle/translation lifecycle, renderer overlay, browser worker или NSIS installer bundle **обновляет соответствующие разделы в той же задаче**. Устаревшие формулировки удаляют или переписывают, а не оставляют «для истории».
 
@@ -35,14 +33,13 @@
 - [21. Frontend: overlay (vanilla)](#21-frontend-overlay-vanilla)
 - [22. Frontend: browser worker (Svelte)](#22-frontend-browser-worker-svelte)
 - [23. UI localization (i18n)](#23-ui-localization-i18n)
-- [24. Архивные возможности (legacy/)](#24-архивные-возможности-legacy)
-- [25. Версионирование и проверка обновлений](#25-версионирование-и-проверка-обновлений)
-- [26. Тестирование](#26-тестирование)
-- [27. Продуктовые инварианты](#27-продуктовые-инварианты)
-- [28. Known Limitations & Technical Debt](#28-known-limitations--technical-debt)
-- [29. Security & Privacy Model](#29-security--privacy-model)
-- [30. Extension Points](#30-extension-points)
-- [31. Glossary](#31-glossary)
+- [24. Версионирование и проверка обновлений](#24-версионирование-и-проверка-обновлений)
+- [25. Тестирование](#25-тестирование)
+- [26. Продуктовые инварианты](#26-продуктовые-инварианты)
+- [27. Known Limitations & Technical Debt](#27-known-limitations--technical-debt)
+- [28. Security & Privacy Model](#28-security--privacy-model)
+- [29. Extension Points](#29-extension-points)
+- [30. Glossary](#30-glossary)
 
 ## Related Documentation
 
@@ -50,11 +47,9 @@
 | --- | --- |
 | `docs/WIKI.ru.md` | Пользовательский гайд (RU) |
 | `docs/WIKI.en.md` | Пользовательский гайд (EN) |
-| `docs/TECHNICAL_ARCHITECTURE.md` | Техническая архитектура (этот документ) |
-| `docs/plans/voicesub_roadmap.ru.md` | Roadmap фаз 0.5.0+ |
-| `docs/CHANGELOG.md` | История изменений (наследие SST + VoiceSub) |
-| `AGENTS.md` | Краткая политика для агентов |
-| SST reference | `F:\AI\stream-sub-translator\docs\TECHNICAL_ARCHITECTURE.md` (frozen 0.4.4) |
+| `docs/TECHNICAL_ARCHITECTURE.en.md` | Техническая архитектура (English) |
+| `docs/CHANGELOG.md` | История изменений |
+| `AGENTS.md` | Политика для агентов |
 
 ## Quick Reference
 
@@ -124,7 +119,7 @@ Tauri dev: embedded HTTP на `http://127.0.0.1:8765`; main webview открыв
 - опциональный **TTS-модуль** (озвучка субтитров, Twitch chat TTS);
 - экспорт diagnostics ZIP и client-side trace logs.
 
-**Core 0.5.0 не включает:** локальный Parakeet ASR, experimental browser routes — код архивирован в `legacy/`, не поднимается active runtime.
+**Core ASR:** только `browser_google` — Web Speech на `/google-asr` и `/google-asr-edge`. Локальный ASR и experimental worker routes не входят в продукт.
 
 Жёсткие границы:
 
@@ -139,7 +134,7 @@ Tauri dev: embedded HTTP на `http://127.0.0.1:8765`; main webview открыв
 
 | Слой | Технологии |
 | --- | --- |
-| Core runtime | Rust 1.75+, Tokio, Axum 0.8 |
+| Core runtime | Rust 1.85+, Tokio, Axum 0.8 |
 | Desktop shell | Tauri 2 → `VoiceSub.exe` (NSIS `setup.exe`) |
 | Dashboard UI | Svelte 5 + Vite → `bin/dashboard/` |
 | Browser worker | Svelte 5 + Vite → `bin/worker/` |
@@ -217,13 +212,12 @@ F:\AI\VoiceSub\
 │   ├── tts/                    # TTS UI bundle
 │   ├── overlay/                # Vanilla OBS overlay
 │   ├── fonts/                  # Project fonts
-│   └── modules/                # Sidecar modules (tts, parakeet later)
+│   └── modules/                # Sidecar modules (tts)
 │
 ├── tests/
-│   ├── golden/                 # SST fixture port
+│   ├── golden/                 # Regression fixtures
 │   └── integration/
 │
-├── legacy/                     # Archived SST code (read-only reference)
 ├── docs/
 ├── user-data/                  # runtime (gitignored)
 └── logs/                       # runtime (gitignored)
@@ -261,10 +255,10 @@ src-tauri (Layer 4: IPC, window, bundle only)
 | Crate | Назначение |
 | --- | --- |
 | `voicesub-types` | `PROJECT_VERSION`, WS envelope types, ASR event DTO |
-| `voicesub-config` | TOML store, defaults, SST JSON import, paths, bind policy |
+| `voicesub-config` | TOML store, defaults, legacy JSON import, paths, bind policy |
 | `voicesub-subtitle` | `SubtitleLifecycleCore`, `SubtitleRouter`, presentation, overlay contract |
 | `voicesub-translation` | `TranslationDispatcher`, `TranslationEngine`, 13 providers |
-| `voicesub-browser` | Chrome supervisor, worker launch flags, FSM port |
+| `voicesub-browser` | Chrome supervisor, worker launch flags, operational FSM |
 | `voicesub-ws` | `/ws/events` hub, `/ws/asr_worker` hub, event sequence |
 | `voicesub-http` | Re-export `voicesub-runtime::http` (thin) |
 | `voicesub-logging` | `tracing` backbone, rotation, session JSONL, deep trace flags |
@@ -332,14 +326,14 @@ Embedded HTTP server: dedicated Tokio runtime в Tauri process; bind из `AppCo
 | --- | --- |
 | `browser_google` | **Active default** |
 | `browser_google_edge` | Сохраняется при import; тот же worker, другой page URL |
-| SST `local`, `browser_google_experimental*` | Import → `browser_google` + `import_hint` |
+| `local`, `browser_google_experimental*` (import) | Mapped → `browser_google` + `import_hint` |
 
-### SST JSON import
+### Legacy JSON import (SST Desktop `config.json`)
 
 `ConfigStore::import_sst_json_file` / load с `config_version < 8`:
 
-1. `migrate_sst_payload` — version steps, build `translation.lines` from legacy `targets`
-2. `apply_voicesub_import_rules` — strip SST-only keys (RNNoise, model fields, …)
+1. `migrate_sst_payload` — version steps, build `translation.lines` from old `targets`
+2. `apply_voicesub_import_rules` — strip removed keys (RNNoise, model fields, …)
 3. `repair_legacy_keep_completed_false` + `normalize_config_payload`
 
 Удалённые providers (например `mymemory`) → fallback `google_translate_v2`.
@@ -354,14 +348,19 @@ Embedded HTTP server: dedicated Tokio runtime в Tauri process; bind из `AppCo
 **Default bind:** `127.0.0.1:8765` (`voicesub-config::paths`)  
 **LAN:** `VOICESUB_ALLOW_LAN=1` → bind `0.0.0.0`
 
+**Безопасность LAN (OWASP ASVS V7):** при `VOICESUB_ALLOW_LAN=1` HTTP API `/api/*` по-прежнему требует per-session `x-voicesub-token`, но **WebSocket endpoints остаются без аутентификации** — любой хост в той же сети может подключиться к `/ws/events` (чтение субтитров/runtime) и `/ws/asr_worker` (отправка ASR/control). Используйте LAN bind только в доверенной сети; для production stream setup предпочтителен default `127.0.0.1` + OBS Browser Source на localhost.
+
 Global middleware: CSP header, `Cache-Control: no-store`.
 
 ### Health / Version
 
-| Method | Path | Назначение |
-| --- | --- | --- |
-| GET | `/api/health` | Liveness + WS connections + worker connected |
-| GET | `/api/version` | Product metadata + `sync` (updates config, `update_available`, `latest_known_version`) |
+| Method | Path | Auth | Назначение |
+| --- | --- | --- | --- |
+| GET | `/live` | public | Минимальный liveness probe (`{"ok":true}`) для OBS overlay |
+| GET | `/api/health` | loopback token | Liveness + WS connections + worker connected |
+| GET | `/api/version` | loopback token | Product metadata + `sync` (updates config, `update_available`, `latest_known_version`) |
+
+**Loopback API auth:** trusted UI pages (dashboard, worker, TTS) получают per-session `x-voicesub-token` через HTML injection; Tauri IPC `get_loopback_api_token`. OBS overlay **не** вызывает protected `/api/*` (только `/live` + WebSocket).
 
 ### Devices / OpenAI helpers
 
@@ -384,7 +383,7 @@ Global middleware: CSP header, `Cache-Control: no-store`.
 
 | Method | Path | Назначение |
 | --- | --- | --- |
-| POST | `/api/runtime/start` | Start session (`device_id?`, `config_payload?`) |
+| POST | `/api/runtime/start` | Start session (`config_payload?`) |
 | POST | `/api/runtime/stop` | Stop session |
 | GET | `/api/runtime/status` | Full runtime snapshot |
 | GET | `/api/obs/url` | `{ overlay_url }` |
@@ -440,6 +439,8 @@ Global middleware: CSP header, `Cache-Control: no-store`.
 `bin/` resolved via `ProjectPaths::locate_bin_dir()` — workspace `bin/` или Tauri NSIS `resources/bin/`.
 
 ## 9. WebSocket-поверхность
+
+**Аутентификация:** WS endpoints **не** используют `x-voicesub-token` (by design — OBS overlay и browser worker). При default bind `127.0.0.1` риск ограничен локальной машиной. При `VOICESUB_ALLOW_LAN=1` см. предупреждение в §8.
 
 ### `/ws/events` — OBS overlay (+ optional external clients)
 
@@ -525,7 +526,8 @@ Payload enrichment: `event_sequence`, `created_at_ms`, `event_type` (`WsEventPub
 | `tts_get_audio_routing` / `tts_bind_window_audio` | Legacy WinAPI per-process routing (single device) |
 | `tts_update_speech_settings` / `tts_update_voice_settings` | Speech params |
 | `tts_plan_subtitle_speech` / `tts_reset_subtitle_planner` | Subtitle-driven queue |
-| `tts_enqueue` | Enqueue speech text |
+| `tts_channel_enqueue` | Enqueue text on `speech` or `twitch` channel (preferred) |
+| `tts_enqueue` | **Deprecated** — backward-compat speech enqueue; prefer `tts_channel_enqueue` |
 | `tts_twitch_*` | Twitch connect/disconnect/status/settings |
 | `tts_sync_source_text_replacement` | Sync replacement rules |
 | `tts_open_window` | Open/focus `/tts` webview |
@@ -551,7 +553,7 @@ Payload enrichment: `event_sequence`, `created_at_ms`, `event_type` (`WsEventPub
 
 ### Opt-in JSONL traces
 
-Master switch: `logging.full_enabled` in config **или** `VOICESUB_DEEP_DIAGNOSTICS` / `SST_DEEP_DIAGNOSTICS`.
+Master switch: `logging.full_enabled` in config **или** `VOICESUB_DEEP_DIAGNOSTICS`.
 
 | File | Enable env |
 | --- | --- |
@@ -600,7 +602,7 @@ Verbose runtime-events: `VOICESUB_TRACE_RUNTIME_EVENTS_VERBOSE`.
 - Isolated `--user-data-dir`: `{user-data}/browser-worker-profile-classic-{engine}/`
 - Edge: `--disable-sync`, `--allow-browser-signin=false`; **never** `--disable-extensions` / `--bwsi`
 - **No** `--app`, hidden windows, in-tab worker
-- Anti-throttling Chrome flags + Windows EcoQoS opt-out (port from SST `browser_worker_launcher.py`)
+- Anti-throttling Chrome flags + Windows EcoQoS opt-out (`launch_config.rs`, `ecoqos.rs`)
 - Detached high-priority process; stop via `taskkill /T /F` (только при реальном `pid > 0`)
 - **Launch stability (0.5.2+):** `launch_stability.rs` (flag profile), `profile_bloat_guard.rs` (profile dir hygiene), `process_affinity.rs` (Windows CPU affinity); contract tests in `crates/voicesub-browser/tests/chrome_launch_contract.rs`
 
@@ -664,7 +666,7 @@ Verbose runtime-events: `VOICESUB_TRACE_RUNTIME_EVENTS_VERBOSE`.
 | `SubtitleLifecycleCore` | `lifecycle.rs` | FSM, TTL, relevance, expiry scheduling |
 | `SubtitleRouter` | `router.rs` | Transcript + translation → presentation events |
 | `SubtitlePresentation` | `presentation.rs` | Payload assembly |
-| Overlay contract | `tests/overlay_contract.rs` | Golden parity |
+| Overlay contract | `tests/overlay_contract.rs` | Golden regression |
 
 **Config keys (`subtitle_lifecycle`):**
 
@@ -687,7 +689,7 @@ Query param override: `?preset=…&compact=1&profile=…&debug=…`
 
 ### Shared renderer
 
-`bin/overlay/shared/js/subtitle-style.js` — fast/slow path invariants ported from SST. Dashboard preview uses same payload shape via WS (not necessarily same JS file).
+`bin/overlay/shared/js/subtitle-style.js` — fast/slow path invariants. Dashboard preview uses same payload shape via WS (not necessarily same JS file).
 
 ### OBS overlay URL (VoiceSub 0.5.0)
 
@@ -695,7 +697,7 @@ Query param override: `?preset=…&compact=1&profile=…&debug=…`
 http://127.0.0.1:8765/overlay
 ```
 
-**Обратная совместимость SST query-params не гарантируется.** Пользователи обновляют Browser Source в OBS вручную.
+**Обратная совместимость query-params со старыми продуктами не гарантируется.** Пользователи обновляют Browser Source в OBS вручную при смене URL или параметров overlay.
 
 ### Empty-state cleanup (caller responsibility)
 
@@ -703,7 +705,7 @@ http://127.0.0.1:8765/overlay
 
 | Surface | Caller |
 | --- | --- |
-| Dashboard preview | `src/lib/components/OverviewSection.svelte` |
+| Dashboard preview | `src/lib/components/SubtitleOutputPreview.svelte` |
 | OBS overlay | `bin/overlay/overlay.js` — после `render()`, если `result?.empty` |
 
 Без cleanup последний кадр может остаться в OBS. Контракт: `crates/voicesub-subtitle/tests/overlay_contract.rs` → `overlay_disposes_renderer_when_payload_is_empty`.
@@ -718,7 +720,7 @@ http://127.0.0.1:8765/overlay
 - `debug_mirror` — optional OBS Text Source mirror (`SetInputSettings`)
 - `timing` — partial throttle, final replace delay, clear after ms, dedup
 - Два входа: ASR **source events** (`source_live` / `source_final_only`) и **subtitle payload** (`translation_*`, `first_visible_line`, debug mirror)
-- Алгоритм send/clear/dedup — SST parity + fixes 0.5.2 (501 debug clear, supersede generation, partial stream inactive after 501)
+- Алгоритм send/clear/dedup с fixes 0.5.2 (501 debug clear, supersede generation, partial stream inactive after 501)
 
 Enabled when `obs_closed_captions.enabled = true` and connection succeeds. Native `SendStreamCaption` только во время active stream.
 
@@ -786,7 +788,7 @@ Config: `user-data/modules/tts/config.toml` → секция `[twitch]`.
 
 ### Legacy audio routing
 
-- WinAPI per-process routing: `VOICESUB_TTS_PER_PROCESS_ROUTING` + `tts_bind_window_audio` — один device на процесс WebView; **не использовать** для dual sink (см. `docs/plans/tts_dual_sink_native_playback.ru.md`).
+- WinAPI per-process routing: `VOICESUB_TTS_PER_PROCESS_ROUTING` + `tts_bind_window_audio` — один device на процесс WebView; **не использовать** для dual sink (используйте native/Sonic `PlaybackHub`).
 
 ## 18. Desktop runtime и NSIS release
 
@@ -883,7 +885,7 @@ Compact layout adds pane `"live"` (overview).
 
 ### Idle subtitle preview (до Start)
 
-**Файлы:** `src/lib/preview-payload.ts`, `src/lib/components/OverviewSection.svelte`
+**Файлы:** `src/lib/preview-payload.ts`, `src/lib/components/SubtitleOutputPreview.svelte` (встроен из `OverviewSection.svelte`)
 
 Пока runtime в фазе `idle`, dashboard показывает **placeholder preview** (`preview.source_line`, labels переводов) вместо live `overlay_update` с WS. Пустой `overlay_update` после Save **не затирает** preview. При `running=true` preview переключается на live payload (`subtitle_payload_update` / `overlay_update`). Тест: `src/lib/preview-payload.test.ts`.
 
@@ -902,7 +904,8 @@ Compact layout adds pane `"live"` (overview).
 
 **WS:** `ws(s)://{host}/ws/events` — handles `transcript_update`, `overlay_update`.  
 **Reconnect:** exponential backoff 1s → 10s max; last frame preserved on disconnect (OBS UX).  
-**Empty payload:** `disposeRenderContainer(linesContainer)` when render returns `empty: true` (TTL / Stop / idle). Idle TTL также требует `hasVisibleRenderedFrame()` — иначе очистка state без `render()` оставляет последний кадр в OBS. Cache-bust: `overlay.html` → `overlay.js?v=20260610b`.
+**Debug:** `?debug=1` включает буфер `writeDebug` + `console.debug`; `?debug-subtitles=1` — ring trace эффектов (`window.__sstOverlaySubtitleTrace`). В production hot path нет `console.log`.  
+**Empty payload:** `disposeRenderContainer(linesContainer)` when render returns `empty: true` (TTL / Stop / idle). Idle TTL также требует `hasVisibleRenderedFrame()` — иначе очистка state без `render()` оставляет последний кадр в OBS. Cache-bust: `overlay.html` → `overlay.js?v=20260615a`.
 
 ## 22. Frontend: browser worker (Svelte)
 
@@ -923,35 +926,26 @@ Autostart: `?autostart=1` query param.
 | Worker | via `locale` query param + worker i18n |
 
 Merge: `src/lib/i18n/index.ts` — main + TTS catalogs per locale.  
-Export pipeline: `npm run i18n:export` → `scripts/export-i18n.mjs`.  
+**Источник правды:** `scripts/i18n-source/locales/*.js` + `dynamic-locales.js`.  
+Export pipeline: `npm run i18n:export` → `scripts/export-i18n.mjs` → `src/lib/i18n/locales/*.json`.  
+Overlay bundle: `npm run i18n:bundle` → `scripts/build-locale-bundle.mjs` → `scripts/i18n-source/locales-bundle.js` + `bin/overlay/shared/js/i18n/`.  
 Config key: `ui.language` (empty = browser default).
 
-## 24. Архивные возможности (legacy/)
+## 24. Версионирование и проверка обновлений
 
-Не импортируются active crates. Reference only.
-
-| Path | Содержимое |
-| --- | --- |
-| `legacy/experimental-browser/` | Experimental worker routes |
-| `legacy/modules-source/parakeet/` | Parakeet Python until `bin/modules/parakeet` |
-
-Active HTTP server **не** поднимает experimental routes, in-process Parakeet.
-
-## 25. Версионирование и проверка обновлений
-
-- **Single source (interim):** `voicesub-types::PROJECT_VERSION` = `"0.5.2"`
-- Workspace `Cargo.toml` `[workspace.package].version` = `0.5.2`
-- `package.json`, `tauri.conf.json` — aligned `0.5.2`
+- **Single source (interim):** `voicesub-types::PROJECT_VERSION` = `"0.5.3"`
+- Workspace `Cargo.toml` `[workspace.package].version` = `0.5.3`
+- `package.json`, `tauri.conf.json` — aligned `0.5.3`
 - `GET /api/version`, `POST /api/updates/check` — GitHub Releases poll (`voicesub-runtime/src/http/update_service.rs`, `voicesub-types::version`)
 - Config `updates.*` — defaults in `voicesub-config::defaults`; legacy configs merge via `normalize_updates_config`
 - Dashboard banner: `UpdateBanner.svelte`; download → Tauri `open_external_https_url` (`src-tauri/src/shell.rs`)
 
-## 26. Тестирование
+## 25. Тестирование
 
 ### Policy
 
 - **No new Rust module without tests** in same task
-- Golden fixtures from SST `tests/` in `tests/golden/`
+- Golden fixtures in `tests/golden/` — update when behavioral contracts change
 - `cargo test --workspace` required before done
 
 ### Levels
@@ -971,34 +965,32 @@ Active HTTP server **не** поднимает experimental routes, in-process P
 - `voicesub-twitch` — pipeline/links/lang/emoji digits/emotes/`apply_settings` (105+ unit tests)
 - `voicesub-browser/tests/worker_svelte_contract.rs`, `launcher.rs` launch skip
 - `voicesub-subtitle/tests/overlay_contract.rs` — overlay lifecycle + empty cleanup
+- `src/lib/preview-payload.test.ts`, `tests/renderer/dashboard-panel.contract.test.ts` — idle/live preview + контракт `SubtitleOutputPreview`
 - `src-tts/lib/popover-position.test.ts`, `twitch-channels.test.ts`
 
-## 27. Продуктовые инварианты
+## 26. Продуктовые инварианты
 
 1. **Local-first:** default localhost bind; no cloud assumptions.
 2. **Browser worker visibility:** separate window, visible URL bar, no hidden/throttled-to-death modes.
 3. **Subtitle lifecycle:** completed block persists until new phrase finalized; late translations allowed on browser path.
-4. **Translation parity:** 13 providers, full dispatcher semantics from SST 0.4.4.
+4. **Translation:** 13 providers, full dispatcher semantics (queue, stale drop, supersession).
 5. **Overlay separation:** vanilla HTML for OBS; not bundled in dashboard Vite chunk.
 6. **No Node in runtime:** only compile-time frontend toolchain.
-7. **Config semantics:** SST import preserves user intent except explicitly removed modes.
+7. **Config import:** legacy SST `config.json` import preserves user intent except explicitly removed modes.
 
-## 28. Known Limitations & Technical Debt
+## 27. Known Limitations & Technical Debt
 
-### 28.1 Текущие ограничения
+### 27.1 Текущие ограничения
 
 - GitHub update **check + dashboard banner** реализованы; авто-скачивание installer — нет (только ссылка на release page)
-- Golden full parity / formal Phase 1 DoD — **deferred** (roadmap §12)
 - `POST /api/openai/models` — static list; live OpenAI model fetch deferred
 - Audio input enumeration empty (by design for browser ASR)
-- SST dashboard field-by-field UI parity — **not a gate** (own Svelte layout)
 
-### 28.2 Технический долг
+### 27.2 Технический долг
 
 - `PROJECT_VERSION` scattered across Cargo/package/tauri — migrate to crate-only source of truth
-- Parakeet module not yet in `bin/modules/parakeet/`
 
-## 29. Security & Privacy Model
+## 28. Security & Privacy Model
 
 - **Bind policy:** localhost default; LAN only via explicit `VOICESUB_ALLOW_LAN=1`
 - **CSP** on all HTTP responses (restrictive `default-src 'self'`)
@@ -1008,7 +1000,7 @@ Active HTTP server **не** поднимает experimental routes, in-process P
 - Twitch OAuth tokens stored locally in TTS bridge
 - Browser worker uses isolated Chrome profile (no sync)
 
-## 30. Extension Points
+## 29. Extension Points
 
 ### Safe extension
 
@@ -1017,8 +1009,8 @@ Active HTTP server **не** поднимает experimental routes, in-process P
 | New translation provider | Add to `voicesub-translation/src/providers/`, register in `mod.rs`, golden tests |
 | New WS event type | Add to `voicesub-ws`, document in §9, update dashboard/overlay consumers |
 | New config key | `voicesub-config` defaults + migrate + normalize + TECH_ARCH §7 |
-| New module | `bin/modules/{name}/module.toml` + sidecar; no import from `legacy/` |
-| Dashboard panel | New `src/lib/panels/*.svelte` + tab in `TabNav.svelte` |
+| New module | `bin/modules/{name}/module.toml` + sidecar |
+| Dashboard panel | New `src/lib/panels/*.svelte` + register in `navigation.ts` (`NavRail` / `BottomNav`); optional `PanelListDetailLayout` for long panels |
 
 ### Unsafe (forbidden without contract update)
 
@@ -1027,16 +1019,16 @@ Active HTTP server **не** поднимает experimental routes, in-process P
 - Reintroducing experimental routes in core HTTP server
 - Business logic in `src-tauri/`
 
-## 31. Glossary
+## 30. Glossary
 
 | Term | Meaning |
 | --- | --- |
 | **ASR** | Automatic Speech Recognition |
 | **Browser worker** | Chrome/Edge window running Web Speech at `/google-asr` |
 | **Completed block** | Finalized subtitle segment shown until next phrase finalizes |
-| **Golden test** | Fixture-based regression test ported from SST |
+| **Golden test** | Fixture-based regression test |
 | **Overlay** | Vanilla OBS Browser Source page at `/overlay` |
 | **Segment / revision** | Translation supersession identity `(segment_id, revision)` |
-| **Sidecar module** | Optional feature (TTS, future Parakeet) under `bin/modules/` |
+| **Sidecar module** | Optional feature (TTS) under `bin/modules/` |
 | **Stale drop** | Discarding in-flight translation superseded by newer segment |
-| **VoiceSub** | Product name for 0.5.0+ line (successor to SST) |
+| **VoiceSub** | Product name for the 0.5.x line |

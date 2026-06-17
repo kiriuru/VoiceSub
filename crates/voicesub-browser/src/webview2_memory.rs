@@ -4,12 +4,12 @@
 mod imp {
     use tracing::{debug, warn};
     use webview2_com::Microsoft::Web::WebView2::Win32::{
-        ICoreWebView2, ICoreWebView2_19, ICoreWebView2_3, ICoreWebView2Controller,
-        COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL,
+        COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL, ICoreWebView2, ICoreWebView2_3, ICoreWebView2_19,
+        ICoreWebView2Controller,
     };
     use webview2_com::TrySuspendCompletedHandler;
-    use windows::core::Interface;
     use windows::core::BOOL;
+    use windows::core::Interface;
 
     use crate::webview_power::WebviewPowerAction;
 
@@ -89,16 +89,14 @@ mod imp {
     fn try_suspend(webview: &ICoreWebView2, label: &str) -> windows::core::Result<()> {
         let webview3 = webview.cast::<ICoreWebView2_3>()?;
         let trace_label = label.to_string();
-        let handler = TrySuspendCompletedHandler::create(Box::new(
-            move |result, success| {
-                if result.is_err() || !success {
-                    debug!(label = %trace_label, "webview TrySuspend completed without success");
-                } else {
-                    debug!(label = %trace_label, "webview TrySuspend succeeded");
-                }
-                Ok(())
-            },
-        ));
+        let handler = TrySuspendCompletedHandler::create(Box::new(move |result, success| {
+            if result.is_err() || !success {
+                debug!(label = %trace_label, "webview TrySuspend completed without success");
+            } else {
+                debug!(label = %trace_label, "webview TrySuspend succeeded");
+            }
+            Ok(())
+        }));
         unsafe { webview3.TrySuspend(&handler)? };
         debug!(label, "webview TrySuspend requested");
         Ok(())

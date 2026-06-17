@@ -59,10 +59,10 @@ pub fn chunk_text_for_google_tts(text: &str, max_chars: usize) -> Vec<String> {
                     break;
                 }
             }
-            if let Some(at) = space_at {
-                if at > start {
-                    end = at;
-                }
+            if let Some(at) = space_at
+                && at > start
+            {
+                end = at;
             }
         }
         let piece: String = chars[start..end].iter().collect();
@@ -161,10 +161,7 @@ pub async fn prefetch_tts_line(
 
     let tl = normalize_tts_lang(lang);
     let mut out = Vec::with_capacity(chunks.len());
-    out.push(
-        fetch_tts_chunk(module_dir, provider, &tl, &chunks[0])
-            .await?,
-    );
+    out.push(fetch_tts_chunk(module_dir, provider, &tl, &chunks[0]).await?);
     if chunks.len() == 1 {
         return Ok(out);
     }

@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use serde_json::{json, Value};
-use voicesub_logging::{subtitle_trace, StructuredRuntimeLogger};
+use serde_json::{Value, json};
+use voicesub_logging::{StructuredRuntimeLogger, subtitle_trace};
 
 use crate::types::{LifecycleState, SubtitlePayloadEvent, TranscriptEvent, TranslationEvent};
 
@@ -18,9 +18,7 @@ fn subtitle_source_for_channel(channel: &str) -> &'static str {
     }
 }
 
-pub fn structured_log_from_runtime_logger(
-    logger: Arc<StructuredRuntimeLogger>,
-) -> StructuredLogFn {
+pub fn structured_log_from_runtime_logger(logger: Arc<StructuredRuntimeLogger>) -> StructuredLogFn {
     Arc::new(move |channel, event, fields| {
         let mut map = BTreeMap::new();
         if let Some(obj) = fields.as_object() {
@@ -205,7 +203,12 @@ impl SubtitleLog {
         );
     }
 
-    pub(crate) fn overlay_publish(&self, published: bool, payload: &SubtitlePayloadEvent, reason: &str) {
+    pub(crate) fn overlay_publish(
+        &self,
+        published: bool,
+        payload: &SubtitlePayloadEvent,
+        reason: &str,
+    ) {
         let event = if published {
             "overlay_update_published"
         } else {

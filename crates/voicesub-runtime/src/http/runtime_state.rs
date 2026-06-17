@@ -13,9 +13,7 @@ use crate::trace::RuntimePipelineLog;
 /// Material status fields used for runtime_update coalescing (SST `runtime_material_status_snapshot`).
 fn runtime_material_status_snapshot(payload: &Value) -> Vec<Value> {
     let asr = payload.get("asr").and_then(|v| v.as_object());
-    let asr_diagnostics = payload
-        .get("asr_diagnostics")
-        .and_then(|v| v.as_object());
+    let asr_diagnostics = payload.get("asr_diagnostics").and_then(|v| v.as_object());
     let browser_worker = asr_diagnostics
         .and_then(|d| d.get("browser_worker"))
         .and_then(|v| v.as_object());
@@ -28,8 +26,13 @@ fn runtime_material_status_snapshot(payload: &Value) -> Vec<Value> {
             .cloned()
             .unwrap_or(Value::Null),
         payload.get("last_error").cloned().unwrap_or(Value::Null),
-        payload.get("status_message").cloned().unwrap_or(Value::Null),
-        asr.and_then(|a| a.get("active_mode")).cloned().unwrap_or(Value::Null),
+        payload
+            .get("status_message")
+            .cloned()
+            .unwrap_or(Value::Null),
+        asr.and_then(|a| a.get("active_mode"))
+            .cloned()
+            .unwrap_or(Value::Null),
         asr.and_then(|a| a.get("effective_provider"))
             .cloned()
             .unwrap_or(Value::Null),
@@ -129,11 +132,7 @@ impl RuntimeStatusBroadcaster {
         let important_change = last_signature.as_ref() != Some(&signature);
         let mut should_send = force;
         if !force {
-            let last_at = self
-                .last_broadcast_at
-                .lock()
-                .ok()
-                .and_then(|guard| *guard);
+            let last_at = self.last_broadcast_at.lock().ok().and_then(|guard| *guard);
             let elapsed_ms = last_at
                 .map(|previous| now.duration_since(previous).as_millis() as u64)
                 .unwrap_or(self.heartbeat_interval_ms);
@@ -224,8 +223,14 @@ fn diagnostics_material_snapshot(payload: &Value) -> Vec<Value> {
     vec![
         payload.get("provider").cloned().unwrap_or(Value::Null),
         payload.get("degraded_mode").cloned().unwrap_or(Value::Null),
-        payload.get("provider_phase").cloned().unwrap_or(Value::Null),
-        payload.get("provider_message").cloned().unwrap_or(Value::Null),
+        payload
+            .get("provider_phase")
+            .cloned()
+            .unwrap_or(Value::Null),
+        payload
+            .get("provider_message")
+            .cloned()
+            .unwrap_or(Value::Null),
         payload
             .get("browser_worker")
             .and_then(|v| v.get("worker_connected"))

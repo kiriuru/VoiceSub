@@ -31,21 +31,13 @@ struct LatinDiacriticScores {
 pub fn resolve_message_language(text: &str, min_chars: usize, fallback: &str) -> String {
     if !has_meaningful_linguistic_content(text) {
         let fb = fallback.trim().to_ascii_lowercase();
-        return if fb.is_empty() {
-            "en".to_string()
-        } else {
-            fb
-        };
+        return if fb.is_empty() { "en".to_string() } else { fb };
     }
     detect_language_code(text, min_chars)
         .filter(|code| code != "und")
         .unwrap_or_else(|| {
             let fb = fallback.trim().to_ascii_lowercase();
-            if fb.is_empty() {
-                "en".to_string()
-            } else {
-                fb
-            }
+            if fb.is_empty() { "en".to_string() } else { fb }
         })
 }
 
@@ -130,10 +122,10 @@ pub fn detect_language_code(text: &str, min_chars: usize) -> Option<String> {
         if let Some(code) = detect_with_whatlang(&cleaned, RELIABLE_CONFIDENCE) {
             return Some(code);
         }
-    } else if char_count >= 2 {
-        if let Some(code) = detect_with_whatlang(&cleaned, SHORT_LATIN_CONFIDENCE) {
-            return Some(code);
-        }
+    } else if char_count >= 2
+        && let Some(code) = detect_with_whatlang(&cleaned, SHORT_LATIN_CONFIDENCE)
+    {
+        return Some(code);
     }
 
     detect_by_script(&cleaned)
@@ -232,19 +224,22 @@ fn detect_single_letter(ch: char) -> Option<String> {
         return Some("hi".to_string());
     }
     if score_latin_diacritic(ch) > 0 {
-        return pick_latin_language(&LatinDiacriticScores {
-            german: score_latin_diacritic(ch) * u32::from(matches_german(ch)),
-            french: score_latin_diacritic(ch) * u32::from(matches_french(ch)),
-            spanish: score_latin_diacritic(ch) * u32::from(matches_spanish(ch)),
-            portuguese: score_latin_diacritic(ch) * u32::from(matches_portuguese(ch)),
-            italian: score_latin_diacritic(ch) * u32::from(matches_italian(ch)),
-            polish: score_latin_diacritic(ch) * u32::from(matches_polish(ch)),
-            turkish: score_latin_diacritic(ch) * u32::from(matches_turkish(ch)),
-            czech: score_latin_diacritic(ch) * u32::from(matches_czech(ch)),
-            romanian: score_latin_diacritic(ch) * u32::from(matches_romanian(ch)),
-            vietnamese: score_latin_diacritic(ch) * u32::from(matches_vietnamese(ch)),
-            nordic: score_latin_diacritic(ch) * u32::from(matches_nordic(ch)),
-        }, 1);
+        return pick_latin_language(
+            &LatinDiacriticScores {
+                german: score_latin_diacritic(ch) * u32::from(matches_german(ch)),
+                french: score_latin_diacritic(ch) * u32::from(matches_french(ch)),
+                spanish: score_latin_diacritic(ch) * u32::from(matches_spanish(ch)),
+                portuguese: score_latin_diacritic(ch) * u32::from(matches_portuguese(ch)),
+                italian: score_latin_diacritic(ch) * u32::from(matches_italian(ch)),
+                polish: score_latin_diacritic(ch) * u32::from(matches_polish(ch)),
+                turkish: score_latin_diacritic(ch) * u32::from(matches_turkish(ch)),
+                czech: score_latin_diacritic(ch) * u32::from(matches_czech(ch)),
+                romanian: score_latin_diacritic(ch) * u32::from(matches_romanian(ch)),
+                vietnamese: score_latin_diacritic(ch) * u32::from(matches_vietnamese(ch)),
+                nordic: score_latin_diacritic(ch) * u32::from(matches_nordic(ch)),
+            },
+            1,
+        );
     }
     if ch.is_ascii_alphabetic() {
         return Some("en".to_string());
@@ -300,13 +295,10 @@ fn detect_by_unicode_heuristics(text: &str) -> Option<String> {
             thai_count += 1;
         } else if is_devanagari(ch) {
             devanagari_count += 1;
-        } else if ch.is_ascii_alphabetic() {
-            latin_count += 1;
-            apply_latin_diacritic_scores(ch, &mut latin_scores);
-        } else if ('\u{00C0}'..='\u{00FF}').contains(&ch) {
-            latin_count += 1;
-            apply_latin_diacritic_scores(ch, &mut latin_scores);
-        } else if ('\u{0100}'..='\u{024F}').contains(&ch) {
+        } else if ch.is_ascii_alphabetic()
+            || ('\u{00C0}'..='\u{00FF}').contains(&ch)
+            || ('\u{0100}'..='\u{024F}').contains(&ch)
+        {
             latin_count += 1;
             apply_latin_diacritic_scores(ch, &mut latin_scores);
         }
@@ -318,7 +310,8 @@ fn detect_by_unicode_heuristics(text: &str) -> Option<String> {
     if kanji_count > 0 {
         return Some("zh".to_string());
     }
-    if ukrainian_specific >= 2 || (ukrainian_specific > 0 && cyrillic_count > 0 && latin_count == 0) {
+    if ukrainian_specific >= 2 || (ukrainian_specific > 0 && cyrillic_count > 0 && latin_count == 0)
+    {
         return Some("uk".to_string());
     }
     if cyrillic_count > latin_count && cyrillic_count > 0 {
@@ -386,25 +379,8 @@ fn twitch_language_detector() -> &'static LanguageDetector {
             Korean, Polish, Portuguese, Russian, Spanish, Swedish, Thai, Turkish, Vietnamese,
         };
         LanguageDetectorBuilder::from_languages(&[
-            English,
-            Chinese,
-            Russian,
-            Spanish,
-            Portuguese,
-            German,
-            Korean,
-            French,
-            Japanese,
-            Turkish,
-            Hindi,
-            Italian,
-            Arabic,
-            Polish,
-            Indonesian,
-            Swedish,
-            Dutch,
-            Vietnamese,
-            Thai,
+            English, Chinese, Russian, Spanish, Portuguese, German, Korean, French, Japanese,
+            Turkish, Hindi, Italian, Arabic, Polish, Indonesian, Swedish, Dutch, Vietnamese, Thai,
         ])
         .with_preloaded_language_models()
         .build()
@@ -415,7 +391,10 @@ fn detect_with_lingua(text: &str) -> Option<String> {
     let detector = twitch_language_detector();
     let values = detector.compute_language_confidence_values(text);
     let (lang, top_conf) = values.first().copied()?;
-    let second_conf = values.get(1).map(|(_, confidence)| *confidence).unwrap_or(0.0);
+    let second_conf = values
+        .get(1)
+        .map(|(_, confidence)| *confidence)
+        .unwrap_or(0.0);
     let gap = top_conf - second_conf;
     let char_count = text.chars().count();
 
@@ -431,11 +410,7 @@ fn detect_with_lingua(text: &str) -> Option<String> {
     }
 
     let code = lingua_to_iso639_1(lang);
-    if code == "und" {
-        None
-    } else {
-        Some(code)
-    }
+    if code == "und" { None } else { Some(code) }
 }
 
 fn lingua_to_iso639_1(lang: Language) -> String {
@@ -457,7 +432,10 @@ fn pick_latin_language(scores: &LatinDiacriticScores, total_chars: usize) -> Opt
         ("sv", scores.nordic),
     ];
 
-    let mut ranked: Vec<(&str, u32)> = entries.into_iter().filter(|(_, count)| *count > 0).collect();
+    let mut ranked: Vec<(&str, u32)> = entries
+        .into_iter()
+        .filter(|(_, count)| *count > 0)
+        .collect();
     if ranked.is_empty() {
         return None;
     }
@@ -494,7 +472,11 @@ fn apply_latin_diacritic_scores(ch: char, scores: &mut LatinDiacriticScores) {
     }
     if matches_spanish(ch) {
         let weight = score_latin_diacritic(ch);
-        scores.spanish += if ch == 'ñ' || ch == 'Ñ' { weight + 2 } else { weight };
+        scores.spanish += if ch == 'ñ' || ch == 'Ñ' {
+            weight + 2
+        } else {
+            weight
+        };
     }
     if matches_portuguese(ch) {
         scores.portuguese += if ch == 'ã' || ch == 'õ' || ch == 'Ã' || ch == 'Õ' {
@@ -527,11 +509,7 @@ fn apply_latin_diacritic_scores(ch: char, scores: &mut LatinDiacriticScores) {
 }
 
 fn score_latin_diacritic(ch: char) -> u32 {
-    if ch.is_ascii_alphabetic() {
-        1
-    } else {
-        2
-    }
+    if ch.is_ascii_alphabetic() { 1 } else { 2 }
 }
 
 fn matches_german(ch: char) -> bool {
@@ -560,7 +538,23 @@ fn matches_italian(ch: char) -> bool {
 fn matches_polish(ch: char) -> bool {
     matches!(
         ch,
-        'ą' | 'ć' | 'ę' | 'ł' | 'ń' | 'ó' | 'ś' | 'ź' | 'ż' | 'Ą' | 'Ć' | 'Ę' | 'Ł' | 'Ń' | 'Ó' | 'Ś' | 'Ź' | 'Ż'
+        'ą' | 'ć'
+            | 'ę'
+            | 'ł'
+            | 'ń'
+            | 'ó'
+            | 'ś'
+            | 'ź'
+            | 'ż'
+            | 'Ą'
+            | 'Ć'
+            | 'Ę'
+            | 'Ł'
+            | 'Ń'
+            | 'Ó'
+            | 'Ś'
+            | 'Ź'
+            | 'Ż'
     )
 }
 
@@ -571,13 +565,31 @@ fn matches_turkish(ch: char) -> bool {
 fn matches_czech(ch: char) -> bool {
     matches!(
         ch,
-        'č' | 'ď' | 'ě' | 'ň' | 'ř' | 'š' | 'ť' | 'ů' | 'ž' | 'Č' | 'Ď' | 'Ě' | 'Ň' | 'Ř' | 'Š' | 'Ť'
-            | 'Ů' | 'Ž'
+        'č' | 'ď'
+            | 'ě'
+            | 'ň'
+            | 'ř'
+            | 'š'
+            | 'ť'
+            | 'ů'
+            | 'ž'
+            | 'Č'
+            | 'Ď'
+            | 'Ě'
+            | 'Ň'
+            | 'Ř'
+            | 'Š'
+            | 'Ť'
+            | 'Ů'
+            | 'Ž'
     )
 }
 
 fn matches_romanian(ch: char) -> bool {
-    matches!(ch, 'ă' | 'â' | 'î' | 'ș' | 'ț' | 'Ă' | 'Â' | 'Î' | 'Ș' | 'Ț')
+    matches!(
+        ch,
+        'ă' | 'â' | 'î' | 'ș' | 'ț' | 'Ă' | 'Â' | 'Î' | 'Ș' | 'Ț'
+    )
 }
 
 fn matches_vietnamese(ch: char) -> bool {
@@ -641,11 +653,7 @@ fn detect_with_whatlang(text: &str, min_confidence: f64) -> Option<String> {
         return None;
     }
     let code = lang_to_iso639_1(info.lang());
-    if code == "und" {
-        None
-    } else {
-        Some(code)
-    }
+    if code == "und" { None } else { Some(code) }
 }
 
 fn detect_by_script(text: &str) -> Option<String> {
@@ -758,12 +766,18 @@ mod tests {
 
     #[test]
     fn detects_russian() {
-        assert_eq!(detect_language_code("привет как дела", 4).as_deref(), Some("ru"));
+        assert_eq!(
+            detect_language_code("привет как дела", 4).as_deref(),
+            Some("ru")
+        );
     }
 
     #[test]
     fn detects_ukrainian() {
-        assert_eq!(detect_language_code("привіт друже", 4).as_deref(), Some("uk"));
+        assert_eq!(
+            detect_language_code("привіт друже", 4).as_deref(),
+            Some("uk")
+        );
     }
 
     #[test]
@@ -925,10 +939,7 @@ mod tests {
 
     #[test]
     fn detects_thai() {
-        assert_eq!(
-            detect_language_code("สวัสดีทุกคน", 4).as_deref(),
-            Some("th")
-        );
+        assert_eq!(detect_language_code("สวัสดีทุกคน", 4).as_deref(), Some("th"));
     }
 
     #[test]
@@ -963,7 +974,10 @@ mod tests {
             strip_leading_speaker_label("Wallenber: hello chat"),
             "hello chat"
         );
-        assert_eq!(strip_leading_speaker_label("12:30 meeting"), "12:30 meeting");
+        assert_eq!(
+            strip_leading_speaker_label("12:30 meeting"),
+            "12:30 meeting"
+        );
     }
 
     #[test]
@@ -971,16 +985,12 @@ mod tests {
         let sample = "Wallenber: https://www.youtube.com/watch?v=zqBnOfSmKQo";
         assert_eq!(detect_language_code(sample, 2), None);
         assert_eq!(resolve_message_language(sample, 2, "ru"), "ru");
-        assert_eq!(
-            detect_language_code("Wallenber", 2).as_deref(),
-            Some("en")
-        );
+        assert_eq!(detect_language_code("Wallenber", 2).as_deref(), Some("en"));
     }
 
     #[test]
     fn youtube_playlist_link_does_not_detect_dutch() {
-        let sample =
-            "Wallenber: https://www.youtube.com/watch?v=3VTkBuxU4yk&list=RDMM&index=5";
+        let sample = "Wallenber: https://www.youtube.com/watch?v=3VTkBuxU4yk&list=RDMM&index=5";
         assert_eq!(resolve_message_language(sample, 2, "ru"), "ru");
         assert_eq!(detect_language_code(sample, 2), None);
         assert!(!has_meaningful_linguistic_content(sample));
@@ -991,10 +1001,7 @@ mod tests {
 
     #[test]
     fn strip_twitch_mentions_removes_at_tokens() {
-        assert_eq!(
-            strip_twitch_mentions("@KamakiriMeido Привет"),
-            "Привет"
-        );
+        assert_eq!(strip_twitch_mentions("@KamakiriMeido Привет"), "Привет");
         assert_eq!(strip_twitch_mentions("hi @friend there"), "hi there");
     }
 

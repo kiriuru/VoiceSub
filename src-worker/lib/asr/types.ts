@@ -50,7 +50,6 @@ export interface BrowserAsrState {
   recognitionState: string;
   restartTimer: ReturnType<typeof setTimeout> | null;
   reconnectTimer: ReturnType<typeof setTimeout> | null;
-  watchdogTimerId: ReturnType<typeof setInterval> | null;
   restartCount: number;
   noSpeechCount: number;
   networkErrorCount: number;
@@ -135,16 +134,13 @@ export interface BrowserAsrState {
   socket: WebSocket | null;
   forceFinalizeTimer: ReturnType<typeof setTimeout> | null;
   currentPartial: string;
-  approxCount: number;
   finalCount: number;
   missingFinalCount: number;
   forcedCount: number;
   appSendCount: number;
   onSound: boolean;
-  hasOpenSentence: boolean;
   forceFinalizationTimeoutMs: number;
   actualContinuous: boolean;
-  mediaStream: MediaStream | null;
   stuckStoppingTimeoutMs: number;
   browserLifecycleConfig: BrowserLifecycleConfig;
   currentConfigPayload: Record<string, unknown> | null;
@@ -291,7 +287,7 @@ export interface AsrManagerHost {
   canForceFinalizeOnInterruptionInternal(): boolean;
   forceFinalizeOnInterruptionInternal(reason: string): boolean;
   refreshHealthSignalsInternal(): void;
-  stripWebSpeechExperimentalHints(recognition: WorkerSpeechRecognition): void;
+  stripChromeOnDeviceHints(recognition: WorkerSpeechRecognition): void;
   applyChromeCompatHintsToRecognition(recognition: WorkerSpeechRecognition): void;
   wireRecognitionHandlers(
     recognition: WorkerSpeechRecognition,

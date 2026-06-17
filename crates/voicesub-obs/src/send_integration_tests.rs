@@ -4,8 +4,8 @@ use std::time::Duration;
 use serde_json::json;
 use voicesub_subtitle::{ConfigGetter, LifecycleState, SubtitleLineItem, SubtitlePayloadEvent};
 
-use crate::client::MockObsClient;
 use crate::ObsCaptionService;
+use crate::client::MockObsClient;
 
 fn obs_source_live_config(debug_mirror: bool) -> serde_json::Value {
     json!({
@@ -144,7 +144,10 @@ fn source_line_item(text: &str) -> SubtitleLineItem {
     }
 }
 
-fn payload_for_sequence(sequence: u64, visible_items: Vec<SubtitleLineItem>) -> SubtitlePayloadEvent {
+fn payload_for_sequence(
+    sequence: u64,
+    visible_items: Vec<SubtitleLineItem>,
+) -> SubtitlePayloadEvent {
     SubtitlePayloadEvent {
         sequence,
         source_lang: "ru".into(),
@@ -171,11 +174,7 @@ fn stream_caption_texts(
         .unwrap()
         .iter()
         .filter(|(kind, _)| kind == "SendStreamCaption")
-        .filter_map(|(_, data)| {
-            data.get("captionText")?
-                .as_str()
-                .map(str::to_string)
-        })
+        .filter_map(|(_, data)| data.get("captionText")?.as_str().map(str::to_string))
         .collect()
 }
 
@@ -191,7 +190,10 @@ fn make_service(config: serde_json::Value) -> Arc<ObsCaptionService> {
 async fn start_with_mock(
     config: serde_json::Value,
     mock: MockObsClient,
-) -> (Arc<ObsCaptionService>, std::sync::Arc<std::sync::Mutex<Vec<(String, serde_json::Value)>>>) {
+) -> (
+    Arc<ObsCaptionService>,
+    std::sync::Arc<std::sync::Mutex<Vec<(String, serde_json::Value)>>>,
+) {
     let service = make_service(config);
     service.start().await;
     let requests = mock.requests.clone();
@@ -335,7 +337,10 @@ async fn send_text_dedupes_identical_debug_mirror_updates() {
     tokio::time::sleep(Duration::from_millis(200)).await;
 
     let mirror_sends = request_count(&requests, "SetInputSettings");
-    assert_eq!(mirror_sends, 1, "duplicate debug mirror text should be deduped");
+    assert_eq!(
+        mirror_sends, 1,
+        "duplicate debug mirror text should be deduped"
+    );
 }
 
 fn debug_mirror_texts(
@@ -410,11 +415,8 @@ async fn source_final_only_routes_final_caption_to_send_stream_caption() {
 
 #[tokio::test]
 async fn translation_mode_skips_repeat_for_same_sequence() {
-    let (service, requests) = start_with_mock(
-        obs_config("translation_1", false),
-        MockObsClient::new(),
-    )
-    .await;
+    let (service, requests) =
+        start_with_mock(obs_config("translation_1", false), MockObsClient::new()).await;
 
     let initial = payload_for_sequence(
         7,
@@ -493,11 +495,8 @@ async fn translation_mode_allows_same_text_for_new_sequence_after_clear() {
 
 #[tokio::test]
 async fn source_live_partial_skips_duplicate_and_small_growth_within_throttle_window() {
-    let (service, requests) = start_with_mock(
-        obs_base_config("source_live", false),
-        MockObsClient::new(),
-    )
-    .await;
+    let (service, requests) =
+        start_with_mock(obs_base_config("source_live", false), MockObsClient::new()).await;
 
     service.publish_source("Hello", false);
     wait_for_requests(&requests, "SendStreamCaption", 1).await;

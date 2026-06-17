@@ -1,10 +1,18 @@
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde_json::Value;
 use tokio::sync::broadcast;
 
 const BUS_CAPACITY: usize = 256;
+
+#[derive(Debug, Clone, Copy, serde::Serialize)]
+pub struct EventBusDiagnostics {
+    pub subscriber_count: usize,
+    pub revision: u64,
+    pub publish_count: u64,
+    pub channel_capacity: usize,
+}
 
 /// In-process event bus for desktop shell clients (dashboard/TTS).
 /// WebSocket transport remains for OBS overlay and browser worker.
@@ -12,6 +20,7 @@ const BUS_CAPACITY: usize = 256;
 pub struct RuntimeEventBus {
     tx: broadcast::Sender<Arc<Value>>,
     rev: Arc<AtomicU64>,
+    publish_count: Arc<AtomicU64>,
 }
 
 impl Default for RuntimeEventBus {
@@ -26,11 +35,13 @@ impl RuntimeEventBus {
         Self {
             tx,
             rev: Arc::new(AtomicU64::new(0)),
+            publish_count: Arc::new(AtomicU64::new(0)),
         }
     }
 
     pub fn publish(&self, message: Value) {
         self.rev.fetch_add(1, Ordering::Relaxed);
+        self.publish_count.fetch_add(1, Ordering::Relaxed);
         let _ = self.tx.send(Arc::new(message));
     }
 
@@ -40,6 +51,15 @@ impl RuntimeEventBus {
 
     pub fn subscribe(&self) -> broadcast::Receiver<Arc<Value>> {
         self.tx.subscribe()
+    }
+
+    pub fn diagnostics(&self) -> EventBusDiagnostics {
+        EventBusDiagnostics {
+            subscriber_count: self.tx.receiver_count(),
+            revision: self.revision(),
+            publish_count: self.publish_count.load(Ordering::Relaxed),
+            channel_capacity: BUS_CAPACITY,
+        }
     }
 }
 
@@ -83,5 +103,8 @@ mod tests {
         let message = rx.recv().await.expect("bus message");
         assert_eq!(message["type"], "runtime_update");
         assert!(bus.revision() >= 1);
+        let diag = bus.diagnostics();
+        assert_eq!(diag.publish_count, 1);
+        assert!(diag.subscriber_count >= 1);
     }
 }

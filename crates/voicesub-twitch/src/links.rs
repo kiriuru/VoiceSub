@@ -74,7 +74,6 @@ fn consume_non_whitespace_run(text: &str, start: usize) -> usize {
     i - start
 }
 
-
 /// Remove inline `http(s)://` and `www.` spans even when glued to punctuation (`Name:https://…`).
 fn strip_inline_schemes(text: &str) -> String {
     let mut out = String::new();
@@ -82,7 +81,10 @@ fn strip_inline_schemes(text: &str) -> String {
     while i < text.len() {
         let rest = &text[i..];
         let lower = rest.to_ascii_lowercase();
-        if lower.starts_with("http://") || lower.starts_with("https://") || lower.starts_with("www.") {
+        if lower.starts_with("http://")
+            || lower.starts_with("https://")
+            || lower.starts_with("www.")
+        {
             i += consume_non_whitespace_run(text, i);
             continue;
         }
@@ -120,10 +122,7 @@ mod tests {
     fn detects_youtube_query_urls() {
         let url = "https://www.youtube.com/watch?v=3VTkBuxU4yk&list=RDMM&index=5";
         assert!(looks_like_url_token(url));
-        assert_eq!(
-            strip_links_from_text(url),
-            ""
-        );
+        assert_eq!(strip_links_from_text(url), "");
     }
 
     #[test]
@@ -161,17 +160,13 @@ mod tests {
 
     #[test]
     fn strips_wallenber_youtube_line() {
-        let sample =
-            "Wallenber: https://www.youtube.com/watch?v=3VTkBuxU4yk&list=RDMM&index=5";
+        let sample = "Wallenber: https://www.youtube.com/watch?v=3VTkBuxU4yk&list=RDMM&index=5";
         assert_eq!(strip_links_from_text(sample), "Wallenber:");
     }
 
     #[test]
     fn trims_trailing_punctuation_on_urls() {
         assert!(looks_like_url_token("https://twitch.tv/x,"));
-        assert_eq!(
-            strip_links_from_text("look: https://twitch.tv/x."),
-            "look:"
-        );
+        assert_eq!(strip_links_from_text("look: https://twitch.tv/x."), "look:");
     }
 }

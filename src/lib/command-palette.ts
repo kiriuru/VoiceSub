@@ -1,4 +1,5 @@
-import type { CompactPaneId } from "./types";
+import type { NavTarget } from "./navigation";
+import { isMoreTab, tabToNavDestination } from "./navigation";
 
 export interface CommandPaletteItem {
   id: string;
@@ -10,7 +11,7 @@ export interface CommandPaletteItem {
 }
 
 export interface CommandPaletteHandlers {
-  navigate: (pane: CompactPaneId) => void;
+  navigate: (target: NavTarget) => void;
   start: () => void | Promise<void>;
   stop: () => void | Promise<void>;
   save: () => void | Promise<void>;
@@ -28,13 +29,14 @@ export function isEditableTarget(target: EventTarget | null): boolean {
   return el.isContentEditable;
 }
 
-const TAB_COMMANDS: Array<{ id: CompactPaneId; labelKey: string; keywords: string[] }> = [
+const TAB_COMMANDS: Array<{ id: NavTarget; labelKey: string; keywords: string[] }> = [
   { id: "live", labelKey: "command_palette.tab.live", keywords: ["transcript", "overview", "recognition", "partial"] },
   { id: "translation", labelKey: "command_palette.tab.translation", keywords: ["translate", "deepl", "provider"] },
   { id: "subtitles", labelKey: "command_palette.tab.subtitles", keywords: ["output", "overlay"] },
   { id: "style", labelKey: "command_palette.tab.style", keywords: ["font", "preset"] },
   { id: "theme", labelKey: "command_palette.tab.theme", keywords: ["color", "palette", "dark", "light"] },
   { id: "obs", labelKey: "command_palette.tab.obs", keywords: ["browser", "source", "stream"] },
+  { id: "modules", labelKey: "command_palette.tab.modules", keywords: ["tts", "speech", "twitch", "module"] },
   { id: "replacement", labelKey: "command_palette.tab.replacement", keywords: ["word", "replace"] },
   { id: "tools", labelKey: "command_palette.tab.tools", keywords: ["export", "diagnostics", "profile"] },
   { id: "settings", labelKey: "command_palette.tab.settings", keywords: ["config", "asr", "browser"] },

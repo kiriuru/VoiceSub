@@ -3,7 +3,7 @@ use crate::lang::{language_allowed, resolve_message_language};
 use crate::replacements::resolve_spoken_nick;
 use crate::settings::TwitchTtsSettings;
 use crate::source_text_replacement::{
-    apply_builtin_profanity, profanity_settings_for_twitch, SourceTextReplacementSettings,
+    SourceTextReplacementSettings, apply_builtin_profanity, profanity_settings_for_twitch,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -106,7 +106,11 @@ pub fn process_chat_message(
 
     let fallback_lang = settings.language.trim().to_lowercase();
     let language = if settings.detect_language {
-        resolve_message_language(&clean_text, settings.lang_min_chars as usize, &fallback_lang)
+        resolve_message_language(
+            &clean_text,
+            settings.lang_min_chars as usize,
+            &fallback_lang,
+        )
     } else {
         fallback_lang.clone()
     };
@@ -187,7 +191,9 @@ mod tests {
     use super::*;
     use crate::emotes::EmoteRegistry;
     use crate::settings::TwitchTtsSettings;
-    use crate::source_text_replacement::{SourceTextReplacementPair, SourceTextReplacementSettings};
+    use crate::source_text_replacement::{
+        SourceTextReplacementPair, SourceTextReplacementSettings,
+    };
 
     fn no_replacement() -> SourceTextReplacementSettings {
         SourceTextReplacementSettings::default()
@@ -462,8 +468,7 @@ mod tests {
     fn youtube_playlist_link_line_is_not_speakable() {
         let settings = TwitchTtsSettings::default();
         let registry = EmoteRegistry::new();
-        let sample =
-            "Wallenber: https://www.youtube.com/watch?v=3VTkBuxU4yk&list=RDMM&index=5";
+        let sample = "Wallenber: https://www.youtube.com/watch?v=3VTkBuxU4yk&list=RDMM&index=5";
         let out = process_chat_message(
             &settings,
             &no_replacement(),
@@ -484,8 +489,7 @@ mod tests {
             ..Default::default()
         };
         let registry = EmoteRegistry::new();
-        let sample =
-            "https://www.youtube.com/watch?v=3VTkBuxU4yk&list=RDMM&index=5";
+        let sample = "https://www.youtube.com/watch?v=3VTkBuxU4yk&list=RDMM&index=5";
         let out = process_chat_message(
             &settings,
             &no_replacement(),
@@ -506,8 +510,7 @@ mod tests {
             ..Default::default()
         };
         let registry = EmoteRegistry::new();
-        let sample =
-            "https://www.youtube.com/watch?v=3VTkBuxU4yk&list=RDMM&index=5";
+        let sample = "https://www.youtube.com/watch?v=3VTkBuxU4yk&list=RDMM&index=5";
         let out = process_chat_message(
             &settings,
             &no_replacement(),
@@ -705,10 +708,7 @@ mod tests {
             None,
         );
         assert!(out.speakable);
-        assert_eq!(
-            out.clean_text,
-            "нужно 100 и 5ю каналов"
-        );
+        assert_eq!(out.clean_text, "нужно 100 и 5ю каналов");
         assert!(out.speak_text.contains("100"));
         assert!(out.speak_text.contains('5'));
     }

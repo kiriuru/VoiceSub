@@ -74,7 +74,7 @@ export function restartDelayForReason(state: BrowserAsrState, reason: string, li
   if (normalized === "network") {
     return nextNetworkBackoffMs(state, limits.initialNetworkBackoffMs, limits.maxNetworkBackoffMs);
   }
-  return limits.restartDelayByReasonMs[normalized] || limits.restartDelayByReasonMs.normal_onend;
+  return limits.restartDelayByReasonMs[normalized] ?? limits.restartDelayByReasonMs.normal_onend ?? 0;
 }
 
 export function resetNetworkErrorBurst(state: BrowserAsrState): void {

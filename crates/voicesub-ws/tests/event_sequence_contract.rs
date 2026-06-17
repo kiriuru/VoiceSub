@@ -1,11 +1,14 @@
-use voicesub_ws::{EventSequencer, shared_event_sequencer, EventsHub, WsEventPublisher};
+use voicesub_ws::{EventSequencer, EventsHub, WsEventPublisher, shared_event_sequencer};
 
 #[test]
 fn sequencer_reset_does_not_rewind_global_stream() {
     let mut seq = EventSequencer::default();
     let first = seq.enrich("runtime_status", serde_json::json!({ "phase": "idle" }));
     seq.reset_broadcast_state();
-    let second = seq.enrich("runtime_status", serde_json::json!({ "phase": "listening" }));
+    let second = seq.enrich(
+        "runtime_status",
+        serde_json::json!({ "phase": "listening" }),
+    );
     assert_eq!(first["event_sequence"], 1);
     assert_eq!(second["event_sequence"], 2);
 }
@@ -23,7 +26,6 @@ async fn publisher_enriches_broadcast_payload() {
         )
         .await;
 
-    let cached = hub
-        .diagnostics();
+    let cached = hub.diagnostics();
     assert_eq!(cached.connections_active, 0);
 }

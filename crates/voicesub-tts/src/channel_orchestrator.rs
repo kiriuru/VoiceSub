@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use tokio::sync::{oneshot, Mutex as AsyncMutex, Notify};
+use tokio::sync::{Mutex as AsyncMutex, Notify, oneshot};
 use tracing::{debug, warn};
 use voicesub_audio::{PlaybackFinished, PlaybackHub};
 
@@ -33,7 +33,12 @@ impl CompletionWaiter {
 
     pub fn notify(&self, finished: &PlaybackFinished) {
         let key = (finished.channel.clone(), finished.item_id.clone());
-        if let Some(tx) = self.pending.lock().expect("completion waiter lock").remove(&key) {
+        if let Some(tx) = self
+            .pending
+            .lock()
+            .expect("completion waiter lock")
+            .remove(&key)
+        {
             let _ = tx.send(finished.ok);
         }
     }
@@ -136,8 +141,12 @@ impl ChannelOrchestrator {
                 !enabled
             };
             if should_disable {
-                orchestrator.completion_waiter.cancel_channel(&orchestrator.channel);
-                let _ = orchestrator.service.queue_clear_channel(&orchestrator.channel);
+                orchestrator
+                    .completion_waiter
+                    .cancel_channel(&orchestrator.channel);
+                let _ = orchestrator
+                    .service
+                    .queue_clear_channel(&orchestrator.channel);
                 let _ = orchestrator.playback.stop_channel(&orchestrator.channel);
             }
             orchestrator.pump_notify.notify_one();
@@ -183,8 +192,12 @@ impl ChannelOrchestrator {
                 state.prefetched.clear();
                 state.prefetch_inflight = 0;
             }
-            orchestrator.completion_waiter.cancel_channel(&orchestrator.channel);
-            let _ = orchestrator.service.queue_clear_channel(&orchestrator.channel);
+            orchestrator
+                .completion_waiter
+                .cancel_channel(&orchestrator.channel);
+            let _ = orchestrator
+                .service
+                .queue_clear_channel(&orchestrator.channel);
             let _ = orchestrator.playback.stop_channel(&orchestrator.channel);
             orchestrator.pump_notify.notify_one();
         });
@@ -262,17 +275,15 @@ impl ChannelOrchestrator {
                 return;
             }
         };
-        let result = prefetch_tts_line(
-            &self.module_dir,
-            &config.tts_provider,
-            &lang,
-            &text,
-        )
-        .await;
+        let result = prefetch_tts_line(&self.module_dir, &config.tts_provider, &lang, &text).await;
         self.finish_prefetch(item_id, result).await;
     }
 
-    async fn finish_prefetch(self: &Arc<Self>, item_id: String, result: Result<Vec<Vec<u8>>, String>) {
+    async fn finish_prefetch(
+        self: &Arc<Self>,
+        item_id: String,
+        result: Result<Vec<Vec<u8>>, String>,
+    ) {
         {
             let mut state = self.state.lock().await;
             state.prefetch_inflight = state.prefetch_inflight.saturating_sub(1);
@@ -325,10 +336,10 @@ impl ChannelOrchestrator {
                     state.prefetched.remove(&item.id);
                     return;
                 }
-                if let Some(job) = state.prefetched.get(&item.id) {
-                    if let Some(audio) = &job.audio {
-                        break audio.clone();
-                    }
+                if let Some(job) = state.prefetched.get(&item.id)
+                    && let Some(audio) = &job.audio
+                {
+                    break audio.clone();
                 }
                 drop(state);
                 tokio::time::sleep(Duration::from_millis(4)).await;
@@ -388,13 +399,10 @@ impl ChannelOrchestrator {
                     }
                 }
                 let chunk_item_id = format!("{}#{}", item.id, chunk_index);
-                if let Err(err) = self.playback.play(
-                    &self.channel,
-                    chunk_item_id.clone(),
-                    bytes,
-                    volume,
-                    rate,
-                ) {
+                if let Err(err) =
+                    self.playback
+                        .play(&self.channel, chunk_item_id.clone(), bytes, volume, rate)
+                {
                     warn!(
                         target: "voicesub.tts.orchestrator",
                         channel = %self.channel,
@@ -405,9 +413,7 @@ impl ChannelOrchestrator {
                     playback_ok = false;
                     break;
                 }
-                let wait = self
-                    .completion_waiter
-                    .wait(&self.channel, &chunk_item_id);
+                let wait = self.completion_waiter.wait(&self.channel, &chunk_item_id);
                 match wait.await {
                     Ok(true) => {}
                     Ok(false) | Err(_) => {
@@ -581,16 +587,20 @@ mod tests {
 
         orch.set_enabled(false);
         tokio::time::sleep(Duration::from_millis(100)).await;
-        assert!(service
-            .queue_snapshot(CHANNEL_SPEECH)
-            .expect("snapshot")
-            .is_empty());
+        assert!(
+            service
+                .queue_snapshot(CHANNEL_SPEECH)
+                .expect("snapshot")
+                .is_empty()
+        );
 
         orch.set_enabled(false);
         tokio::time::sleep(Duration::from_millis(100)).await;
-        assert!(service
-            .queue_snapshot(CHANNEL_SPEECH)
-            .expect("snapshot")
-            .is_empty());
+        assert!(
+            service
+                .queue_snapshot(CHANNEL_SPEECH)
+                .expect("snapshot")
+                .is_empty()
+        );
     }
 }

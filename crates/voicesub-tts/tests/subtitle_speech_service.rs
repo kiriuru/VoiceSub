@@ -2,9 +2,7 @@ use std::fs;
 use std::io::Write;
 
 use serde_json::json;
-use voicesub_tts::{
-    SpeechQueueItem, SubtitleSpeechPlanner, TtsModuleService, TtsSpeechSettings,
-};
+use voicesub_tts::{SpeechQueueItem, SubtitleSpeechPlanner, TtsModuleService, TtsSpeechSettings};
 
 #[test]
 fn service_plans_subtitle_lines_when_enabled() {
@@ -45,10 +43,7 @@ fn service_skips_when_disabled() {
 
 #[test]
 fn service_skips_when_config_unreadable() {
-    let dir = std::env::temp_dir().join(format!(
-        "voicesub-tts-bad-cfg-{}",
-        std::process::id()
-    ));
+    let dir = std::env::temp_dir().join(format!("voicesub-tts-bad-cfg-{}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);
     let config_dir = dir.join("modules").join("tts");
     fs::create_dir_all(&config_dir).expect("mkdir");
@@ -68,10 +63,7 @@ fn service_skips_when_config_unreadable() {
 
 #[test]
 fn enqueue_drop_releases_subtitle_dedupe_key() {
-    let dir = std::env::temp_dir().join(format!(
-        "voicesub-tts-drop-{}",
-        std::process::id()
-    ));
+    let dir = std::env::temp_dir().join(format!("voicesub-tts-drop-{}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);
     let service = TtsModuleService::new(&dir);
     service
@@ -108,7 +100,10 @@ fn enqueue_drop_releases_subtitle_dedupe_key() {
             .expect("enqueue filler");
         total_dropped += result.dropped_ids.len();
     }
-    assert!(total_dropped > 0, "expected adaptive drop ids during saturation");
+    assert!(
+        total_dropped > 0,
+        "expected adaptive drop ids during saturation"
+    );
 
     let replay = service.plan_subtitle_speech(&payload);
     assert_eq!(replay.len(), 1, "dropped subtitle should be planned again");

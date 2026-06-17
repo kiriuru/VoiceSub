@@ -1,7 +1,7 @@
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use voicesub_ws::EventsHubDiagnostics;
 
 #[derive(Debug, Default)]
@@ -167,7 +167,10 @@ impl RuntimeMetricsCollector {
         );
         map.insert(
             "runtime_status_duplicate_suppressed".into(),
-            json!(self.runtime_status_duplicate_suppressed.load(Ordering::Relaxed)),
+            json!(
+                self.runtime_status_duplicate_suppressed
+                    .load(Ordering::Relaxed)
+            ),
         );
         map.insert(
             "runtime_status_heartbeat_sent".into(),
@@ -175,7 +178,10 @@ impl RuntimeMetricsCollector {
         );
         map.insert(
             "runtime_events_duplicate_suppressed".into(),
-            json!(self.runtime_events_duplicate_suppressed.load(Ordering::Relaxed)),
+            json!(
+                self.runtime_events_duplicate_suppressed
+                    .load(Ordering::Relaxed)
+            ),
         );
         map.insert(
             "browser_transcripts_received".into(),
@@ -213,7 +219,10 @@ impl RuntimeMetricsCollector {
         }
 
         let stored_translation = inner.as_ref().map(|v| v.translation_metrics.clone());
-        let merge_source = if translation_metrics.as_object().is_some_and(|obj| !obj.is_empty()) {
+        let merge_source = if translation_metrics
+            .as_object()
+            .is_some_and(|obj| !obj.is_empty())
+        {
             translation_metrics.clone()
         } else {
             stored_translation.unwrap_or(Value::Null)

@@ -21,6 +21,9 @@ describe("ttsTrace", () => {
   });
 
   it("posts ui and client logs when full logging is enabled", () => {
+    vi.stubGlobal("window", {
+      __VOICESUB_API_TOKEN__: "test-loopback-token",
+    });
     setTtsFullLoggingEnabled(true);
     ttsTrace("engine", "speak_end", { channel: "speech" });
     expect(fetch).toHaveBeenCalledTimes(2);

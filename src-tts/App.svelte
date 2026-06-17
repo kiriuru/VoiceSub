@@ -38,6 +38,8 @@
   import { warmupTtsFetch } from "./lib/google-tts";
   import { startTtsKeepalive, stopTtsKeepalive, updateTtsKeepalive } from "./lib/tts-keepalive";
   import { ttsTrace, setTtsFullLoggingEnabled } from "./lib/tts-trace";
+  import { apiFetch } from "./lib/loopback-api-client";
+  import { initLoopbackApiToken } from "../src/lib/loopback-api";
   import { buildTtsAudioUrl } from "./lib/google-tts";
   import {
     loadSampleLang,
@@ -485,6 +487,7 @@
   }
 
   onMount(async () => {
+    await initLoopbackApiToken();
     if (await tryCompleteExternalOAuthCallback()) {
       externalOAuthDone = true;
       return;
@@ -500,7 +503,7 @@
       audioOutputs = [{ id: "", label: tr("tts.module.audio_default"), is_default: true }];
     }
     try {
-      const versionRes = await fetch("/api/version");
+      const versionRes = await apiFetch("/api/version");
       if (versionRes.ok) {
         const body = (await versionRes.json()) as { version?: string };
         if (body.version) version = body.version;
@@ -523,12 +526,18 @@
         config.twitch = defaultTwitchSettings();
       } else {
         const twitchDefaults = defaultTwitchSettings();
+        const defaultEmoteSources = twitchDefaults.emote_sources ?? {
+          twitch: true,
+          bttv: true,
+          seventv: true,
+        };
         config.twitch = {
           ...twitchDefaults,
           ...config.twitch,
           emote_sources: {
-            ...twitchDefaults.emote_sources,
-            ...config.twitch.emote_sources,
+            twitch: config.twitch.emote_sources?.twitch ?? defaultEmoteSources.twitch,
+            bttv: config.twitch.emote_sources?.bttv ?? defaultEmoteSources.bttv,
+            seventv: config.twitch.emote_sources?.seventv ?? defaultEmoteSources.seventv,
           },
         };
       }
@@ -764,7 +773,7 @@
 
 {#if externalOAuthDone}
   <div class="app-shell tts-module-shell tts-oauth-success-shell">
-    <section class="glass-panel bento-tile panel-padding stack">
+    <section class="surface-card bento-tile panel-padding stack">
       <div class="section-heading section-heading--stacked">
         <p class="eyebrow">{tr("tts.oauth.eyebrow")}</p>
         <h2>{tr("tts.oauth.done_title")}</h2>
@@ -772,15 +781,21 @@
       <p class="muted">{tr("tts.oauth.done_body")}</p>
       <p class="muted">{tr("tts.oauth.done_close")}</p>
     </section>
+    <footer class="app-footer tts-module-footer">
+      <span class="app-footer__line">
+        VoiceSub <span class="app-footer__version">v{version}</span>
+        <span class="app-footer__sep" aria-hidden="true">·</span>
+        Powered by Kiriuru
+      </span>
+    </footer>
   </div>
 {:else}
 <div class="app-shell tts-module-shell">
-  <header class="app-chrome glass-chrome tts-chrome">
+  <header class="top-app-bar glass-chrome-shell tts-top-bar">
     <div class="tts-chrome__brand">
       <span class="tts-chrome__mark" aria-hidden="true">◆</span>
       <div>
         <div class="tts-chrome__title">{tr("tts.module.title")}</div>
-        <div class="tts-chrome__subtitle">{tr("tts.module.version", { version })}</div>
         {#if resourceTelemetry}
           <div class="tts-chrome__telemetry" role="status">
             <span
@@ -868,7 +883,7 @@
   </header>
 
   {#if nativeDeviceHint}
-    <div class="tts-native-hint glass-panel panel-padding" role="status">
+    <div class="tts-native-hint surface-card panel-padding" role="status">
       <p>{tr("tts.module.native_device_hint")}</p>
       <button type="button" class="btn btn-ghost btn-sm" onclick={dismissNativeDeviceHint}>
         {tr("tts.module.native_device_hint_dismiss")}
@@ -876,19 +891,19 @@
     </div>
   {/if}
 
-  <nav class="tab-bar" aria-label="TTS module sections">
+  <nav class="section-nav tts-section-nav" aria-label={tr("nav.section.jump")}>
     <button
       type="button"
-      class="tab-btn"
-      class:active={tab === "speech"}
+      class="section-nav__btn"
+      class:is-active={tab === "speech"}
       onclick={() => selectTab("speech")}
     >
       {tr("tts.tab.speech")}
     </button>
     <button
       type="button"
-      class="tab-btn"
-      class:active={tab === "twitch"}
+      class="section-nav__btn"
+      class:is-active={tab === "twitch"}
       onclick={() => selectTab("twitch")}
     >
       {tr("tts.tab.twitch")}
@@ -897,7 +912,7 @@
 
   <section
     id="tts-panel-speech"
-    class="glass-panel bento-tile panel-padding stack"
+    class="surface-card bento-tile panel-padding stack tts-panel-card"
     hidden={tab !== "speech"}
     aria-hidden={tab !== "speech"}
   >
@@ -1114,7 +1129,7 @@
   <div id="tts-panel-twitch" hidden={tab !== "twitch"} aria-hidden={tab !== "twitch"}>
     <TwitchPanel
       bind:this={twitchPanel}
-      bind:twitch={config.twitch}
+      bind:twitch={config.twitch!}
       moduleEnabled={config.enabled}
       moduleSpeechRate={config.speech_rate}
       moduleSpeechVolume={config.speech_volume}
@@ -1128,6 +1143,14 @@
     />
   </div>
 
+  <footer class="app-footer tts-module-footer">
+    <span class="app-footer__line">
+      VoiceSub <span class="app-footer__version">v{version}</span>
+      <span class="app-footer__sep" aria-hidden="true">·</span>
+      Powered by Kiriuru
+    </span>
+  </footer>
+
   {#if telemetryHelpOpen}
     <button
       type="button"
@@ -1139,10 +1162,16 @@
     <div
       class="tts-telemetry-help-popover"
       role="dialog"
+      aria-modal="true"
       aria-labelledby="tts-telemetry-help-title"
+      tabindex="-1"
       style:top="{telemetryHelpPos.top}px"
       style:left="{telemetryHelpPos.left}px"
       onclick={(event) => event.stopPropagation()}
+      onkeydown={(event) => {
+        event.stopPropagation();
+        if (event.key === "Escape") closeTelemetryHelp();
+      }}
     >
       <p id="tts-telemetry-help-title" class="tts-telemetry-help-popover__title">
         {tr("tts.telemetry.help_title")}

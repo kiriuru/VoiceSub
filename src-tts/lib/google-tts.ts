@@ -1,3 +1,4 @@
+import { apiFetch } from "./loopback-api-client";
 import { ttsTrace } from "./tts-trace";
 import type { TtsProvider } from "./types";
 
@@ -160,8 +161,8 @@ function formatMediaError(audio: HTMLAudioElement): string {
 
 function looksLikeMpegAudio(bytes: Uint8Array): boolean {
   if (bytes.length < 2) return false;
-  if (bytes[0] === 0x49 && bytes[1] === 0x44 && bytes[2] === 0x33) return true;
-  return bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0;
+  if (bytes.length >= 3 && bytes[0] === 0x49 && bytes[1] === 0x44 && bytes[2] === 0x33) return true;
+  return bytes[0] === 0xff && ((bytes[1] ?? 0) & 0xe0) === 0xe0;
 }
 
 let ttsFetchWarmed = false;
@@ -171,7 +172,7 @@ export function warmupTtsFetch(lang = "en"): void {
   if (ttsFetchWarmed || typeof fetch === "undefined") return;
   ttsFetchWarmed = true;
   const url = buildTtsAudioUrl(".", lang, "browser_google");
-  void fetch(url, { cache: "no-store", keepalive: true }).catch(() => {
+  void apiFetch(url, { cache: "no-store", keepalive: true }).catch(() => {
     ttsFetchWarmed = false;
   });
   ttsTrace("google_tts", "warmup_started", { lang });
@@ -183,7 +184,7 @@ async function fetchTtsAudioBytes(
   provider: TtsProvider,
 ): Promise<{ data: Uint8Array; provider: TtsProvider; bytes: number }> {
   const url = buildTtsAudioUrl(text, lang, provider);
-  const response = await fetch(url, { cache: "no-store", keepalive: true });
+  const response = await apiFetch(url, { cache: "no-store", keepalive: true });
   if (!response.ok) {
     throw new Error(
       `TTS HTTP ${response.status} from ${ttsProviderPath(provider)}`,
@@ -295,7 +296,12 @@ export async function prefetchGoogleTts(
     readyCount: 0,
   };
 
-  const first = await prefetchGoogleTtsChunk(textChunks[0], tl, provider);
+  const firstChunk = textChunks[0];
+  if (!firstChunk) {
+    return { chunks: [], expectedChunkCount: 0, readyCount: 0 };
+  }
+
+  const first = await prefetchGoogleTtsChunk(firstChunk, tl, provider);
   prepared.chunks[0] = first;
   prepared.readyCount = 1;
   onProgress?.(prepared, 0);
@@ -344,7 +350,7 @@ async function playPreparedGoogleTtsChunk(
       ? Math.min(1, Math.max(0, options.volume))
       : 1;
 
-  const objectUrl = URL.createObjectURL(new Blob([chunk.data], { type: "audio/mpeg" }));
+  const objectUrl = URL.createObjectURL(new Blob([chunk.data as BlobPart], { type: "audio/mpeg" }));
   const audio = new Audio(objectUrl);
   audio.preload = "auto";
   options.onAudio?.(audio);

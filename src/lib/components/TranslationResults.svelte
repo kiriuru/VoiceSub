@@ -160,6 +160,8 @@
 
     gap: var(--space-3);
 
+    flex-wrap: wrap;
+
   }
 
 
@@ -171,6 +173,68 @@
     flex-shrink: 0;
 
     white-space: nowrap;
+
+  }
+
+
+
+  :global(body.voicesub-layout-compact) .translation-results-heading {
+
+    flex-wrap: wrap;
+
+  }
+
+
+
+  :global(body.voicesub-layout-compact) .translation-results-toggle {
+
+    margin-left: 0;
+
+    width: 100%;
+
+  }
+
+
+
+  .translation-results {
+
+    min-width: 0;
+
+    width: 100%;
+
+  }
+
+
+
+  .result-line {
+
+    min-width: 0;
+
+  }
+
+
+
+  .result-line p {
+
+    margin: 0;
+
+    overflow-wrap: anywhere;
+
+    word-break: break-word;
+
+    line-height: 1.5;
+
+  }
+
+
+
+  .translation-results .transcript-box {
+
+    width: 100%;
+
+    max-width: 100%;
+
+    box-sizing: border-box;
 
   }
 

@@ -12,7 +12,6 @@ export function normalizeDiagnosticsPayload(payload: Record<string, unknown> | n
     message: String(current.message || ""),
     fallback_reason: String(current.fallback_reason || ""),
     cpu_fallback_reason: String(current.cpu_fallback_reason || ""),
-    rnnoise_message: String(current.rnnoise_message || ""),
     requested_device_policy: String(current.requested_device_policy || ""),
     torch_built_with_cuda: current.torch_built_with_cuda === true,
     degraded_mode: current.degraded_mode === true,

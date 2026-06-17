@@ -2,10 +2,7 @@ use std::net::SocketAddr;
 
 use std::path::PathBuf;
 
-use std::sync::{
-    atomic::AtomicBool,
-    Arc, Mutex, RwLock as StdRwLock,
-};
+use std::sync::{Arc, Mutex, RwLock as StdRwLock, atomic::AtomicBool};
 
 use tokio::sync::RwLock as TokioRwLock;
 
@@ -16,42 +13,48 @@ use tokio::sync::RwLock;
 use tracing::{info, instrument};
 
 use voicesub_browser::{
-    structured_log_from_runtime_logger as browser_structured_log_from_runtime_logger, BrowserAsrGateway,
-    BrowserAsrService, BrowserWorkerLauncher, StatusCallback, WorkerLifecycleCallback,
+    BrowserAsrGateway, BrowserAsrService, BrowserWorkerLauncher, StatusCallback,
+    WorkerLifecycleCallback,
+    structured_log_from_runtime_logger as browser_structured_log_from_runtime_logger,
 };
 
-use voicesub_config::{
-    base_url_from_socket, default_config_payload, worker_url_for_payload, AppConfig, ConfigStore,
-    ProjectPaths,
-};
-use voicesub_export::ExportService;
 use crate::http::{
-    build_router, spawn_runtime_heartbeat, spawn_startup_check, HttpState, PartialEmitCoordinator,
-    RuntimeMetricsCollector, RuntimeStatusBroadcaster, StylePresetsFn,
+    BackgroundTaskRegistry, HttpState, LoopbackAuth, PartialEmitCoordinator,
+    RuntimeMetricsCollector, RuntimeStatusBroadcaster, StylePresetsFn, build_router,
+    spawn_runtime_heartbeat, spawn_startup_check,
 };
 use voicesub_config::read_full_logging_enabled;
-use voicesub_logging::{
-    apply_logging_preferences, ensure_logs_dir, SessionLogManager, StructuredRuntimeLogger,
+use voicesub_config::{
+    AppConfig, ConfigStore, ProjectPaths, base_url_from_socket, default_config_payload,
+    worker_url_for_payload,
 };
-use voicesub_obs::{structured_log_from_runtime_logger as obs_structured_log_from_runtime_logger, ObsCaptionService};
+use voicesub_export::ExportService;
+use voicesub_logging::{
+    SessionLogManager, StructuredRuntimeLogger, apply_logging_preferences, ensure_logs_dir,
+};
+use voicesub_obs::{
+    ObsCaptionService, structured_log_from_runtime_logger as obs_structured_log_from_runtime_logger,
+};
 
 use voicesub_subtitle::{
-    structured_log_from_runtime_logger, ConfigGetter, OverlayBroadcaster, PublishCallback,
-    SubtitleLog, SubtitleRouter,
+    ConfigGetter, OverlayBroadcaster, PublishCallback, SubtitleLog, SubtitleRouter,
+    structured_log_from_runtime_logger,
 };
 use voicesub_ws::{
-    shared_event_sequencer, ws_structured_log_from_runtime_logger, AsrWorkerHub, EventsHub,
-    RuntimeEventBus, RuntimeStateSnapshot, WsEventPublisher, WsLog,
+    AsrWorkerHub, EventsHub, RuntimeEventBus, RuntimeStateSnapshot, WsEventPublisher, WsLog,
+    shared_event_sequencer, ws_structured_log_from_runtime_logger,
 };
 
-use crate::trace::{structured_log_from_runtime_logger as runtime_pipeline_structured_log, RuntimePipelineLog};
-
-use voicesub_translation::{
-    arc_publish, arc_relevance, TranslationRuntimeController,
+use crate::trace::{
+    RuntimePipelineLog, structured_log_from_runtime_logger as runtime_pipeline_structured_log,
 };
+
+use voicesub_translation::{TranslationRuntimeController, arc_publish, arc_relevance};
 
 use crate::browser_event_builder::BrowserTranscriptEventBuilder;
-use crate::browser_speech_source::{BrowserSpeechSource, SharedBrowserSpeechSource};
+use crate::browser_speech_source::{
+    BrowserSpeechSource, OrderedBrowserSpeechIngest, SharedBrowserSpeechSource,
+};
 use crate::transcript_controller::TranscriptController;
 
 use voicesub_tts::TwitchOAuthBridge;
@@ -80,6 +83,8 @@ pub struct RuntimeHandle {
     server_task: Option<tokio::task::JoinHandle<()>>,
 
     heartbeat_task: Option<tokio::task::JoinHandle<()>>,
+
+    background_tasks: Option<Arc<BackgroundTaskRegistry>>,
 }
 
 impl RuntimeHandle {
@@ -103,6 +108,9 @@ impl RuntimeHandle {
         if let Some(heartbeat_task) = self.heartbeat_task.take() {
             heartbeat_task.abort();
         }
+        if let Some(tasks) = &self.background_tasks {
+            tasks.set_runtime_heartbeat(false);
+        }
     }
 }
 
@@ -113,6 +121,9 @@ impl Drop for RuntimeHandle {
         }
         if let Some(heartbeat_task) = self.heartbeat_task.take() {
             heartbeat_task.abort();
+        }
+        if let Some(tasks) = &self.background_tasks {
+            tasks.set_runtime_heartbeat(false);
         }
         if let Some(server_task) = self.server_task.take() {
             server_task.abort();
@@ -163,6 +174,10 @@ pub struct RuntimeService {
 
     runtime_event_bus: RuntimeEventBus,
 
+    loopback_auth: Arc<LoopbackAuth>,
+
+    background_tasks: Arc<BackgroundTaskRegistry>,
+
     subtitle_payload_listener: Arc<Mutex<Option<SubtitlePayloadListener>>>,
 
     overlay_broadcaster: Arc<OverlayBroadcaster>,
@@ -202,17 +217,12 @@ impl RuntimeService {
         Self::build(paths, config, twitch_oauth)
     }
 
-    fn build(
-        paths: ProjectPaths,
-        config: AppConfig,
-        twitch_oauth: Arc<TwitchOAuthBridge>,
-    ) -> Self {
+    fn build(paths: ProjectPaths, config: AppConfig, twitch_oauth: Arc<TwitchOAuthBridge>) -> Self {
         let config_store = Arc::new(RwLock::new(ConfigStore::new(paths.config_toml_path())));
 
         let config_snapshot = Arc::new(StdRwLock::new(default_config_payload()));
 
-        let structured_runtime_logger =
-            Arc::new(StructuredRuntimeLogger::new(&paths.logs_dir));
+        let structured_runtime_logger = Arc::new(StructuredRuntimeLogger::new(&paths.logs_dir));
         let runtime_metrics = Arc::new(RuntimeMetricsCollector::new());
         let pipeline_log = RuntimePipelineLog::new(Some(runtime_pipeline_structured_log(
             structured_runtime_logger.clone(),
@@ -222,6 +232,8 @@ impl RuntimeService {
         )));
         let events = EventsHub::with_log(ws_log);
         let runtime_event_bus = RuntimeEventBus::new();
+        let loopback_auth = Arc::new(LoopbackAuth::generate());
+        let background_tasks = Arc::new(BackgroundTaskRegistry::default());
         let ws_publisher = WsEventPublisher::with_event_bus(
             events.clone(),
             shared_event_sequencer(),
@@ -271,10 +283,10 @@ impl RuntimeService {
                 .lock()
                 .unwrap_or_else(|e| e.into_inner()) = Some(subtitle_body.clone());
             overlay.publish(&payload);
-            if let Ok(guard) = subtitle_listener.lock() {
-                if let Some(listener) = guard.as_ref() {
-                    listener(subtitle_body.clone());
-                }
+            if let Ok(guard) = subtitle_listener.lock()
+                && let Some(listener) = guard.as_ref()
+            {
+                listener(subtitle_body.clone());
             }
             publisher.broadcast_overlay_body_now(
                 "subtitle_payload_update",
@@ -291,8 +303,7 @@ impl RuntimeService {
 
         let obs_structured_log =
             obs_structured_log_from_runtime_logger(structured_runtime_logger.clone());
-        let obs_captions =
-            ObsCaptionService::new(config_getter.clone(), Some(obs_structured_log));
+        let obs_captions = ObsCaptionService::new(config_getter.clone(), Some(obs_structured_log));
 
         let obs_for_publish = obs_captions.clone();
         let base_publish = publish.clone();
@@ -371,7 +382,6 @@ impl RuntimeService {
         let event_builder = Arc::new(BrowserTranscriptEventBuilder::new(
             runtime_running.clone(),
             partial_emit.clone(),
-            pipeline_log.clone(),
         ));
 
         let browser_structured_log =
@@ -424,13 +434,11 @@ impl RuntimeService {
             }
         });
 
-        let browser_speech_for_ingest = browser_speech.clone();
+        let browser_speech_for_ingest =
+            Arc::new(OrderedBrowserSpeechIngest::new(browser_speech.clone()));
         let browser_asr = Arc::new(BrowserAsrService::with_hooks(
             Arc::new(move |update| {
-                let speech = browser_speech_for_ingest.clone();
-                tokio::spawn(async move {
-                    speech.ingest(update).await;
-                });
+                browser_speech_for_ingest.enqueue(update);
             }),
             Some(on_worker_connected),
             Some(on_worker_disconnected),
@@ -475,6 +483,8 @@ impl RuntimeService {
             twitch_oauth,
             structured_runtime_logger,
             runtime_event_bus,
+            loopback_auth,
+            background_tasks,
             subtitle_payload_listener,
             overlay_broadcaster,
             last_subtitle_payload,
@@ -489,6 +499,10 @@ impl RuntimeService {
 
     pub fn runtime_event_bus(&self) -> RuntimeEventBus {
         self.runtime_event_bus.clone()
+    }
+
+    pub fn loopback_api_token(&self) -> &str {
+        self.loopback_auth.token()
     }
 
     pub async fn runtime_state_snapshot(&self) -> RuntimeStateSnapshot {
@@ -560,9 +574,7 @@ impl RuntimeService {
         let structured_runtime_logger = self.structured_runtime_logger.clone();
         let export_service = Arc::new(ExportService::from_paths(&self.paths, PROJECT_VERSION));
 
-        let style_presets: StylePresetsFn = Arc::new(|subtitle_style| {
-            voicesub_subtitle::subtitle_style_presets(subtitle_style)
-        });
+        let style_presets: StylePresetsFn = Arc::new(voicesub_subtitle::subtitle_style_presets);
         HttpState::new(
             self.paths.clone(),
             self.events.clone(),
@@ -589,6 +601,8 @@ impl RuntimeService {
             self.ws_publisher.clone(),
             self.overlay_broadcaster.clone(),
             self.last_subtitle_payload.clone(),
+            self.loopback_auth.clone(),
+            self.background_tasks.clone(),
         )
     }
 
@@ -620,8 +634,13 @@ impl RuntimeService {
         let addr = self.config.http.socket_addr();
 
         let state = self.http_state();
-        let heartbeat_task = spawn_runtime_heartbeat(self.runtime_broadcaster.clone(), state.clone());
+        self.background_tasks.set_http_server(true);
+        self.background_tasks.set_runtime_heartbeat(true);
+        self.background_tasks.set_startup_check(true);
+        let heartbeat_task =
+            spawn_runtime_heartbeat(self.runtime_broadcaster.clone(), state.clone());
         spawn_startup_check(state.clone());
+        let background_tasks = self.background_tasks.clone();
         let router = Self::router(state);
 
         let listener = tokio::net::TcpListener::bind(addr)
@@ -637,15 +656,17 @@ impl RuntimeService {
         let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
 
         let server_task = tokio::spawn(async move {
-            let server = axum::serve(listener, router).with_graceful_shutdown(async {
+            let shutdown_tasks = background_tasks.clone();
+            let server = axum::serve(listener, router).with_graceful_shutdown(async move {
                 let _ = shutdown_rx.await;
-
+                shutdown_tasks.set_http_server(false);
                 info!("http server shutdown requested");
             });
 
             if let Err(err) = server.await {
                 tracing::error!(error = %err, "http server exited with error");
             }
+            background_tasks.set_http_server(false);
         });
 
         info!(%bound, "VoiceSub runtime listening");
@@ -658,6 +679,8 @@ impl RuntimeService {
             server_task: Some(server_task),
 
             heartbeat_task: Some(heartbeat_task),
+
+            background_tasks: Some(self.background_tasks.clone()),
         })
     }
 

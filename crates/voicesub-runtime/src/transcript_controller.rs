@@ -7,7 +7,9 @@ use tokio::sync::Mutex;
 use voicesub_obs::ObsCaptionService;
 use voicesub_subtitle::{SubtitleRouter, TranscriptEvent, TranscriptKind, TranscriptSegment};
 use voicesub_translation::{TranslationPreviewLineage, TranslationRuntimeController};
-use voicesub_twitch::{apply_source_text_replacement, settings_from_config_value, SourceTextReplacementSettings};
+use voicesub_twitch::{
+    SourceTextReplacementSettings, apply_source_text_replacement, settings_from_config_value,
+};
 use voicesub_ws::WsEventPublisher;
 
 use crate::http::RuntimeMetricsCollector;
@@ -104,12 +106,18 @@ impl TranscriptController {
                     preview_lineage_key.as_deref(),
                 )
                 .await;
-            self.pipeline_log
-                .asr_ingest_published(true, event.sequence, event.text.chars().count());
+            self.pipeline_log.asr_ingest_published(
+                true,
+                event.sequence,
+                event.text.chars().count(),
+            );
             self.metrics.record_final_published(None);
         } else {
-            self.pipeline_log
-                .asr_ingest_published(false, event.sequence, event.text.chars().count());
+            self.pipeline_log.asr_ingest_published(
+                false,
+                event.sequence,
+                event.text.chars().count(),
+            );
             self.metrics.record_partial_published(None);
         }
     }
@@ -120,11 +128,7 @@ impl TranscriptController {
             .broadcast_channel("transcript_update", "transcript_update", body.clone())
             .await;
         self.publisher
-            .broadcast_channel(
-                "transcript_segment_event",
-                "transcript_segment_event",
-                body,
-            )
+            .broadcast_channel("transcript_segment_event", "transcript_segment_event", body)
             .await;
     }
 

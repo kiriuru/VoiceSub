@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { apiFetch } from "./loopback-api-client";
 import type { ResourceTelemetry } from "./resource-telemetry";
 import type { SourceTextReplacementSettings } from "./source-text-replacement";
 import type {
@@ -6,6 +7,7 @@ import type {
   PythonTtsStatus,
   SpeechQueueItem,
   TtsConfig,
+  TtsPlaybackMode,
   TtsProvider,
   TtsSpeechSettings,
   TwitchConnectionStatus,
@@ -21,7 +23,7 @@ export async function setTtsProvider(provider: TtsProvider): Promise<TtsConfig> 
 }
 
 export async function fetchPythonTtsStatus(): Promise<PythonTtsStatus> {
-  const response = await fetch("/api/tts/python/status");
+  const response = await apiFetch("/api/tts/python/status");
   if (!response.ok) {
     throw new Error(`python status HTTP ${response.status}`);
   }
@@ -155,14 +157,6 @@ export async function recoverStuckSpeechQueues(): Promise<void> {
 
 export async function fetchResourceTelemetry(): Promise<ResourceTelemetry> {
   return invoke<ResourceTelemetry>("tts_get_resource_telemetry");
-}
-
-/** @deprecated Use `channelEnqueue("speech", …)` */
-export async function legacyEnqueue(
-  text: string,
-  source?: string,
-): Promise<number> {
-  return invoke<number>("tts_enqueue", { text, source });
 }
 
 export async function openTtsWindow(): Promise<void> {

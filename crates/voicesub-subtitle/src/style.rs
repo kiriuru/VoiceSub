@@ -1,6 +1,6 @@
 use std::sync::OnceLock;
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 const LINE_SLOT_NAMES: [&str; 6] = [
     "source",
@@ -42,11 +42,7 @@ fn clamp_f64(raw: &Value, default: f64, min: f64, max: f64) -> f64 {
 
 fn normalize_str(raw: &Value, default: &str) -> String {
     let s = raw.as_str().unwrap_or(default).trim().to_string();
-    if s.is_empty() {
-        default.to_string()
-    } else {
-        s
-    }
+    if s.is_empty() { default.to_string() } else { s }
 }
 
 fn round_to(value: f64, decimals: u32) -> f64 {
@@ -574,17 +570,20 @@ mod tests {
     #[test]
     fn preserves_extended_web_effects() {
         for effect in [
-            "slide_up", "zoom_in", "blur_in", "glow", "fade", "subtle_pop", "none",
+            "slide_up",
+            "zoom_in",
+            "blur_in",
+            "glow",
+            "fade",
+            "subtle_pop",
+            "none",
         ] {
             let payload = json!({
                 "preset": "clean_default",
                 "base": { "effect": effect }
             });
             let effective = resolve_effective_subtitle_style(&payload);
-            assert_eq!(
-                effective["base"]["effect"], effect,
-                "effect {effect}"
-            );
+            assert_eq!(effective["base"]["effect"], effect, "effect {effect}");
         }
     }
 
@@ -616,7 +615,10 @@ mod tests {
             }
         });
         let effective = resolve_effective_subtitle_style(&payload);
-        assert_eq!(effective["line_slots"]["source"]["font_family"], "Source Font");
+        assert_eq!(
+            effective["line_slots"]["source"]["font_family"],
+            "Source Font"
+        );
         assert_eq!(effective["line_slots"]["source"]["font_size_px"], 40);
         assert_eq!(
             effective["line_slots"]["translation_1"]["font_family"],
@@ -628,11 +630,7 @@ mod tests {
     #[test]
     fn builtin_presets_include_accessibility_dark_cinema_meeting_soft() {
         let catalog = subtitle_style_presets(None);
-        for key in [
-            "accessibility_high_contrast",
-            "dark_cinema",
-            "meeting_soft",
-        ] {
+        for key in ["accessibility_high_contrast", "dark_cinema", "meeting_soft"] {
             assert!(catalog.get(key).is_some(), "missing preset {key}");
             assert_eq!(catalog[key]["built_in"], true);
         }
@@ -720,9 +718,7 @@ mod tests {
             if preset.get("built_in").and_then(|v| v.as_bool()) != Some(true) {
                 continue;
             }
-            let opacity = preset["base"]["background_opacity"]
-                .as_i64()
-                .unwrap_or(0);
+            let opacity = preset["base"]["background_opacity"].as_i64().unwrap_or(0);
             if opacity <= 0 {
                 continue;
             }
@@ -738,7 +734,10 @@ mod tests {
         let catalog = subtitle_style_presets(None);
         let base = &catalog["accessibility_high_contrast"]["base"];
         assert_eq!(
-            base["fill_color"].as_str().unwrap_or("").to_ascii_lowercase(),
+            base["fill_color"]
+                .as_str()
+                .unwrap_or("")
+                .to_ascii_lowercase(),
             "#ffffff"
         );
         assert_eq!(

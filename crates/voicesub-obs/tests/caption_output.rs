@@ -1,6 +1,6 @@
 use serde_json::json;
 use voicesub_obs::{
-    normalize_text, select_payload_text, should_throttle_partial_update, ObsCaptionSettings,
+    ObsCaptionSettings, normalize_text, select_payload_text, should_throttle_partial_update,
 };
 use voicesub_subtitle::{LifecycleState, SubtitleLineItem, SubtitlePayloadEvent};
 

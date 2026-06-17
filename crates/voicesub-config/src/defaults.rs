@@ -1,11 +1,11 @@
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use voicesub_types::DEFAULT_GITHUB_REPO;
 
 use crate::translation_normalize::default_translation_provider_settings;
 
 pub const CURRENT_CONFIG_VERSION: i64 = 8;
 
-/// VoiceSub 0.5.0 default — `browser_google` only (roadmap §9).
+/// VoiceSub 0.5.0 default — `browser_google` only.
 pub fn default_config_payload() -> Value {
     json!({
         "config_version": CURRENT_CONFIG_VERSION,

@@ -8,7 +8,7 @@
   }
 </script>
 
-<section class="glass-panel panel-padding help-prose">
+<section class="surface-card panel-padding help-prose">
   <div class="section-heading">
     <div>
       <p class="eyebrow">{tr("tab.help")}</p>

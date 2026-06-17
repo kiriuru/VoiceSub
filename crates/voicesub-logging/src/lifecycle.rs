@@ -6,7 +6,7 @@ use std::process;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tracing::{info, warn};
 
 use crate::diagnostics::is_deep_diagnostics_enabled;
@@ -149,15 +149,16 @@ fn install_panic_hook(project_root: PathBuf, version: String) {
         }
         eprintln!("voicesub panic: {fields}");
         let path = session_lifecycle_path(&project_root);
-        let mut record = read_session_lifecycle_record(&project_root).unwrap_or(SessionLifecycleRecord {
-            pid: process::id(),
-            version: version.clone(),
-            started_utc_secs: utc_secs(),
-            ended_utc_secs: None,
-            state: SessionExitState::Running,
-            reason: String::new(),
-            detail: Value::Null,
-        });
+        let mut record =
+            read_session_lifecycle_record(&project_root).unwrap_or(SessionLifecycleRecord {
+                pid: process::id(),
+                version: version.clone(),
+                started_utc_secs: utc_secs(),
+                ended_utc_secs: None,
+                state: SessionExitState::Running,
+                reason: String::new(),
+                detail: Value::Null,
+            });
         record.state = SessionExitState::Panic;
         record.ended_utc_secs = Some(utc_secs());
         record.reason = "panic".into();
@@ -181,15 +182,16 @@ pub fn log_shutdown_step(step: &str, detail: Value) {
 
 pub fn complete_graceful_shutdown(project_root: &Path, reason: &str) {
     let path = session_lifecycle_path(project_root);
-    let mut record = read_session_lifecycle_record(project_root).unwrap_or(SessionLifecycleRecord {
-        pid: process::id(),
-        version: String::new(),
-        started_utc_secs: utc_secs(),
-        ended_utc_secs: None,
-        state: SessionExitState::Running,
-        reason: String::new(),
-        detail: Value::Null,
-    });
+    let mut record =
+        read_session_lifecycle_record(project_root).unwrap_or(SessionLifecycleRecord {
+            pid: process::id(),
+            version: String::new(),
+            started_utc_secs: utc_secs(),
+            ended_utc_secs: None,
+            state: SessionExitState::Running,
+            reason: String::new(),
+            detail: Value::Null,
+        });
     record.state = SessionExitState::Graceful;
     record.ended_utc_secs = Some(utc_secs());
     record.reason = reason.to_string();

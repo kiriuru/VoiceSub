@@ -6,7 +6,7 @@ use serde::Deserialize;
 use serde_json::Value;
 use voicesub_subtitle::TranslationEvent;
 use voicesub_translation::{
-    arc_publish, arc_relevance, ConfigGetter, TranslationDispatcher, TranslationEngine,
+    ConfigGetter, TranslationDispatcher, TranslationEngine, arc_publish, arc_relevance,
 };
 
 fn golden_path() -> PathBuf {

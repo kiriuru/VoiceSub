@@ -3,9 +3,7 @@ use std::net::{IpAddr, Ipv4Addr};
 /// Port of SST `backend/core/bind_policy.py`.
 pub fn resolve_bind_host(explicit_host: Option<&str>, allow_lan: bool) -> IpAddr {
     if let Some(host) = explicit_host.map(str::trim).filter(|h| !h.is_empty()) {
-        return host
-            .parse()
-            .unwrap_or(IpAddr::V4(Ipv4Addr::LOCALHOST));
+        return host.parse().unwrap_or(IpAddr::V4(Ipv4Addr::LOCALHOST));
     }
     if allow_lan {
         return IpAddr::V4(Ipv4Addr::UNSPECIFIED);
@@ -14,6 +12,9 @@ pub fn resolve_bind_host(explicit_host: Option<&str>, allow_lan: bool) -> IpAddr
 }
 
 /// Reads `VOICESUB_ALLOW_LAN` (same truthy set as SST `SST_ALLOW_LAN`).
+///
+/// When enabled, HTTP binds `0.0.0.0`. Protected `/api/*` still requires
+/// `x-voicesub-token`, but `/ws/events` and `/ws/asr_worker` accept any LAN client.
 pub fn allow_lan_from_env() -> bool {
     match std::env::var("VOICESUB_ALLOW_LAN") {
         Ok(value) => matches!(

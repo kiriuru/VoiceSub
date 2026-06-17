@@ -1,3 +1,4 @@
+import { apiFetch } from "./loopback-api-client";
 import { invoke } from "@tauri-apps/api/core";
 import {
   buildTwitchAuthorizeUrl,
@@ -9,7 +10,7 @@ export async function openTwitchOAuthInSystemBrowser(clientId?: string | null): 
   const url = buildTwitchAuthorizeUrl(resolveTwitchClientId(clientId));
 
   try {
-    const response = await fetch("/api/tts/twitch/oauth-open", {
+    const response = await apiFetch("/api/tts/twitch/oauth-open", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ url }),
@@ -35,7 +36,7 @@ export async function openTwitchOAuthInSystemBrowser(clientId?: string | null): 
 }
 
 export async function fetchPendingOAuthToken(): Promise<string | null> {
-  const response = await fetch("/api/tts/twitch/oauth-pending");
+  const response = await apiFetch("/api/tts/twitch/oauth-pending");
   if (!response.ok) return null;
   const body = (await response.json()) as { ok?: boolean; token?: string };
   if (!body.ok || !body.token) return null;

@@ -4,18 +4,18 @@ use std::sync::{Arc, Mutex as StdMutex};
 use std::time::{Duration, Instant};
 
 use chrono::Utc;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tokio::sync::{Mutex, Notify};
 use tokio::task::JoinHandle;
 use tracing::debug;
 use voicesub_subtitle::{ConfigGetter, SubtitlePayloadEvent};
 
-use crate::client::{ObsClientError, ObsClientHandle, ObsWsClient};
 #[cfg(test)]
 use crate::client::MockObsClient;
+use crate::client::{ObsClientError, ObsClientHandle, ObsWsClient};
 use crate::diagnostics::{ConnectionState, ObsCaptionDiagnostics};
 use crate::error_codes::{self, native_status};
-use crate::settings::{ObsCaptionSettings, CONNECTABLE_OUTPUT_MODES, SOURCE_EVENT_OUTPUT_MODES};
+use crate::settings::{CONNECTABLE_OUTPUT_MODES, ObsCaptionSettings, SOURCE_EVENT_OUTPUT_MODES};
 use crate::text::{
     normalize_text, select_first_visible_text, select_payload_text, should_throttle_partial_update,
 };
@@ -173,7 +173,11 @@ impl ObsCaptionService {
         drain_queue(&self.inner);
         *self.inner.last_partial_text.lock().await = String::new();
         *self.inner.last_partial_sent.lock().await = None;
-        *self.inner.last_payload_signature.lock().unwrap_or_else(|e| e.into_inner()) = None;
+        *self
+            .inner
+            .last_payload_signature
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = None;
     }
 
     async fn clear_remote_outputs_if_possible(&self, settings: &ObsCaptionSettings) {
@@ -192,8 +196,9 @@ impl ObsCaptionService {
             None
         };
         let last_debug_input_name = diag.last_debug_input_name.clone();
-        let should_clear_debug =
-            debug_input_name.is_some() || diag.last_debug_text.is_some() || last_debug_input_name.is_some();
+        let should_clear_debug = debug_input_name.is_some()
+            || diag.last_debug_text.is_some()
+            || last_debug_input_name.is_some();
         drop(diag);
 
         if should_clear_native
@@ -207,22 +212,20 @@ impl ObsCaptionService {
             diag.last_caption_sent_at_utc = Some(utc_now_iso());
         }
 
-        if should_clear_debug {
-            if let Some(input_name) = debug_input_name.or(last_debug_input_name) {
-                let _ = client
-                    .send_request(
-                        "SetInputSettings",
-                        json!({
-                            "inputName": input_name,
-                            "inputSettings": { "text": "" },
-                            "overlay": true
-                        }),
-                    )
-                    .await;
-                let mut diag = self.inner.diagnostics.lock().await;
-                diag.last_debug_text = Some(String::new());
-                diag.last_debug_input_name = Some(input_name);
-            }
+        if should_clear_debug && let Some(input_name) = debug_input_name.or(last_debug_input_name) {
+            let _ = client
+                .send_request(
+                    "SetInputSettings",
+                    json!({
+                        "inputName": input_name,
+                        "inputSettings": { "text": "" },
+                        "overlay": true
+                    }),
+                )
+                .await;
+            let mut diag = self.inner.diagnostics.lock().await;
+            diag.last_debug_text = Some(String::new());
+            diag.last_debug_input_name = Some(input_name);
         }
     }
 
@@ -311,11 +314,7 @@ impl ObsCaptionService {
             .worker_task
             .try_lock()
             .ok()
-            .and_then(|worker| {
-                worker
-                    .as_ref()
-                    .map(|task| !task.is_finished())
-            })
+            .and_then(|worker| worker.as_ref().map(|task| !task.is_finished()))
             .unwrap_or(false);
         if !worker_running {
             return;
@@ -592,7 +591,9 @@ async fn handle_source_partial(inner: Arc<Inner>, text: &str) -> Result<(), Stri
         settings.partial_throttle_ms,
         settings.min_partial_delta_chars,
     ) {
-        inner.log.partial_throttled(normalized.chars().count(), elapsed_ms);
+        inner
+            .log
+            .partial_throttled(normalized.chars().count(), elapsed_ms);
         return Ok(());
     }
     *inner.last_partial_text.lock().await = normalized.clone();
@@ -624,7 +625,10 @@ async fn handle_source_final(inner: Arc<Inner>, text: &str) -> Result<(), String
     }
     *inner.last_partial_text.lock().await = String::new();
     *inner.last_partial_sent.lock().await = None;
-    *inner.last_payload_signature.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    *inner
+        .last_payload_signature
+        .lock()
+        .unwrap_or_else(|e| e.into_inner()) = None;
     schedule_final_send(inner, normalized, send_stream, mirror_debug).await?;
     Ok(())
 }
@@ -669,11 +673,9 @@ async fn handle_payload(inner: Arc<Inner>, payload: SubtitlePayloadEvent) -> Res
             return Ok(());
         }
     }
-    inner.log.payload_routed(
-        payload.sequence,
-        mode,
-        normalized.chars().count(),
-    );
+    inner
+        .log
+        .payload_routed(payload.sequence, mode, normalized.chars().count());
     *inner
         .last_payload_signature
         .lock()
@@ -727,8 +729,7 @@ async fn send_text(
     };
 
     let mut should_send_caption = send_stream_caption;
-    let mut should_send_debug =
-        mirror_debug_text && !settings.debug_input_name.trim().is_empty();
+    let mut should_send_debug = mirror_debug_text && !settings.debug_input_name.trim().is_empty();
 
     if settings.avoid_duplicate_text && !force {
         let diag = inner.diagnostics.lock().await;
@@ -811,16 +812,8 @@ async fn send_text(
                 inner.log.stream_output_inactive();
                 set_connection_state(&inner, ConnectionState::Connected, None).await;
                 drop(client_guard);
-                if mirror_debug_text
-                    && schedule_clear_after
-                    && !normalized.is_empty()
-                {
-                    enqueue_clear(
-                        inner,
-                        false,
-                        true,
-                        settings.clear_after_ms,
-                    );
+                if mirror_debug_text && schedule_clear_after && !normalized.is_empty() {
+                    enqueue_clear(inner, false, true, settings.clear_after_ms);
                 }
                 return Ok(());
             }
@@ -1001,11 +994,7 @@ async fn wait_for_connection(
         && inner.client.lock().await.is_some()
 }
 
-async fn set_connection_state(
-    inner: &Inner,
-    state: ConnectionState,
-    error: Option<&str>,
-) {
+async fn set_connection_state(inner: &Inner, state: ConnectionState, error: Option<&str>) {
     let prev = {
         let mut diag = inner.diagnostics.lock().await;
         let prev = diag.connection_state;

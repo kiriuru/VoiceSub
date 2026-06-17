@@ -178,14 +178,13 @@ fn should_emit_char_delta(
     if min_delta_chars > 0 && growth_chars >= min_delta_chars as i64 {
         return true;
     }
-    if coalescing_ms > 0 {
-        if let Some(previous_emit) = previous_emit {
-            if growth_chars >= 0 && (min_delta_chars == 0 || growth_chars < min_delta_chars as i64)
-            {
-                let elapsed_ms = now.duration_since(previous_emit).as_millis() as u32;
-                return elapsed_ms >= coalescing_ms;
-            }
-        }
+    if coalescing_ms > 0
+        && let Some(previous_emit) = previous_emit
+        && growth_chars >= 0
+        && (min_delta_chars == 0 || growth_chars < min_delta_chars as i64)
+    {
+        let elapsed_ms = now.duration_since(previous_emit).as_millis() as u32;
+        return elapsed_ms >= coalescing_ms;
     }
     growth_chars > 0
 }

@@ -43,9 +43,7 @@ fn classify_io_error(err: &tokio_tungstenite::tungstenite::Error) -> &'static st
     {
         return error::CONNECTION_REFUSED;
     }
-    if haystack.contains("10060")
-        || haystack.contains("timed out")
-        || haystack.contains("timeout")
+    if haystack.contains("10060") || haystack.contains("timed out") || haystack.contains("timeout")
     {
         return error::CONNECTION_TIMEOUT;
     }

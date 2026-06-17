@@ -3,10 +3,10 @@ use std::net::{SocketAddr, TcpStream};
 use std::sync::Arc;
 use std::time::Duration;
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::engine::NormalizedLine;
-use crate::providers::{canonical_provider_name, TranslationProvider};
+use crate::providers::{TranslationProvider, canonical_provider_name};
 
 const CONNECT_PROBE_TIMEOUT: Duration = Duration::from_millis(400);
 
@@ -23,9 +23,14 @@ fn required_fields(provider_name: &str) -> &'static [&'static str] {
     }
 }
 
-fn provider_endpoint_summary(provider_name: &str, settings: &HashMap<String, String>) -> Option<String> {
+fn provider_endpoint_summary(
+    provider_name: &str,
+    settings: &HashMap<String, String>,
+) -> Option<String> {
     match provider_name {
-        "google_translate_v2" => Some("https://translation.googleapis.com/language/translate/v2".into()),
+        "google_translate_v2" => {
+            Some("https://translation.googleapis.com/language/translate/v2".into())
+        }
         "google_cloud_translation_v3" => {
             let project_id = settings.get("project_id").map(|s| s.trim()).unwrap_or("");
             let location = settings
@@ -76,7 +81,9 @@ fn local_endpoint_reachable(endpoint: &str) -> (bool, Option<String>) {
         Some(host) => host,
         None => return (false, Some("endpoint host missing".into())),
     };
-    let port = url.port().unwrap_or(if url.scheme() == "https" { 443 } else { 80 });
+    let port = url
+        .port()
+        .unwrap_or(if url.scheme() == "https" { 443 } else { 80 });
     let addr = format!("{host}:{port}");
     let Ok(socket_addr) = addr.parse::<SocketAddr>() else {
         return (false, Some("endpoint address invalid".into()));
@@ -177,7 +184,13 @@ pub fn summarize_readiness(
 
         let missing: Vec<String> = required_fields(&provider_name)
             .iter()
-            .filter(|field| normalized.get(**field).map(|s| s.as_str()).unwrap_or("").is_empty())
+            .filter(|field| {
+                normalized
+                    .get(**field)
+                    .map(|s| s.as_str())
+                    .unwrap_or("")
+                    .is_empty()
+            })
             .map(|field| (*field).to_string())
             .collect();
         if !missing.is_empty() {
@@ -187,28 +200,35 @@ pub fn summarize_readiness(
             continue;
         }
 
-        if provider.info().local_provider {
-            if let Some(endpoint) = provider_endpoint_summary(&provider_name, &normalized) {
-                let (reachable, reason) = local_endpoint_reachable(&endpoint);
-                if !reachable {
-                    if let Some(reason) = reason {
-                        unreachable_local.insert(line.slot_id.clone(), reason);
-                    }
-                    all_ready = false;
+        if provider.info().local_provider
+            && let Some(endpoint) = provider_endpoint_summary(&provider_name, &normalized)
+        {
+            let (reachable, reason) = local_endpoint_reachable(&endpoint);
+            if !reachable {
+                if let Some(reason) = reason {
+                    unreachable_local.insert(line.slot_id.clone(), reason);
                 }
+                all_ready = false;
             }
         }
     }
 
     let unique_providers: HashSet<_> = line_providers.iter().cloned().collect();
     let primary_provider = if unique_providers.len() == 1 {
-        line_providers.first().cloned().unwrap_or_else(|| "mixed".into())
+        line_providers
+            .first()
+            .cloned()
+            .unwrap_or_else(|| "mixed".into())
     } else {
         "mixed".into()
     };
     let groups: HashSet<String> = diagnostics_by_provider
         .iter()
-        .filter_map(|d| d.get("provider_group").and_then(|v| v.as_str()).map(str::to_string))
+        .filter_map(|d| {
+            d.get("provider_group")
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
+        })
         .collect();
     let primary_group = if groups.len() == 1 {
         groups.into_iter().next().unwrap_or_else(|| "mixed".into())

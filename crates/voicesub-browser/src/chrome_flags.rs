@@ -1,4 +1,4 @@
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 /// Chrome feature gates disabled for Web Speech stability (SST `browser_worker_launcher.py`).
 pub const DISABLED_CHROME_FEATURES: &[&str] = &[
@@ -20,10 +20,8 @@ pub const DISABLED_CHROME_DISK_BLOAT_FEATURES: &[&str] = &[
 ];
 
 /// Launch flags that keep the worker profile from accumulating component CRX / sync data.
-pub const CHROME_DISK_BLOAT_GUARD_FLAGS: &[&str] = &[
-    "--disable-component-update",
-    "--disable-sync",
-];
+pub const CHROME_DISK_BLOAT_GUARD_FLAGS: &[&str] =
+    &["--disable-component-update", "--disable-sync"];
 
 /// Launch flags always applied for the classic Browser Speech worker (SST §11.1 / Appendix A).
 pub const CHROME_ANTI_THROTTLE_FLAGS: &[&str] = &[
@@ -70,7 +68,11 @@ impl BrowserChromeLaunchConfig {
         self.disabled_features.join(",")
     }
 
-    pub fn launch_args_for_url(&self, profile_dir: &std::path::Path, worker_url: &str) -> Vec<String> {
+    pub fn launch_args_for_url(
+        &self,
+        profile_dir: &std::path::Path,
+        worker_url: &str,
+    ) -> Vec<String> {
         let mut config = self.clone();
         finalize_chrome_launch_config(&mut config);
 
@@ -113,7 +115,8 @@ pub fn finalize_chrome_launch_config(config: &mut BrowserChromeLaunchConfig) {
 
 fn flag_present(args: &[String], required: &str) -> bool {
     let key = required.split('=').next().unwrap_or(required);
-    args.iter().any(|arg| arg == required || arg == key || arg.starts_with(&format!("{key}=")))
+    args.iter()
+        .any(|arg| arg == required || arg == key || arg.starts_with(&format!("{key}=")))
 }
 
 pub fn ensure_sst_launch_flags(args: &mut Vec<String>) {

@@ -82,7 +82,10 @@
 </script>
 
 <div class="obs-layout bento-root stack">
-  <section class="glass-panel panel-padding bento-tile bento-span-full stack">
+  <section
+    id="obs-section-overlay"
+    class="surface-card panel-padding bento-tile bento-span-full stack panel-section-anchor"
+  >
     <div class="section-heading">
       <div>
         <p class="eyebrow">{tr("tab.obs")}</p>
@@ -99,8 +102,8 @@
     </div>
   </section>
 
-  <section class="glass-panel panel-padding stack obs-bento-main bento-grid bento-tile">
-    <article class="stack">
+  <section class="surface-card panel-padding stack obs-bento-main bento-grid bento-tile">
+    <article id="obs-section-captions" class="stack panel-section-anchor">
       <div class="section-heading">
         <div>
           <p class="eyebrow">{tr("obs.eyebrow")}</p>
@@ -264,7 +267,7 @@
       <p class="muted">{tr("obs.note.native")}</p>
     </article>
 
-    <article class="stack">
+    <article id="obs-section-status" class="stack panel-section-anchor">
       <div class="section-heading">
         <div>
           <p class="eyebrow">{tr("obs.state.eyebrow")}</p>

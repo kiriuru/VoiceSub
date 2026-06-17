@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use serde::Deserialize;
 use serde_json::Value;
 use voicesub_translation::{
-    arc_publish, arc_relevance, ConfigGetter, TranslationDispatcher, TranslationEngine,
+    ConfigGetter, TranslationDispatcher, TranslationEngine, arc_publish, arc_relevance,
 };
 
 fn golden_path() -> PathBuf {
@@ -75,7 +75,10 @@ async fn golden_drops_stale_translation() {
             None,
         )
         .await;
-    tokio::time::sleep(std::time::Duration::from_millis(fixture.input.relevant_until_ms)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(
+        fixture.input.relevant_until_ms,
+    ))
+    .await;
     relevant.lock().unwrap().clear();
     tokio::time::sleep(std::time::Duration::from_millis(
         fixture.input.wait_for_result_ms,

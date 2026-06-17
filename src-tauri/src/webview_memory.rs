@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager, WebviewWindow};
 use tracing::debug;
 use voicesub_browser::{
-    apply_from_controller, resolve_power_action, WebviewActivity, WebviewPowerAction, WebviewRole,
+    WebviewActivity, WebviewPowerAction, WebviewRole, apply_from_controller, resolve_power_action,
 };
 use voicesub_tts::TTS_WINDOW_LABEL;
 
@@ -112,13 +112,19 @@ fn apply_to_window(window: &WebviewWindow, _role: WebviewRole, action: WebviewPo
 
 pub fn refresh_webview_power(app: &AppHandle, manager: &WebviewMemoryManager) {
     if let Some(main) = app.get_webview_window("main") {
-        let action = resolve_power_action(WebviewRole::MainShell, manager.activity(WebviewRole::MainShell));
+        let action = resolve_power_action(
+            WebviewRole::MainShell,
+            manager.activity(WebviewRole::MainShell),
+        );
         debug!(window = "main", ?action, "apply webview power");
         apply_to_window(&main, WebviewRole::MainShell, action);
     }
 
     if let Some(tts) = app.get_webview_window(TTS_WINDOW_LABEL) {
-        let action = resolve_power_action(WebviewRole::TtsModule, manager.activity(WebviewRole::TtsModule));
+        let action = resolve_power_action(
+            WebviewRole::TtsModule,
+            manager.activity(WebviewRole::TtsModule),
+        );
         debug!(window = "tts", ?action, "apply webview power");
         apply_to_window(&tts, WebviewRole::TtsModule, action);
     }
@@ -160,7 +166,7 @@ pub fn sync_tts_window_visibility(app: &AppHandle, state: &SharedWebviewMemoryMa
 #[cfg(test)]
 mod tests {
     use super::WebviewMemoryManager;
-    use voicesub_browser::{resolve_power_action, WebviewPowerAction, WebviewRole};
+    use voicesub_browser::{WebviewPowerAction, WebviewRole, resolve_power_action};
 
     #[test]
     fn manager_activity_feeds_policy() {
@@ -168,7 +174,10 @@ mod tests {
         manager.set_tts_activity(true, true, false);
         manager.tts.visible = false;
         manager.tts.focused = false;
-        let action = resolve_power_action(WebviewRole::TtsModule, manager.activity(WebviewRole::TtsModule));
+        let action = resolve_power_action(
+            WebviewRole::TtsModule,
+            manager.activity(WebviewRole::TtsModule),
+        );
         assert_eq!(action, WebviewPowerAction::Normal);
     }
 

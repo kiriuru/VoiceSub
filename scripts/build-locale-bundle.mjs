@@ -4,11 +4,12 @@ import vm from "node:vm";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const targets = [path.join(root, "frontend", "js", "i18n")];
 
-for (const dir of targets) {
-  const localesDir = path.join(dir, "locales");
-  const locales = fs.readdirSync(localesDir).filter((f) => f.endsWith(".js")).map((f) => f.replace(/\.js$/, ""));
+function buildBundle(localesDir, outPath) {
+  const locales = fs
+    .readdirSync(localesDir)
+    .filter((f) => f.endsWith(".js"))
+    .map((f) => f.replace(/\.js$/, ""));
   let out = "(function () {\n  window.__SST_I18N_LOCALES = window.__SST_I18N_LOCALES || {};\n";
   for (const locale of locales) {
     const code = fs.readFileSync(path.join(localesDir, `${locale}.js`), "utf8");
@@ -19,7 +20,23 @@ for (const dir of targets) {
     out += `  window.__SST_I18N_LOCALES.${locale} = ${JSON.stringify(messages, null, 2)};\n`;
   }
   out += "})();\n";
-  const outPath = path.join(dir, "locales-bundle.js");
+  fs.mkdirSync(path.dirname(outPath), { recursive: true });
   fs.writeFileSync(outPath, out);
   console.log(`wrote ${outPath}`);
 }
+
+const sourceLocalesDir = path.join(root, "scripts", "i18n-source", "locales");
+const bundleTargets = [
+  path.join(root, "scripts", "i18n-source", "locales-bundle.js"),
+  path.join(root, "bin", "overlay", "shared", "js", "i18n", "locales-bundle.js"),
+];
+
+for (const outPath of bundleTargets) {
+  buildBundle(sourceLocalesDir, outPath);
+}
+
+const dynamicSource = path.join(root, "scripts", "i18n-source", "dynamic-locales.js");
+const dynamicTarget = path.join(root, "bin", "overlay", "shared", "js", "i18n", "dynamic-locales.js");
+fs.mkdirSync(path.dirname(dynamicTarget), { recursive: true });
+fs.copyFileSync(dynamicSource, dynamicTarget);
+console.log(`copied ${dynamicSource} -> ${dynamicTarget}`);

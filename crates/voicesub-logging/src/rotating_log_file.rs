@@ -5,7 +5,7 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use crate::log_rotation::{rotate_if_needed, DEFAULT_BACKUP_COUNT, DEFAULT_MAX_BYTES};
+use crate::log_rotation::{DEFAULT_BACKUP_COUNT, DEFAULT_MAX_BYTES, rotate_if_needed};
 
 #[derive(Debug)]
 pub struct RotatingLogFile {
@@ -53,7 +53,9 @@ impl Write for RotatingLogFileWriter {
     }
 }
 
-pub fn default_core_log_writer(path: impl AsRef<Path>) -> impl Fn() -> RotatingLogFileWriter + Send + Sync + 'static {
+pub fn default_core_log_writer(
+    path: impl AsRef<Path>,
+) -> impl Fn() -> RotatingLogFileWriter + Send + Sync + 'static {
     let file = RotatingLogFile::open(path, DEFAULT_MAX_BYTES, DEFAULT_BACKUP_COUNT);
     move || RotatingLogFileWriter(file.clone())
 }

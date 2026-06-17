@@ -1,17 +1,15 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use serde_json::{json, Value};
-use voicesub_logging::{ws_trace, StructuredRuntimeLogger};
+use serde_json::{Value, json};
+use voicesub_logging::{StructuredRuntimeLogger, ws_trace};
 
 pub type StructuredLogFn = Arc<dyn Fn(&str, &str, Value) + Send + Sync>;
 
 pub const WS_LOG_CHANNEL: &str = "ws_events";
 pub const WS_LOG_SOURCE: &str = "ws_manager";
 
-pub fn structured_log_from_runtime_logger(
-    logger: Arc<StructuredRuntimeLogger>,
-) -> StructuredLogFn {
+pub fn structured_log_from_runtime_logger(logger: Arc<StructuredRuntimeLogger>) -> StructuredLogFn {
     Arc::new(move |_channel, event, fields| {
         let mut map = BTreeMap::new();
         if let Some(obj) = fields.as_object() {

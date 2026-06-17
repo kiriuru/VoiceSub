@@ -17,19 +17,21 @@ mod tls;
 mod trace;
 
 pub use lang::{
-    language_allowed, resolve_message_language, strip_twitch_mentions, TWITCH_TOP_LANGUAGE_CODES,
+    TWITCH_TOP_LANGUAGE_CODES, language_allowed, resolve_message_language, strip_twitch_mentions,
 };
 
 pub use emotes::{EmoteRegistry, EmoteSets};
 pub use error::TwitchError;
 pub use filter::should_speak_message;
-pub use service::{EventBroadcaster, TwitchChatService, TwitchConnectionState, TwitchConnectionStatus};
+pub use service::{
+    EventBroadcaster, TwitchChatService, TwitchConnectionState, TwitchConnectionStatus,
+};
 pub use settings::{
-    normalize_speak_template, normalize_twitch_settings, pause_separator, TwitchChatMessage,
-    TwitchEmoteSources, TwitchPauseStyle, TwitchReplacement, TwitchTtsSettings,
+    TwitchChatMessage, TwitchEmoteSources, TwitchPauseStyle, TwitchReplacement, TwitchTtsSettings,
+    normalize_speak_template, normalize_twitch_settings, pause_separator,
 };
 pub use source_text_replacement::{
-    apply_source_text_replacement, settings_from_config_value, settings_from_section_value,
-    SourceTextReplacementPair, SourceTextReplacementSettings,
+    SourceTextReplacementPair, SourceTextReplacementSettings, apply_source_text_replacement,
+    settings_from_config_value, settings_from_section_value,
 };
 pub use tls::init_crypto_provider;

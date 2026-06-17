@@ -520,7 +520,10 @@ export function createOverlapRecognitionPair(manager: AsrManagerHost, generation
 
   resetOverlapSlotTracking(manager.state);
 
-  const slots = [new manager.SpeechRecognitionCtor!(), new manager.SpeechRecognitionCtor!()];
+  const slots = [new manager.SpeechRecognitionCtor!(), new manager.SpeechRecognitionCtor!()] as [
+    WorkerSpeechRecognition,
+    WorkerSpeechRecognition,
+  ];
 
   slots[0].maxAlternatives = 1;
 
@@ -654,7 +657,7 @@ export function handleOverlapRecognitionEnded(manager: AsrManagerHost, overlapSl
 
       manager.state.recognitionOverlapActiveSlot = buddy;
 
-      manager.state.recognition = manager.state.recognitionOverlapSlots![buddy];
+      manager.state.recognition = manager.state.recognitionOverlapSlots![buddy] ?? null;
 
       manager.state.recognitionOverlapPrestarted = false;
 

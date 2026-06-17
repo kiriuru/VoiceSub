@@ -4,8 +4,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use tracing::warn;
 
-use crate::service::TtsModuleService;
 use crate::TtsConfig;
+use crate::service::TtsModuleService;
 
 pub const TTS_WINDOW_LABEL: &str = "tts";
 
@@ -43,10 +43,7 @@ pub fn speech_queue_item_id() -> String {
     format!("tts-{millis}")
 }
 
-pub fn bind_window_process(
-    service: &TtsModuleService,
-    pid: u32,
-) -> Result<TtsConfig, String> {
+pub fn bind_window_process(service: &TtsModuleService, pid: u32) -> Result<TtsConfig, String> {
     if pid == 0 {
         warn!(target: "voicesub.tts.ipc", "unable to resolve TTS window process id");
         return Err("unable to resolve TTS window process id".to_string());

@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tokio::sync::{Mutex, Notify, Semaphore};
 use tokio::task::JoinHandle;
 use tokio::task::JoinSet;
@@ -13,8 +13,8 @@ use tracing::{debug, warn};
 use voicesub_subtitle::{TranslationEvent, TranslationItem};
 
 use crate::engine::{
-    PreparedLine, PreparedRequest, TranslateTargetOptions, TranslationEngine,
-    DEFAULT_TRANSLATION_RETRIES,
+    DEFAULT_TRANSLATION_RETRIES, PreparedLine, PreparedRequest, TranslateTargetOptions,
+    TranslationEngine,
 };
 use crate::preview_lineage::TranslationPreviewLineage;
 
@@ -205,7 +205,14 @@ impl TranslationDispatcher {
                 .active_tasks
                 .iter()
                 .filter(|task| task.sequence < sequence)
-                .map(|task| (task.job_id, task.sequence, task.source_lang.clone(), task.source_text_len))
+                .map(|task| {
+                    (
+                        task.job_id,
+                        task.sequence,
+                        task.source_lang.clone(),
+                        task.source_text_len,
+                    )
+                })
                 .collect::<Vec<_>>();
             (queued_jobs, active_tasks)
         };
@@ -447,10 +454,7 @@ impl TranslationDispatcher {
             let handle = tokio::spawn(async move {
                 this.run_job(&job_for_task, job_cancelled_run).await;
                 let mut inner = this.inner.lock().await;
-                let still_active = inner
-                    .active_tasks
-                    .iter()
-                    .any(|task| task.job_id == job_id);
+                let still_active = inner.active_tasks.iter().any(|task| task.job_id == job_id);
                 if still_active {
                     inner.active_jobs = inner.active_jobs.saturating_sub(1);
                     inner
@@ -463,7 +467,10 @@ impl TranslationDispatcher {
             });
             {
                 let mut inner = self.inner.lock().await;
-                if let Some(task) = inner.active_tasks.iter_mut().find(|task| task.job_id == job_id)
+                if let Some(task) = inner
+                    .active_tasks
+                    .iter_mut()
+                    .find(|task| task.job_id == job_id)
                 {
                     *task.handle.lock().await = Some(handle);
                 }
@@ -1135,15 +1142,15 @@ impl TranslationDispatcher {
 
     async fn emit_metrics_locked(self: &Arc<Self>, inner: &mut DispatcherInner) {
         let queue_depth = inner.queue.len() + inner.active_jobs;
-        if let Some(ref logger) = self.callbacks.structured_log {
-            if inner.last_logged_queue_depth != queue_depth {
-                inner.last_logged_queue_depth = queue_depth;
-                logger(
-                    "translation_dispatcher",
-                    "translation_queue_depth_changed",
-                    json!({ "queue_depth": queue_depth }),
-                );
-            }
+        if let Some(ref logger) = self.callbacks.structured_log
+            && inner.last_logged_queue_depth != queue_depth
+        {
+            inner.last_logged_queue_depth = queue_depth;
+            logger(
+                "translation_dispatcher",
+                "translation_queue_depth_changed",
+                json!({ "queue_depth": queue_depth }),
+            );
         }
         if let Some(ref callback) = self.callbacks.metrics_callback {
             callback(self.metrics_from_inner(inner));

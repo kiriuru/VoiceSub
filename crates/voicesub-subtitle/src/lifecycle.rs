@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tokio::task::JoinHandle;
 
 use crate::presentation::SubtitlePresentation;
@@ -345,10 +345,9 @@ impl SubtitleLifecycleCore {
         if self.completed_sequence.is_none()
             && self.pending_final_sequence.is_none()
             && self.latest_final_sequence == Some(sequence)
+            && let Some(payload) = self.promotion_payload(sequence, presentation)
         {
-            if let Some(payload) = self.promotion_payload(sequence, presentation) {
-                return !payload.visible_items.is_empty();
-            }
+            return !payload.visible_items.is_empty();
         }
         false
     }
@@ -489,10 +488,10 @@ impl SubtitleLifecycleCore {
         if let Some(seq) = self.latest_final_sequence {
             protected.insert(seq);
         }
-        if let Some(partial) = self.active_partial.as_ref() {
-            if let Some(seq) = partial.get("sequence").and_then(|v| v.as_u64()) {
-                protected.insert(seq);
-            }
+        if let Some(partial) = self.active_partial.as_ref()
+            && let Some(seq) = partial.get("sequence").and_then(|v| v.as_u64())
+        {
+            protected.insert(seq);
         }
 
         let mut removable: Vec<u64> = self
@@ -713,10 +712,11 @@ impl SubtitleLifecycleCore {
             .get("translation")
             .cloned()
             .unwrap_or(Value::Null);
-        let required_slots: Vec<String> = SubtitlePresentation::translation_slot_map(&translation_config)
-            .keys()
-            .cloned()
-            .collect();
+        let required_slots: Vec<String> =
+            SubtitlePresentation::translation_slot_map(&translation_config)
+                .keys()
+                .cloned()
+                .collect();
         let received: HashSet<String> = record
             .get("translations")
             .and_then(|v| v.as_object())
@@ -1017,11 +1017,8 @@ mod tests {
     #[test]
     fn prune_old_records_keeps_active_sequences() {
         let schedule = Arc::new(|_sequence: u64, _delay: f64| {});
-        let mut core = SubtitleLifecycleCore::new(
-            Box::new(|| json!({})),
-            schedule,
-            SubtitleLog::default(),
-        );
+        let mut core =
+            SubtitleLifecycleCore::new(Box::new(|| json!({})), schedule, SubtitleLog::default());
         core.completed_sequence = Some(600);
         core.pending_final_sequence = Some(601);
         core.latest_final_sequence = Some(601);

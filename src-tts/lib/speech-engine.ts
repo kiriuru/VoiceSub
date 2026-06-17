@@ -518,14 +518,10 @@ export class SpeechEngine {
 
       if (inFlight >= PREFETCH_AHEAD_MAX) break;
 
-      const job = this.prefetchById.get(entry.id) ?? {
-
+      const job: SpeechJob = this.prefetchById.get(entry.id) ?? {
         id: entry.id,
-
         text: entry.text,
-
-        lang: entry.lang,
-
+        lang: entry.lang ?? "en",
       };
 
       this.prefetchById.set(entry.id, job);
@@ -706,18 +702,12 @@ export class SpeechEngine {
 
     try {
 
-    const job =
-
+    const job: SpeechJob =
       this.prefetchById.get(item.id) ??
-
       ({
-
         id: item.id,
-
         text: item.text,
-
-        lang: item.lang,
-
+        lang: item.lang ?? "en",
       } satisfies SpeechJob);
 
     this.prefetchById.set(item.id, job);
@@ -878,7 +868,7 @@ export class SpeechEngine {
 
     try {
 
-      await this.player.playPrepared(job.prepared, {
+      await this.player.playPrepared(job.prepared!, {
 
         lang: job.lang,
 

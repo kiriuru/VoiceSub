@@ -15,7 +15,8 @@ fn worker_src_root() -> PathBuf {
 
 fn read_manager_ts_bundle() -> String {
     let root = worker_src_root();
-    let manager = fs::read_to_string(root.join("lib/asr/session-manager.ts")).expect("session-manager");
+    let manager =
+        fs::read_to_string(root.join("lib/asr/session-manager.ts")).expect("session-manager");
     let logic_dir = root.join("lib/asr");
     let mut logic = String::new();
     let mut paths: Vec<PathBuf> = fs::read_dir(&logic_dir)

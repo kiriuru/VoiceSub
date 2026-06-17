@@ -1,11 +1,6 @@
 use std::time::Duration;
 
-use axum::{
-    extract::WebSocketUpgrade,
-    response::IntoResponse,
-    routing::get,
-    Router,
-};
+use axum::{Router, extract::WebSocketUpgrade, response::IntoResponse, routing::get};
 use futures_util::StreamExt;
 use serde_json::json;
 use tokio::net::TcpListener;

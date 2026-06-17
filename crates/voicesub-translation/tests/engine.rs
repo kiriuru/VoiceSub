@@ -4,11 +4,11 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use reqwest::Client;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tempfile::TempDir;
 use voicesub_translation::{
-    PreparedLine, ProviderError, ProviderInfo, TranslateRequest, TranslateTargetOptions,
-    TranslationBatch, TranslationEngine, TranslationProvider, DEFAULT_REQUEST_TIMEOUT_SECONDS,
+    DEFAULT_REQUEST_TIMEOUT_SECONDS, PreparedLine, ProviderError, ProviderInfo, TranslateRequest,
+    TranslateTargetOptions, TranslationBatch, TranslationEngine, TranslationProvider,
 };
 
 struct FakeProvider {
@@ -130,7 +130,10 @@ impl TranslationProvider for UnreliableProvider {
     }
 }
 
-fn engine_with_fake(delays: HashMap<String, u64>, cache_dir: Option<std::path::PathBuf>) -> (TranslationEngine, Arc<FakeProvider>) {
+fn engine_with_fake(
+    delays: HashMap<String, u64>,
+    cache_dir: Option<std::path::PathBuf>,
+) -> (TranslationEngine, Arc<FakeProvider>) {
     let fake = Arc::new(FakeProvider::new(delays));
     let mut providers = HashMap::new();
     providers.insert("stub".into(), fake.clone() as Arc<dyn TranslationProvider>);
@@ -171,7 +174,11 @@ async fn translate_targets_preserves_requested_order_with_parallel_completion() 
         .await;
 
     assert!(matches!(batch, TranslationBatch { .. }));
-    let langs: Vec<_> = batch.items.iter().map(|item| item.target_lang.as_str()).collect();
+    let langs: Vec<_> = batch
+        .items
+        .iter()
+        .map(|item| item.target_lang.as_str())
+        .collect();
     assert_eq!(langs, vec!["de", "fr", "en"]);
     let texts: Vec<_> = batch.items.iter().map(|item| item.text.as_str()).collect();
     assert_eq!(texts, vec!["hello:de", "hello:fr", "hello:en"]);
@@ -196,7 +203,11 @@ async fn translate_targets_uses_cache_before_calling_provider() {
         .await;
 
     assert_eq!(
-        batch.items.iter().map(|i| i.target_lang.as_str()).collect::<Vec<_>>(),
+        batch
+            .items
+            .iter()
+            .map(|i| i.target_lang.as_str())
+            .collect::<Vec<_>>(),
         vec!["en", "fr"]
     );
     assert!(batch.items[0].cached);
@@ -248,15 +259,27 @@ fn prepare_request_uses_per_line_provider_and_duplicate_languages() {
 
     assert_eq!(prepared.provider_name, "mixed");
     assert_eq!(
-        prepared.lines.iter().map(|l| l.slot_id.as_str()).collect::<Vec<_>>(),
+        prepared
+            .lines
+            .iter()
+            .map(|l| l.slot_id.as_str())
+            .collect::<Vec<_>>(),
         vec!["translation_1", "translation_2"]
     );
     assert_eq!(
-        prepared.lines.iter().map(|l| l.target_lang.as_str()).collect::<Vec<_>>(),
+        prepared
+            .lines
+            .iter()
+            .map(|l| l.target_lang.as_str())
+            .collect::<Vec<_>>(),
         vec!["en", "en"]
     );
     assert_eq!(
-        prepared.lines.iter().map(|l| l.provider_name.as_str()).collect::<Vec<_>>(),
+        prepared
+            .lines
+            .iter()
+            .map(|l| l.provider_name.as_str())
+            .collect::<Vec<_>>(),
         vec!["google_translate_v2", "openai"]
     );
     assert_eq!(prepared.lines[0].provider_settings["api_key"], "AIza-demo");
@@ -272,7 +295,10 @@ async fn translate_target_cache_key_includes_provider_name() {
         "google_translate_v2".into(),
         fake.clone() as Arc<dyn TranslationProvider>,
     );
-    providers.insert("openai".into(), fake.clone() as Arc<dyn TranslationProvider>);
+    providers.insert(
+        "openai".into(),
+        fake.clone() as Arc<dyn TranslationProvider>,
+    );
     let mut engine = TranslationEngine::with_providers(providers, None);
     engine.seed_translation_cache("google_translate_v2", "en", "fr", "hello", "cached-google");
     engine.seed_translation_cache("openai", "en", "fr", "hello", "cached-openai");
@@ -293,10 +319,20 @@ async fn translate_target_cache_key_includes_provider_name() {
     };
 
     let (google_item, _) = engine
-        .translate_target("hello", "en", &google_line, TranslateTargetOptions::default())
+        .translate_target(
+            "hello",
+            "en",
+            &google_line,
+            TranslateTargetOptions::default(),
+        )
         .await;
     let (openai_item, _) = engine
-        .translate_target("hello", "en", &openai_line, TranslateTargetOptions::default())
+        .translate_target(
+            "hello",
+            "en",
+            &openai_line,
+            TranslateTargetOptions::default(),
+        )
         .await;
 
     assert_eq!(google_item.text, "cached-google");
@@ -331,7 +367,12 @@ async fn translate_target_short_circuits_when_source_and_target_match() {
     let line = stub_line("en");
 
     let (item, _) = engine
-        .translate_target("hello world", "EN", &line, TranslateTargetOptions::default())
+        .translate_target(
+            "hello world",
+            "EN",
+            &line,
+            TranslateTargetOptions::default(),
+        )
         .await;
 
     assert!(item.success);
@@ -387,7 +428,10 @@ async fn translate_target_uses_default_timeout_when_no_budget_given() {
         .translate_target("hello", "en", &line, TranslateTargetOptions::default())
         .await;
 
-    assert_eq!(fake.received_timeouts(), vec![Some(DEFAULT_REQUEST_TIMEOUT_SECONDS)]);
+    assert_eq!(
+        fake.received_timeouts(),
+        vec![Some(DEFAULT_REQUEST_TIMEOUT_SECONDS)]
+    );
 }
 
 #[tokio::test]
@@ -547,8 +591,8 @@ async fn google_cloud_translation_v3_uses_advanced_endpoint_and_bearer_token() {
         .await;
 
     let transport = SharedHttpClient::new(reqwest::Client::new());
-    let provider = GoogleCloudTranslationV3Provider::new(transport)
-        .with_api_root_for_test(server.uri());
+    let provider =
+        GoogleCloudTranslationV3Provider::new(transport).with_api_root_for_test(server.uri());
 
     let settings = HashMap::from([
         ("project_id".into(), "demo-project".into()),

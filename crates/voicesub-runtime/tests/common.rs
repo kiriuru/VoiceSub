@@ -1,3 +1,6 @@
+#[path = "authed_api.rs"]
+mod authed_api;
+
 use std::sync::{Arc, Mutex, Once, OnceLock};
 
 use tempfile::TempDir;
@@ -19,7 +22,9 @@ static ENSURE_SKIP_BROWSER: Once = Once::new();
 fn ensure_skip_browser_worker_in_tests() {
     ENSURE_SKIP_BROWSER.call_once(|| {
         if matches!(
-            std::env::var("VOICESUB_FORCE_BROWSER_WORKER").ok().as_deref(),
+            std::env::var("VOICESUB_FORCE_BROWSER_WORKER")
+                .ok()
+                .as_deref(),
             Some("1") | Some("true") | Some("yes")
         ) {
             return;
@@ -30,6 +35,8 @@ fn ensure_skip_browser_worker_in_tests() {
     });
 }
 
+pub use authed_api::AuthedApi;
+
 pub fn integration_lock() -> std::sync::MutexGuard<'static, ()> {
     ensure_skip_browser_worker_in_tests();
     INTEGRATION_LOCK
@@ -39,7 +46,7 @@ pub fn integration_lock() -> std::sync::MutexGuard<'static, ()> {
 }
 
 pub struct EphemeralRuntime {
-    service: RuntimeService,
+    pub service: RuntimeService,
     _temp: TempDir,
 }
 

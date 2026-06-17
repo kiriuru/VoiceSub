@@ -8,10 +8,10 @@ use tracing::{info, warn};
 
 use crate::emotes::EmoteRegistry;
 use crate::error::TwitchError;
-use crate::irc::{run_session, MessageCallback, StatusCallback};
+use crate::irc::{MessageCallback, StatusCallback, run_session};
 use crate::settings::{TwitchChatMessage, TwitchTtsSettings};
 use crate::source_text_replacement::{
-    profanity_settings_for_twitch, SourceTextReplacementSettings,
+    SourceTextReplacementSettings, profanity_settings_for_twitch,
 };
 use crate::trace;
 
@@ -189,7 +189,10 @@ impl TwitchChatService {
         self.broadcast_connection();
     }
 
-    pub fn connect(&self, settings: TwitchTtsSettings) -> Result<TwitchConnectionStatus, TwitchError> {
+    pub fn connect(
+        &self,
+        settings: TwitchTtsSettings,
+    ) -> Result<TwitchConnectionStatus, TwitchError> {
         settings
             .validate_for_connect()
             .map_err(TwitchError::InvalidSettings)?;
@@ -286,8 +289,7 @@ impl TwitchChatService {
         let task = self.runtime.spawn(async move {
             if refresh_settings.strip_emotes
                 && (refresh_sources.twitch || refresh_sources.bttv || refresh_sources.seventv)
-            {
-                if let Err(err) = emotes_for_session
+                && let Err(err) = emotes_for_session
                     .refresh_all(
                         &refresh_logins,
                         &refresh_client_id,
@@ -302,7 +304,6 @@ impl TwitchChatService {
                         "pre-connect emote refresh failed"
                     );
                 }
-            }
 
             if let Err(err) = run_session(
                 live_for_task,
@@ -399,6 +400,7 @@ impl Inner {
 }
 
 #[cfg(test)]
+#[allow(clippy::field_reassign_with_default)]
 mod tests {
     use super::*;
     use std::sync::Arc;

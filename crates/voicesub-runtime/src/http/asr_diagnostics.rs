@@ -1,9 +1,9 @@
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use voicesub_browser::BrowserAsrDiagnostics;
 
 use super::partial_emit::PartialEmitSettings;
 
-/// Browser-only ASR diagnostics snapshot (SST `assemble_browser_asr_diagnostics`).
+/// Browser-only ASR diagnostics snapshot (SST dashboard parity; GPU/torch fields are inert stubs).
 pub fn assemble_browser_asr_diagnostics(
     asr_mode: &str,
     browser_lang: &str,
@@ -71,7 +71,9 @@ pub fn assemble_browser_asr_diagnostics(
     }
     body.insert(
         "message".into(),
-        json!(format!("{worker_message} Recognition language: {browser_lang}.")),
+        json!(format!(
+            "{worker_message} Recognition language: {browser_lang}."
+        )),
     );
     body.insert("runtime_initialized".into(), json!(is_runtime_running));
     body.insert(
@@ -187,13 +189,8 @@ mod tests {
             partial_min_delta_chars: 1,
             partial_coalescing_ms: 100,
         };
-        let body = assemble_browser_asr_diagnostics(
-            "browser_google",
-            "en-US",
-            &worker,
-            &partial,
-            true,
-        );
+        let body =
+            assemble_browser_asr_diagnostics("browser_google", "en-US", &worker, &partial, true);
         assert_eq!(body["true_streaming"], true);
         assert_eq!(body["partial_emit_mode"], "word_growth");
         assert_eq!(body["partial_min_new_words"], 2);

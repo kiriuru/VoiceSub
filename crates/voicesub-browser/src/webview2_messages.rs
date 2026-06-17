@@ -42,7 +42,7 @@ pub fn normalize_supported_ui_language(raw: &str) -> &'static str {
 #[cfg(windows)]
 pub fn system_supported_ui_language() -> &'static str {
     #[link(name = "kernel32")]
-    extern "system" {
+    unsafe extern "system" {
         fn GetUserDefaultUILanguage() -> u16;
     }
 

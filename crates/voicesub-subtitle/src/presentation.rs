@@ -129,10 +129,10 @@ impl SubtitlePresentation {
                 normalized.push(value);
                 continue;
             }
-            if let Some(mapped) = language_to_slot.get(&value) {
-                if !normalized.contains(mapped) {
-                    normalized.push(mapped.clone());
-                }
+            if let Some(mapped) = language_to_slot.get(&value)
+                && !normalized.contains(mapped)
+            {
+                normalized.push(mapped.clone());
             }
         }
         if !normalized.contains(&"source".to_string()) {
@@ -494,123 +494,123 @@ impl SubtitlePresentation {
             ..Default::default()
         });
 
-        if !active_partial_text.is_empty() {
-            if let Some(completed_tp) = completed_tp_snapshot.as_ref() {
-                let preserve = core
-                    .lifecycle_config()
-                    .get("keep_completed_translation_during_active_partial")
-                    .and_then(|v| v.as_bool())
-                    .unwrap_or(true);
-                if !preserve && !completed_tp.visible_items.is_empty() {
-                    (self.payload_mismatch_count)(1);
-                }
-
-                let show_source = subtitle_output
-                    .get("show_source")
-                    .and_then(|v| v.as_bool())
-                    .unwrap_or(true);
-                let show_translations = subtitle_output
-                    .get("show_translations")
-                    .and_then(|v| v.as_bool())
-                    .unwrap_or(true);
-                let max_translation_languages = subtitle_output
-                    .get("max_translation_languages")
-                    .and_then(|v| v.as_u64())
-                    .unwrap_or(0)
-                    .min(5) as u32;
-                let active_source_lang = active_partial_source_lang
-                    .clone()
-                    .unwrap_or_else(|| payload.source_lang.clone());
-
-                let source_item = SubtitleLineItem {
-                    kind: "source".into(),
-                    lang: active_source_lang.clone(),
-                    label: active_source_lang.to_ascii_uppercase(),
-                    text: active_partial_text.clone(),
-                    style_slot: if show_source && !active_partial_text.is_empty() {
-                        Some("source".into())
-                    } else {
-                        None
-                    },
-                    slot_id: None,
-                    target_lang: None,
-                    provider: active_partial
-                        .as_ref()
-                        .and_then(|p| p.get("provider"))
-                        .and_then(|v| v.as_str())
-                        .map(str::to_string),
-                    visible: show_source && !active_partial_text.is_empty(),
-                    success: true,
-                    error: None,
-                };
-
-                let mut items = Vec::new();
-                let mut visible_items = Vec::new();
-                for code in &display_order {
-                    if code == "source" {
-                        items.push(source_item.clone());
-                        if source_item.visible && !source_item.text.is_empty() {
-                            visible_items.push(source_item.clone());
-                        }
-                        continue;
-                    }
-                    let translation_item = payload.items.iter().find(|item| {
-                        item.kind == "translation"
-                            && item
-                                .slot_id
-                                .as_deref()
-                                .unwrap_or(&item.lang)
-                                .eq_ignore_ascii_case(code)
-                    });
-                    let Some(translation_item) = translation_item else {
-                        continue;
-                    };
-                    let translation_count = visible_items
-                        .iter()
-                        .filter(|i| i.kind == "translation")
-                        .count();
-                    let can_show = preserve
-                        && show_translations
-                        && translation_count < max_translation_languages as usize
-                        && translation_item.success
-                        && !translation_item.text.is_empty();
-                    if !preserve && !translation_item.text.is_empty() {
-                        (self.stale_translation_suppressed)(1);
-                    }
-                    let updated = SubtitleLineItem {
-                        visible: can_show,
-                        style_slot: if can_show { Some(code.clone()) } else { None },
-                        ..translation_item.clone()
-                    };
-                    items.push(updated.clone());
-                    if updated.visible && !updated.text.is_empty() {
-                        visible_items.push(updated);
-                    }
-                }
-                payload.sequence = active_partial_sequence.unwrap_or(payload.sequence);
-                payload.source_text = active_partial_text.clone();
-                payload.source_lang = active_source_lang;
-                payload.provider = source_item.provider.clone();
-                payload.display_order = display_order;
-                payload.show_source = show_source;
-                payload.show_translations = show_translations;
-                payload.max_translation_languages = max_translation_languages;
-                payload.items = items;
-                payload.visible_items = visible_items.clone();
-                payload.line1 = visible_items
-                    .first()
-                    .map(|i| i.text.clone())
-                    .unwrap_or_default();
-                payload.line2 = if visible_items.len() > 1 {
-                    visible_items[1..]
-                        .iter()
-                        .map(|i| i.text.as_str())
-                        .collect::<Vec<_>>()
-                        .join("\n")
-                } else {
-                    String::new()
-                };
+        if !active_partial_text.is_empty()
+            && let Some(completed_tp) = completed_tp_snapshot.as_ref()
+        {
+            let preserve = core
+                .lifecycle_config()
+                .get("keep_completed_translation_during_active_partial")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(true);
+            if !preserve && !completed_tp.visible_items.is_empty() {
+                (self.payload_mismatch_count)(1);
             }
+
+            let show_source = subtitle_output
+                .get("show_source")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(true);
+            let show_translations = subtitle_output
+                .get("show_translations")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(true);
+            let max_translation_languages = subtitle_output
+                .get("max_translation_languages")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0)
+                .min(5) as u32;
+            let active_source_lang = active_partial_source_lang
+                .clone()
+                .unwrap_or_else(|| payload.source_lang.clone());
+
+            let source_item = SubtitleLineItem {
+                kind: "source".into(),
+                lang: active_source_lang.clone(),
+                label: active_source_lang.to_ascii_uppercase(),
+                text: active_partial_text.clone(),
+                style_slot: if show_source && !active_partial_text.is_empty() {
+                    Some("source".into())
+                } else {
+                    None
+                },
+                slot_id: None,
+                target_lang: None,
+                provider: active_partial
+                    .as_ref()
+                    .and_then(|p| p.get("provider"))
+                    .and_then(|v| v.as_str())
+                    .map(str::to_string),
+                visible: show_source && !active_partial_text.is_empty(),
+                success: true,
+                error: None,
+            };
+
+            let mut items = Vec::new();
+            let mut visible_items = Vec::new();
+            for code in &display_order {
+                if code == "source" {
+                    items.push(source_item.clone());
+                    if source_item.visible && !source_item.text.is_empty() {
+                        visible_items.push(source_item.clone());
+                    }
+                    continue;
+                }
+                let translation_item = payload.items.iter().find(|item| {
+                    item.kind == "translation"
+                        && item
+                            .slot_id
+                            .as_deref()
+                            .unwrap_or(&item.lang)
+                            .eq_ignore_ascii_case(code)
+                });
+                let Some(translation_item) = translation_item else {
+                    continue;
+                };
+                let translation_count = visible_items
+                    .iter()
+                    .filter(|i| i.kind == "translation")
+                    .count();
+                let can_show = preserve
+                    && show_translations
+                    && translation_count < max_translation_languages as usize
+                    && translation_item.success
+                    && !translation_item.text.is_empty();
+                if !preserve && !translation_item.text.is_empty() {
+                    (self.stale_translation_suppressed)(1);
+                }
+                let updated = SubtitleLineItem {
+                    visible: can_show,
+                    style_slot: if can_show { Some(code.clone()) } else { None },
+                    ..translation_item.clone()
+                };
+                items.push(updated.clone());
+                if updated.visible && !updated.text.is_empty() {
+                    visible_items.push(updated);
+                }
+            }
+            payload.sequence = active_partial_sequence.unwrap_or(payload.sequence);
+            payload.source_text = active_partial_text.clone();
+            payload.source_lang = active_source_lang;
+            payload.provider = source_item.provider.clone();
+            payload.display_order = display_order;
+            payload.show_source = show_source;
+            payload.show_translations = show_translations;
+            payload.max_translation_languages = max_translation_languages;
+            payload.items = items;
+            payload.visible_items = visible_items.clone();
+            payload.line1 = visible_items
+                .first()
+                .map(|i| i.text.clone())
+                .unwrap_or_default();
+            payload.line2 = if visible_items.len() > 1 {
+                visible_items[1..]
+                    .iter()
+                    .map(|i| i.text.as_str())
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            } else {
+                String::new()
+            };
         }
 
         let completed_block_visible = completed_payload

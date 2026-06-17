@@ -52,7 +52,11 @@ fn dashboard_overlay_normalizer_preserves_lifecycle_state() {
 #[test]
 fn overlay_skips_render_when_signature_unchanged() {
     let source = read_workspace_file("bin/overlay/overlay.js");
-    assert_contains(&source, "signature !== overlayState.lastRenderSignature", "signature gate");
+    assert_contains(
+        &source,
+        "signature !== overlayState.lastRenderSignature",
+        "signature gate",
+    );
     assert_contains(
         &source,
         "overlayState.lastRenderSignature = signature",
@@ -89,7 +93,11 @@ fn overlay_ignores_stale_ws_payloads() {
 #[test]
 fn overlay_disposes_renderer_when_payload_is_empty() {
     let source = read_workspace_file("bin/overlay/overlay.js");
-    assert_contains(&source, "const result = window.SubtitleStyleRenderer.render", "render result");
+    assert_contains(
+        &source,
+        "const result = window.SubtitleStyleRenderer.render",
+        "render result",
+    );
     assert_contains(
         &source,
         "window.SubtitleStyleRenderer.disposeRenderContainer(linesContainer)",
@@ -124,10 +132,28 @@ fn overlay_subtitle_debug_hook_is_opt_in() {
         "onRenderTrace: subtitleDebugMode ? handleSubtitleRenderTrace : null",
         "renderer trace gate",
     );
-    assert_contains(
-        &source,
-        "postOverlayUiTrace(\"subtitle_render_anomaly\"",
-        "anomaly ui trace",
-    );
     assert_contains(&source, "__sstOverlaySubtitleTrace", "devtools ring buffer");
+}
+
+#[test]
+fn overlay_uses_public_live_probe_not_protected_health() {
+    let source = read_workspace_file("bin/overlay/overlay.js");
+    assert_contains(&source, "fetch(\"/live\"", "public liveness probe");
+    assert!(
+        !source.contains("/api/health"),
+        "overlay must not call protected /api/health"
+    );
+}
+
+#[test]
+fn overlay_does_not_post_http_logs() {
+    let source = read_workspace_file("bin/overlay/overlay.js");
+    assert!(
+        !source.contains("/api/logs/"),
+        "overlay must not POST client/ui logs over HTTP"
+    );
+    assert!(
+        !source.contains("sendBeacon"),
+        "overlay must not use sendBeacon log fallback"
+    );
 }

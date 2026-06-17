@@ -65,15 +65,16 @@
   --shadow-focus: 0 0 0 3px rgb(var(--ui-accent-rgb) / 0.28);
   --radius-sm: var(--sst-radius-sm);
   --radius-md: var(--sst-radius-md);
-  --radius-lg: var(--sst-radius-lg);
-  --radius-xl: 18px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-2xl: 28px;
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
   --space-5: 20px;
   --space-6: 24px;
-  --control-height: 44px;
+  --control-height: 40px;
   --chrome-height: 40px;
   --font-ui: "Segoe UI Variable", "Segoe UI", "Yu Gothic UI", Tahoma, Geneva, Verdana, sans-serif;
   --font-mono: "Cascadia Mono", Consolas, Menlo, monospace;
@@ -81,9 +82,28 @@
   --duration-fast: 120ms;
   --duration-normal: 200ms;
   --z-command-palette: 600;
-  --bento-gap: var(--space-4);
+  --bento-gap: var(--space-3);
   --bento-tile-min-height: 100px;
   --bento-cols: 2;
+
+  /* M3 shell (desktop standard + compact) — fixed modes, not breakpoint-driven nav */
+  --nav-rail-width: 88px;
+  --top-app-bar-height: 52px;
+  --bottom-nav-height: 64px;
+  --fab-size: 56px;
+  --content-max-width: none;
+  --panel-padding: var(--space-4);
+  --target-min-desktop: 40px;
+  --target-min-touch: 48px;
+
+  /* Tonal surfaces (Material You — derived from base, tinted by accent in theme) */
+  --surface-0: var(--glass-0);
+  --surface-1: var(--glass-1);
+  --surface-2: var(--glass-2);
+  --surface-3: var(--glass-3);
+  --surface-on-variant: var(--text-secondary);
+  --primary-container: rgb(var(--ui-accent-rgb) / 0.14);
+  --on-primary-container: var(--text-primary);
 }
 
 html[data-ui-theme="light"] {

@@ -1,11 +1,11 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+use axum::Json;
 use axum::extract::State;
 use axum::response::{IntoResponse, Response};
-use axum::Json;
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tokio::sync::Mutex;
 use voicesub_browser::BrowserWorkerLauncher;
 use voicesub_config::{
@@ -89,7 +89,9 @@ impl RuntimeOrchestrator {
             let mut partial_emit = state.partial_emit.lock().await;
             partial_emit.reset();
         }
-        state.runtime_running.store(true, std::sync::atomic::Ordering::Relaxed);
+        state
+            .runtime_running
+            .store(true, std::sync::atomic::Ordering::Relaxed);
         state.browser_speech.start().await;
         state
             .translation
@@ -116,10 +118,7 @@ impl RuntimeOrchestrator {
         };
         if let Some(pid) = previous_worker_pid {
             if BrowserWorkerLauncher::terminate_worker(pid) {
-                tracing::info!(
-                    pid,
-                    "terminated previous browser worker before relaunch"
-                );
+                tracing::info!(pid, "terminated previous browser worker before relaunch");
             } else {
                 tracing::warn!(
                     pid,
@@ -147,7 +146,9 @@ impl RuntimeOrchestrator {
                     inner.running,
                     None,
                 );
-                state.pipeline_log.start_complete(inner.phase, inner.worker_pid);
+                state
+                    .pipeline_log
+                    .start_complete(inner.phase, inner.worker_pid);
             }
             Err(err) => {
                 inner.phase = "error";
@@ -184,10 +185,10 @@ impl RuntimeOrchestrator {
             .send_control("stop", Some("runtime_stop"))
             .await;
 
-        if let Some(pid) = worker_pid {
-            if BrowserWorkerLauncher::terminate_worker(pid) {
-                tracing::info!(pid, "browser worker process terminated");
-            }
+        if let Some(pid) = worker_pid
+            && BrowserWorkerLauncher::terminate_worker(pid)
+        {
+            tracing::info!(pid, "browser worker process terminated");
         }
 
         state.subtitle.reset().await;
@@ -197,7 +198,9 @@ impl RuntimeOrchestrator {
         state.runtime_broadcaster.reset_broadcast_state();
 
         log_runtime_stop(state);
-        state.runtime_running.store(false, std::sync::atomic::Ordering::Relaxed);
+        state
+            .runtime_running
+            .store(false, std::sync::atomic::Ordering::Relaxed);
         state.browser_speech.stop().await;
         {
             let mut partial_emit = state.partial_emit.lock().await;
@@ -233,9 +236,6 @@ impl RuntimeOrchestrator {
 
 #[derive(Debug, Deserialize, Default)]
 pub struct RuntimeStartRequest {
-    #[serde(default)]
-    #[allow(dead_code)]
-    pub device_id: Option<String>,
     #[serde(default)]
     pub config_payload: Option<Value>,
 }
@@ -323,11 +323,30 @@ async fn build_runtime_status(inner: &OrchestratorInner, state: &HttpState) -> V
         inner.running,
     );
 
-    let metrics = state.runtime_metrics.snapshot(
+    let mut metrics = state.runtime_metrics.snapshot(
         &ws_diag,
         browser_diag.browser_stale_events_ignored,
         &translation_diag,
     );
+    if let Some(obj) = metrics.as_object_mut() {
+        if let Some(bus) = state.ws_publisher.event_bus() {
+            let bus_diag = bus.diagnostics();
+            obj.insert(
+                "event_bus_subscribers".into(),
+                json!(bus_diag.subscriber_count),
+            );
+            obj.insert("event_bus_revision".into(), json!(bus_diag.revision));
+            obj.insert(
+                "event_bus_publish_count".into(),
+                json!(bus_diag.publish_count),
+            );
+            obj.insert(
+                "event_bus_channel_capacity".into(),
+                json!(bus_diag.channel_capacity),
+            );
+        }
+        obj.insert("background_tasks".into(), state.background_tasks.snapshot());
+    }
 
     json!({
         "running": inner.running,
@@ -391,12 +410,7 @@ fn structured_log_callbacks(state: &HttpState) -> DispatcherCallbacks {
                     map.insert(key.clone(), value.clone());
                 }
             }
-            structured_logger.log(
-                channel,
-                message,
-                Some("translation_dispatcher"),
-                Some(map),
-            );
+            structured_logger.log(channel, message, Some("translation_dispatcher"), Some(map));
         })),
         metrics_callback: Some(Arc::new(move |snapshot| {
             runtime_metrics.record_translation_metrics(snapshot);

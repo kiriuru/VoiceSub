@@ -1,3 +1,4 @@
+import { apiFetch } from "../loopback-api-client";
 import { CLIENT_LOG_THROTTLE_MS } from "./worker-defaults";
 
 const CLIENT_LOG_STATE_MAX = 256;
@@ -11,14 +12,16 @@ function trimClientLogState(): void {
   const entries = [...clientLogState.entries()].sort((a, b) => a[1].at - b[1].at);
   const removeCount = clientLogState.size - CLIENT_LOG_STATE_MAX;
   for (let index = 0; index < removeCount; index += 1) {
-    clientLogState.delete(entries[index][0]);
+    const entry = entries[index];
+    if (!entry) continue;
+    clientLogState.delete(entry[0]);
   }
 }
 
 async function sendClientLogPayload(payload: Record<string, unknown>): Promise<void> {
   const body = JSON.stringify(payload);
   try {
-    const response = await fetch("/api/logs/client-event", {
+    const response = await apiFetch("/api/logs/client-event", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body,
@@ -29,13 +32,7 @@ async function sendClientLogPayload(payload: Record<string, unknown>): Promise<v
       clientLogState.set(key, { at: Date.now(), muted: true });
     }
   } catch {
-    if (typeof navigator?.sendBeacon === "function") {
-      try {
-        navigator.sendBeacon("/api/logs/client-event", new Blob([body], { type: "application/json" }));
-      } catch {
-        // best-effort
-      }
-    }
+    // best-effort client log
   }
 }
 
@@ -58,13 +55,10 @@ function shouldPersistWorkerLog(message: string): boolean {
     "microphone permission granted",
     "microphone permission failed",
     "recognition.start failed",
-    "recognition.onerror",
     "websocket connected",
     "websocket closed",
     "websocket error",
     "watchdog forced rearm",
-    "restart cancelled",
-    "auto-restart stopped",
     "stop requested by user",
   ].some((token) => normalized.includes(token));
 }

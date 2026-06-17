@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::sync::{Mutex, OnceLock};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::diagnostics::is_ui_trace_enabled;
 use crate::jsonl_trace::JsonlTraceLog;
@@ -39,12 +39,7 @@ pub fn ui_trace(surface: &str, phase: &str, event: &str, fields: Value) {
     );
 }
 
-pub fn ui_trace_mapping(
-    surface: &str,
-    phase: &str,
-    event: &str,
-    payload: Option<&Value>,
-) {
+pub fn ui_trace_mapping(surface: &str, phase: &str, event: &str, payload: Option<&Value>) {
     let fields = match payload {
         Some(value) => value.clone(),
         None => json!({}),

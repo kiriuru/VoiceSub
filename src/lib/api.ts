@@ -1,11 +1,12 @@
 import type { ConfigPayload, RuntimeStatus, VersionInfo } from "./types";
+import { apiFetch } from "./loopback-api-client";
 
 /** Dashboard HTTP calls hit the embedded Rust Axum server (`/api/*`), not Python. */
 
 async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(url, init);
+    res = await apiFetch(url, init);
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
     if (/failed to fetch|networkerror|load failed/i.test(reason)) {
@@ -85,10 +86,6 @@ export async function checkUpdates(): Promise<VersionInfo> {
   });
 }
 
-export async function fetchHealth(): Promise<Record<string, unknown>> {
-  return jsonFetch("/api/health");
-}
-
 export async function listProfiles(): Promise<{ profiles: string[] }> {
   return jsonFetch("/api/profiles");
 }
@@ -109,7 +106,7 @@ export async function saveProfile(
 }
 
 export async function deleteProfile(name: string): Promise<{ name: string; deleted: boolean }> {
-  const res = await fetch(`/api/profiles/${encodeURIComponent(name)}`, { method: "DELETE" });
+  const res = await apiFetch(`/api/profiles/${encodeURIComponent(name)}`, { method: "DELETE" });
   if (!res.ok) {
     throw new Error(`delete profile -> ${res.status}`);
   }
@@ -117,7 +114,7 @@ export async function deleteProfile(name: string): Promise<{ name: string; delet
 }
 
 export async function downloadDiagnostics(): Promise<void> {
-  const res = await fetch("/api/exports/diagnostics");
+  const res = await apiFetch("/api/exports/diagnostics");
   if (!res.ok) {
     throw new Error(`diagnostics export -> ${res.status}`);
   }
@@ -134,7 +131,7 @@ export async function downloadDiagnostics(): Promise<void> {
 }
 
 export async function postClientLog(channel: string, message: string, details?: Record<string, unknown>): Promise<void> {
-  await fetch("/api/logs/client-event", {
+  await apiFetch("/api/logs/client-event", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ channel, message, details }),

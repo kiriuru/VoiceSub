@@ -1,6 +1,6 @@
 # VoiceSub — WIKI
 
-Operational guide for the VoiceSub `0.5.2` UI. Each element is described as: **what it is**, **why it exists**, **how it works**, **what it affects**, and **common mistakes**.
+Operational guide for the VoiceSub `0.5.3` UI. Each element is described as: **what it is**, **why it exists**, **how it works**, **what it affects**, and **common mistakes**.
 
 Technical architecture: `docs/TECHNICAL_ARCHITECTURE.en.md`. SST `0.4.4` is a frozen predecessor; core behavior in this document is VoiceSub-specific.
 
@@ -9,7 +9,7 @@ Technical architecture: `docs/TECHNICAL_ARCHITECTURE.en.md`. SST `0.4.4` is a fr
 ## 0. About the product
 
 ### Element: VoiceSub vs SST
-- **VoiceSub** — active `0.5.2` line (Rust + Tauri + Svelte); first release baseline is `0.5.0`.
+- **VoiceSub** — active `0.5.3` line (Rust + Tauri + Svelte); first release baseline is `0.5.0`.
 - **SST** `0.4.4` — frozen reference; settings import works, but Parakeet/Experimental modes are not started in core.
 - **New overlay URL:** `http://127.0.0.1:8765/overlay` — update OBS Browser Source manually.
 
@@ -20,7 +20,7 @@ Technical architecture: `docs/TECHNICAL_ARCHITECTURE.en.md`. SST `0.4.4` is a fr
 - Microphone in the Chrome worker; internet for external translation providers (optional).
 
 ### Element: install and update (NSIS)
-- **What it does:** `VoiceSub_0.5.2_x64-setup.exe` installs `VoiceSub.exe` and bundled static assets (dashboard, overlay, worker, tts).
+- **What it does:** `VoiceSub_0.5.3_x64-setup.exe` installs `VoiceSub.exe` and bundled static assets (dashboard, overlay, worker, tts).
 - **Why:** single installer without Python/Node in runtime; downloads WebView2 via bootstrapper when missing (`downloadBootstrapper` in Tauri).
 - **Update:** close app → run new `setup.exe` over existing → `user-data/` and `logs/` persist next to install/project root.
 - **Developers:** `build-release-msi.bat` → `build-release.ps1` → `F:\AI\VoiceSub - release\v{version}\`.
@@ -81,7 +81,8 @@ Technical architecture: `docs/TECHNICAL_ARCHITECTURE.en.md`. SST `0.4.4` is a fr
 - **Subtitles** → source/translation visibility enabled.
 - TTL not too aggressive (text may flash and vanish).
 - On WS disconnect overlay keeps last frame (stale-guard + 1–10 s backoff) — expected.
-- Text **stuck after TTL/Stop** — update the app and reload Browser Source (`disposeRenderContainer` + `hasVisibleRenderedFrame`, `overlay.js?v=20260610b`).
+- Overlay dev console noise — use `?debug=1` only when debugging; production hot path does not log every WS frame.
+- Text **stuck after TTL/Stop** — update the app and reload Browser Source (`disposeRenderContainer` + `hasVisibleRenderedFrame`, `overlay.js?v=20260615a`).
 
 ### Scenario: worker keeps dying
 - Check network (Web Speech uses Google endpoints).
@@ -290,10 +291,10 @@ Technical architecture: `docs/TECHNICAL_ARCHITECTURE.en.md`. SST `0.4.4` is a fr
 ## 13. Settings
 
 ### Element: UI language (EN / RU / JA / KO / ZH)
-- Svelte i18n: `src/lib/i18n/locales/*.json`.
+- Svelte i18n: `src/lib/i18n/locales/*.json` (generated from `scripts/i18n-source/locales/*.js`).
 - Saved in `ui.language` → Save config.
 - Worker gets `locale` query param on launch.
-- Overlay i18n: `bin/overlay/shared/js/i18n/`.
+- Overlay i18n: `bin/overlay/shared/js/i18n/` (regenerate: `npm run i18n:bundle` after editing source locales).
 - **Details:** `TECHNICAL_ARCHITECTURE.en.md` §23.
 
 ### Element: SST config.json import

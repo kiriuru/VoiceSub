@@ -8,7 +8,7 @@ use serde_json::Value;
 
 use crate::compact_log_line::{format_structured_runtime_line, should_write_runtime_event};
 use crate::diagnostics::is_runtime_events_verbose_enabled;
-use crate::log_rotation::{rotate_if_needed, DEFAULT_BACKUP_COUNT, DEFAULT_MAX_BYTES};
+use crate::log_rotation::{DEFAULT_BACKUP_COUNT, DEFAULT_MAX_BYTES, rotate_if_needed};
 use crate::redaction::redact_mapping;
 use crate::structured_log_compact::compact_mapping_for_runtime_log;
 
@@ -68,12 +68,7 @@ impl StructuredRuntimeLogger {
             fields.extend(compact_mapping_for_runtime_log(&redacted));
         }
 
-        let line = format_structured_runtime_line(
-            normalized_event,
-            channel,
-            source,
-            &fields,
-        );
+        let line = format_structured_runtime_line(normalized_event, channel, source, &fields);
         let _guard = self.lock.lock().unwrap_or_else(|e| e.into_inner());
         let _ = self.write_line_locked(&line);
     }
@@ -112,28 +107,9 @@ pub fn runtime_trace(
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{Mutex, MutexGuard};
-
     use super::*;
     use crate::diagnostics::set_config_full_logging_enabled;
-
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
-
-    fn env_test_lock() -> MutexGuard<'static, ()> {
-        ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner())
-    }
-
-    fn clear_verbose_env() {
-        for key in [
-            "VOICESUB_DEEP_DIAGNOSTICS",
-            "SST_DEEP_DIAGNOSTICS",
-            "VOICESUB_TRACE_RUNTIME_EVENTS_VERBOSE",
-            "SST_TRACE_RUNTIME_EVENTS_VERBOSE",
-        ] {
-            std::env::remove_var(key);
-        }
-        set_config_full_logging_enabled(false);
-    }
+    use crate::env_test;
 
     fn temp_dir(name: &str) -> PathBuf {
         std::env::temp_dir().join(format!("vs-srl-{name}-{}", std::process::id()))
@@ -153,8 +129,9 @@ mod tests {
 
     #[test]
     fn default_skips_dbg_and_vrb_events() {
-        let _guard = env_test_lock();
-        clear_verbose_env();
+        let _guard = env_test::lock();
+        env_test::clear_env_vars(env_test::RUNTIME_VERBOSE_KEYS);
+        env_test::reset_compact_logging_env();
         let dir = temp_dir("gate");
         let _ = fs::remove_dir_all(&dir);
 
@@ -175,7 +152,10 @@ mod tests {
             "browser_recognition",
             "browser_degraded",
             Some("browser_asr_gateway"),
-            Some(BTreeMap::from([("reason".into(), Value::String("noise".into()))])),
+            Some(BTreeMap::from([(
+                "reason".into(),
+                Value::String("noise".into()),
+            )])),
         );
         logger.log(
             "runtime_state",
@@ -211,8 +191,9 @@ mod tests {
 
     #[test]
     fn verbose_mode_writes_dbg_events() {
-        let _guard = env_test_lock();
-        clear_verbose_env();
+        let _guard = env_test::lock();
+        env_test::clear_env_vars(env_test::RUNTIME_VERBOSE_KEYS);
+        env_test::reset_compact_logging_env();
         let dir = temp_dir("verbose");
         let _ = fs::remove_dir_all(&dir);
         set_config_full_logging_enabled(true);

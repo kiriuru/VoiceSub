@@ -1,4 +1,4 @@
-import type { AsrManagerHost } from "./types";
+import type { AsrManagerHost, BrowserAsrState } from "./types";
 import type {
   WorkerSpeechRecognition,
   WorkerSpeechRecognitionErrorEvent,
@@ -20,6 +20,23 @@ import {
 } from "./overlap-logic";
 import { registerNetworkErrorForPreflight } from "./network-preflight-bridge";
 
+function shouldIgnoreAbortedOverlapActiveGuard(
+  state: BrowserAsrState,
+  overlapSlotIndex: number | null
+): boolean {
+  if (!recognitionOverlapActive(state) || overlapSlotIndex == null) {
+    return false;
+  }
+  const active = overlapActiveSlotIndex(state);
+  const buddy = (active + 1) % 2;
+  if (overlapSlotIndex !== active) {
+    return false;
+  }
+  const buddyListening = Boolean(state.recognitionOverlapSlotListening?.[buddy]);
+  const buddyPrestarted = Boolean(state.recognitionOverlapPrestarted);
+  return buddyListening || buddyPrestarted;
+}
+
 function applyRecognitionError(
   manager: AsrManagerHost,
   _generationId: number,
@@ -30,16 +47,8 @@ function applyRecognitionError(
   const classified = classifyRecognitionError(event, policy, manager.state);
   const { errorKind, errorMessage } = classified;
 
-  if (classified.kind === "aborted" && recognitionOverlapActive(manager.state) && overlapSlotIndex != null) {
-    const active = Number(manager.state.recognitionOverlapActiveSlot || 0) % 2;
-    const buddy = (active + 1) % 2;
-    if (
-      overlapSlotIndex === active &&
-      manager.state.recognitionOverlapSlotListening &&
-      manager.state.recognitionOverlapSlotListening[buddy]
-    ) {
-      return;
-    }
+  if (classified.kind === "aborted" && shouldIgnoreAbortedOverlapActiveGuard(manager.state, overlapSlotIndex)) {
+    return;
   }
 
   manager.setLastErrorInternal(errorKind, errorMessage);
@@ -62,7 +71,7 @@ function applyRecognitionError(
           : [];
       stripTargets.forEach((rec) => {
         if (rec) {
-          manager.stripWebSpeechExperimentalHints(rec);
+          manager.stripChromeOnDeviceHints(rec);
         }
       });
       manager.state.pendingRestartReason = "normal_onend";
@@ -94,16 +103,8 @@ function applyRecognitionError(
       manager.emitWorkerStatus("recognition-error");
       return;
     case "aborted":
-      if (recognitionOverlapActive(manager.state) && overlapSlotIndex != null) {
-        const active = Number(manager.state.recognitionOverlapActiveSlot || 0) % 2;
-        const buddy = (active + 1) % 2;
-        if (
-          overlapSlotIndex === active &&
-          manager.state.recognitionOverlapSlotListening &&
-          manager.state.recognitionOverlapSlotListening[buddy]
-        ) {
-          return;
-        }
+      if (shouldIgnoreAbortedOverlapActiveGuard(manager.state, overlapSlotIndex)) {
+        return;
       }
       if (manager.state.desiredRunning) {
         manager.state.pendingRestartReason = "normal_onend";
@@ -125,7 +126,7 @@ function applyRecognitionError(
       manager.clearAllTimersInternal();
       manager.setSupervisorStateInternal("fatal");
       manager.setStatusInternal(manager.translate("browser_asr.error.terminal_status", { errorKind }));
-      manager.setTerminalDegradedReasonInternal("permission_denied");
+      manager.setTerminalDegradedReasonInternal(classified.terminalReason || "language_not_supported");
       manager.emitWorkerStatus("terminal-error");
       return;
     default:

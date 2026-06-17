@@ -126,10 +126,10 @@ impl CacheState {
         self.entries.clear();
         self.order.clear();
         self.dirty = false;
-        if self.persist {
-            if let Some(path) = self.cache_file.clone() {
-                let _ = Self::write_atomic(&path, &HashMap::new());
-            }
+        if self.persist
+            && let Some(path) = self.cache_file.clone()
+        {
+            let _ = Self::write_atomic(&path, &HashMap::new());
         }
     }
 
@@ -146,10 +146,10 @@ impl CacheState {
             return;
         }
         let now = Instant::now();
-        if let Some(last) = self.last_flush_scheduled {
-            if now.duration_since(last) < FLUSH_INTERVAL {
-                return;
-            }
+        if let Some(last) = self.last_flush_scheduled
+            && now.duration_since(last) < FLUSH_INTERVAL
+        {
+            return;
         }
         self.last_flush_scheduled = Some(now);
         let Some(path) = self.cache_file.clone() else {

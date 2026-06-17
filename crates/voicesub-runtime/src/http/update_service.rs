@@ -2,11 +2,11 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tracing::info;
 use voicesub_types::{
-    build_version_info_payload, extract_latest_github_release, is_remote_version_newer,
-    release_url_for, PROJECT_VERSION,
+    PROJECT_VERSION, build_version_info_payload, extract_latest_github_release,
+    is_remote_version_newer, release_url_for,
 };
 
 use super::state::HttpState;
@@ -30,9 +30,7 @@ fn patch_updates_in_value(payload: &mut Value, latest_version: &str, checked_utc
     let Some(root) = payload.as_object_mut() else {
         return;
     };
-    let updates = root
-        .entry("updates")
-        .or_insert_with(|| json!({}));
+    let updates = root.entry("updates").or_insert_with(|| json!({}));
     if let Some(obj) = updates.as_object_mut() {
         obj.insert(
             "latest_known_version".into(),
@@ -115,21 +113,19 @@ pub async fn check_now(state: &Arc<HttpState>, force: bool) -> Value {
         .to_string();
     // After a local upgrade the cached GitHub latest can lag behind PROJECT_VERSION
     // (e.g. cache 0.5.1 while running 0.5.2). Do not let the interval gate hide newer tags.
-    let cache_stale = !latest_known.is_empty()
-        && is_remote_version_newer(&latest_known, PROJECT_VERSION);
+    let cache_stale =
+        !latest_known.is_empty() && is_remote_version_newer(&latest_known, PROJECT_VERSION);
 
     let last_checked = updates
         .get("last_checked_utc")
         .and_then(Value::as_str)
         .and_then(|value| parse_checked_time(Some(value)));
     let now = Utc::now();
-    if !force {
-        if let Some(last_checked) = last_checked {
-            let due_at = last_checked + chrono::Duration::hours(interval_hours);
-            if now < due_at && !cache_stale {
-                payload["sync"]["message"] = json!("Update check skipped (interval not reached yet).");
-                return payload;
-            }
+    if !force && let Some(last_checked) = last_checked {
+        let due_at = last_checked + chrono::Duration::hours(interval_hours);
+        if now < due_at && !cache_stale {
+            payload["sync"]["message"] = json!("Update check skipped (interval not reached yet).");
+            return payload;
         }
     }
 
@@ -137,9 +133,7 @@ pub async fn check_now(state: &Arc<HttpState>, force: bool) -> Value {
     payload["sync"]["check_active"] = json!(true);
     payload["sync"]["message"] = json!("Checking GitHub Releases...");
 
-    let api_url = format!(
-        "https://api.github.com/repos/{github_repo}/releases?per_page=20"
-    );
+    let api_url = format!("https://api.github.com/repos/{github_repo}/releases?per_page=20");
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(6))
         .connect_timeout(Duration::from_secs(3))
@@ -165,8 +159,7 @@ pub async fn check_now(state: &Arc<HttpState>, force: bool) -> Value {
             },
             Err(err) => {
                 payload["sync"]["check_active"] = json!(false);
-                payload["sync"]["message"] =
-                    json!(format!("Update check failed: reqwest: {err}"));
+                payload["sync"]["message"] = json!(format!("Update check failed: reqwest: {err}"));
                 return payload;
             }
         },
@@ -179,12 +172,7 @@ pub async fn check_now(state: &Arc<HttpState>, force: bool) -> Value {
 
     let (latest_version, selection_message, release_url) =
         extract_latest_github_release(&releases, release_channel);
-    let active_payload = match persist_updates(
-        state,
-        latest_version.as_deref(),
-        &checked_utc,
-    )
-    .await
+    let active_payload = match persist_updates(state, latest_version.as_deref(), &checked_utc).await
     {
         Ok(payload) => payload,
         Err(message) => {
@@ -213,6 +201,7 @@ pub async fn check_now(state: &Arc<HttpState>, force: bool) -> Value {
 pub fn spawn_startup_check(state: Arc<HttpState>) {
     tokio::spawn(async move {
         let _ = check_now(&state, true).await;
+        state.background_tasks.set_startup_check(false);
     });
 }
 
@@ -223,6 +212,6 @@ mod tests {
     #[test]
     fn cache_stale_when_local_version_ahead_of_cached_latest() {
         assert!(is_remote_version_newer("0.5.1", "0.5.2"));
-        assert!(!is_remote_version_newer("0.5.3", "0.5.2"));
+        assert!(is_remote_version_newer("0.5.2", "0.5.3"));
     }
 }

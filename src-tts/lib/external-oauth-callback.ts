@@ -1,3 +1,4 @@
+import { apiFetch } from "./loopback-api-client";
 import {
   clearTwitchOAuthFragment,
   normalizeOAuthToken,
@@ -12,7 +13,7 @@ export async function tryCompleteExternalOAuthCallback(): Promise<boolean> {
   if (!raw) return false;
 
   const token = normalizeOAuthToken(raw);
-  const response = await fetch("/api/tts/twitch/oauth-complete", {
+  const response = await apiFetch("/api/tts/twitch/oauth-complete", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ token }),

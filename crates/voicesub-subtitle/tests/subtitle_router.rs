@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use voicesub_subtitle::{
     SubtitlePayloadEvent, SubtitleRouter, TranscriptEvent, TranscriptKind, TranscriptSegment,
     TranslationEvent, TranslationItem,
@@ -489,7 +489,12 @@ async fn browser_same_sequence_partial_keeps_completed_translations() {
     let (recorder, router) = router_with_config(config);
 
     router
-        .ingest_browser_text("Добрый вечер дамы и господа", true, Some("ru"), Some("browser_google"))
+        .ingest_browser_text(
+            "Добрый вечер дамы и господа",
+            true,
+            Some("ru"),
+            Some("browser_google"),
+        )
         .await;
     apply_translation(
         &router,
@@ -509,7 +514,7 @@ async fn browser_same_sequence_partial_keeps_completed_translations() {
                     success: true,
                     error: None,
                     cached: false,
-                ..Default::default()
+                    ..Default::default()
                 },
                 TranslationItem {
                     slot_id: Some("translation_1".into()),
@@ -520,7 +525,7 @@ async fn browser_same_sequence_partial_keeps_completed_translations() {
                     success: true,
                     error: None,
                     cached: false,
-                ..Default::default()
+                    ..Default::default()
                 },
             ],
             ..Default::default()
@@ -654,7 +659,7 @@ async fn duplicate_target_languages_render_separate_translation_slots() {
                     success: true,
                     error: None,
                     cached: false,
-                ..Default::default()
+                    ..Default::default()
                 },
                 TranslationItem {
                     slot_id: Some("translation_2".into()),
@@ -665,7 +670,7 @@ async fn duplicate_target_languages_render_separate_translation_slots() {
                     success: true,
                     error: None,
                     cached: false,
-                ..Default::default()
+                    ..Default::default()
                 },
             ],
             ..Default::default()

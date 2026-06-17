@@ -5,11 +5,6 @@ export function createWorkerUiStore() {
   let currentStatusRaw = $state("idle");
   let workerStatus = $state("idle");
   let onSound = $state(false);
-  let approxCount = $state(0);
-  let finalCount = $state(0);
-  let missingFinalCount = $state(0);
-  let forcedCount = $state(0);
-  let appSendCount = $state(0);
   let websocketReady = $state(false);
   let configuredLanguage = $state("loading...");
   let sourceLang = $state("");
@@ -26,6 +21,7 @@ export function createWorkerUiStore() {
   let documentHidden = $state(false);
   let lastConfiguredLanguage = $state("");
   let lastSourceLang = $state("");
+  let appVersion = $state("0.5.3");
 
   function recognitionStatusLabel(value: string): string {
     const normalized = String(value || "").replace(/-/g, "_");
@@ -47,21 +43,11 @@ export function createWorkerUiStore() {
   }
 
   function updateCountersFromState(state: {
-    approxCount: number;
-    finalCount: number;
-    missingFinalCount: number;
-    forcedCount: number;
-    appSendCount: number;
     onSound: boolean;
     websocketReady: boolean;
     configuredLanguage: string;
     sourceLang: string;
   }): void {
-    approxCount = state.approxCount;
-    finalCount = state.finalCount;
-    missingFinalCount = state.missingFinalCount;
-    forcedCount = state.forcedCount;
-    appSendCount = state.appSendCount;
     onSound = state.onSound;
     websocketReady = state.websocketReady;
     lastConfiguredLanguage = state.configuredLanguage;
@@ -94,21 +80,6 @@ export function createWorkerUiStore() {
     },
     get onSoundLabel() {
       return onSound ? t("common.yes") : t("common.no");
-    },
-    get approxCount() {
-      return approxCount;
-    },
-    get finalCount() {
-      return finalCount;
-    },
-    get missingFinalCount() {
-      return missingFinalCount;
-    },
-    get forcedCount() {
-      return forcedCount;
-    },
-    get appSendCount() {
-      return appSendCount;
     },
     get websocketReady() {
       return websocketReady;
@@ -163,6 +134,13 @@ export function createWorkerUiStore() {
     },
     get visibilityWarning() {
       return visibilityWarning;
+    },
+    get appVersion() {
+      return appVersion;
+    },
+    setAppVersion(value: string) {
+      const next = value.trim();
+      if (next) appVersion = next;
     },
     get forceFinalizationTimeoutDisabled() {
       return !forceFinalization;

@@ -10,7 +10,7 @@
   <a href="./docs/CHANGELOG.md">Changelog</a>
 </p>
 
-VoiceSub **`0.5.2`** (current line) is a Windows desktop app for streamers who need real-time subtitles with optional translation. It combines browser-based speech recognition, subtitle styling, routing, and OBS output in one local workflow. Default bind is `127.0.0.1:8765` — no cloud backend, no accounts.
+VoiceSub **`0.5.3`** (current line) is a Windows desktop app for streamers who need real-time subtitles with optional translation. It combines browser-based speech recognition, subtitle styling, routing, and OBS output in one local workflow. Default bind is `127.0.0.1:8765` — no cloud backend, no accounts.
 
 Successor to SST Desktop `0.4.4`; first VoiceSub release baseline: **`0.5.0`**. Core stack: **Rust + Tauri**, **Svelte dashboard**, **vanilla OBS overlay**.
 
@@ -38,7 +38,7 @@ Successor to SST Desktop `0.4.4`; first VoiceSub release baseline: **`0.5.0`**. 
 
 ## Quick start
 
-1. Install **VoiceSub** from the release installer (`VoiceSub_0.5.2_x64-setup.exe` or latest in your release folder; developers: `build-release-msi.bat` → `build-release.ps1`).
+1. Install **VoiceSub** from the release installer (`VoiceSub_0.5.3_x64-setup.exe` or latest in your release folder; developers: `build-release-msi.bat` → `build-release.ps1`).
 2. Launch **VoiceSub.exe** — the main window opens the dashboard at `http://127.0.0.1:8765/`.
 3. In OBS, add a **Browser Source** pointing to `http://127.0.0.1:8765/overlay`.
 4. Configure translation and subtitle style if needed, then click **Start**.
@@ -76,7 +76,7 @@ SST `config.json` can be imported on first run or via settings — modes like `l
 | No subtitles at all | Runtime **Start** pressed; worker window open; mic allowed in Chrome |
 | Source text but no translation | Translation enabled; at least one line active; provider credentials |
 | OBS empty | Browser Source URL is `/overlay`; visibility toggles in Subtitles tab; reload source after app update (overlay cache-bust) |
-| OBS text stuck after TTL/Stop | Update to latest build; reload Browser Source (`overlay.js?v=20260610b`, idle TTL DOM clear fix) |
+| OBS text stuck after TTL/Stop | Update to latest build; reload Browser Source (`overlay.js?v=20260615a`, idle TTL DOM clear fix) |
 | Update banner shows raw keys / Download does nothing | Update to latest build (i18n `updates.banner.*`, `open_external_https_url` IPC) |
 | Port conflict | Ensure `8765` is free or change bind (developer build) |
 | Worker dies silently | See Tools & Data → diagnostics; check `logs/core.log` |
@@ -97,11 +97,10 @@ npm run test:frontend
 
 - [Wiki (EN)](./docs/WIKI.en.md) / [Wiki (RU)](./docs/WIKI.ru.md) — user guide
 - [Technical Architecture (EN)](./docs/TECHNICAL_ARCHITECTURE.en.md) / [(RU)](./docs/TECHNICAL_ARCHITECTURE.md)
-- [Roadmap](./docs/plans/voicesub_roadmap.ru.md)
 
-## Roadmap
+## Development
 
-Active development: Parakeet as optional **sidecar module** after 0.5.x. Current patch line **`0.5.2`** — see [CHANGELOG](./docs/CHANGELOG.md). Roadmap: `docs/plans/voicesub_roadmap.ru.md`.
+Current patch line **`0.5.3`** — see [CHANGELOG](./docs/CHANGELOG.md).
 
 ## License
 
@@ -129,7 +128,9 @@ Node.js is **build-time only** — not shipped in the installer.
 
 ```powershell
 npm install
-npm run build          # dashboard + worker + TTS
+npm run build          # dashboard + worker + TTS (runs i18n:export first)
+npm run i18n:export    # scripts/i18n-source → src/lib/i18n/locales/*.json
+npm run i18n:bundle    # overlay locales-bundle.js (after editing scripts/i18n-source/)
 cargo test --workspace
 build-release-msi.bat  # → build-release.ps1 → NSIS setup.exe in release_root
 ```
@@ -142,7 +143,7 @@ Tauri `beforeBuildCommand`: `npm run build`. Resources bundled: `bin/dashboard`,
 
 `src-tauri/` is thin IPC only — no business logic.
 
-Version: `voicesub-types::PROJECT_VERSION` = **`0.5.2`**.
+Version: `voicesub-types::PROJECT_VERSION` = **`0.5.3`**.
 
 Full reference: [Technical Architecture](./docs/TECHNICAL_ARCHITECTURE.en.md).
 

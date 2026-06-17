@@ -21,7 +21,10 @@ pub fn is_plain_decimal_char(ch: char) -> bool {
 
 pub fn is_plain_decimal_token(token: &str) -> bool {
     let trimmed = token.trim_matches(|ch: char| {
-        matches!(ch, ',' | '.' | '!' | '?' | ';' | ':' | ')' | ']' | '"' | '\'')
+        matches!(
+            ch,
+            ',' | '.' | '!' | '?' | ';' | ':' | ')' | ']' | '"' | '\''
+        )
     });
     !trimmed.is_empty() && trimmed.chars().all(is_plain_decimal_char)
 }
@@ -100,14 +103,26 @@ mod tests {
             let sample = format!("x {digit} y {digit}{digit}{digit} z");
             assert_eq!(strip_unicode_emoji(&sample), sample);
         }
-        assert_eq!(strip_unicode_emoji("0 42 999 1234567890"), "0 42 999 1234567890");
+        assert_eq!(
+            strip_unicode_emoji("0 42 999 1234567890"),
+            "0 42 999 1234567890"
+        );
     }
 
     #[test]
     fn preserves_unicode_decimal_digit_blocks() {
-        assert_eq!(strip_unicode_emoji("count \u{0661}\u{0662}\u{0663} ok"), "count \u{0661}\u{0662}\u{0663} ok");
-        assert_eq!(strip_unicode_emoji("count \u{06F4}\u{06F5} ok"), "count \u{06F4}\u{06F5} ok");
-        assert_eq!(strip_unicode_emoji("count \u{FF11}\u{FF12} ok"), "count \u{FF11}\u{FF12} ok");
+        assert_eq!(
+            strip_unicode_emoji("count \u{0661}\u{0662}\u{0663} ok"),
+            "count \u{0661}\u{0662}\u{0663} ok"
+        );
+        assert_eq!(
+            strip_unicode_emoji("count \u{06F4}\u{06F5} ok"),
+            "count \u{06F4}\u{06F5} ok"
+        );
+        assert_eq!(
+            strip_unicode_emoji("count \u{FF11}\u{FF12} ok"),
+            "count \u{FF11}\u{FF12} ok"
+        );
     }
 
     #[test]

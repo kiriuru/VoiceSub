@@ -1,14 +1,13 @@
 use std::collections::HashMap;
 
 use async_trait::async_trait;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use std::sync::Arc;
 
 use super::{
-    http::SharedHttpClient,
-    base_diagnostics, mask_secret, normalize_source_lang, ProviderError, ProviderInfo,
-    TranslateRequest, TranslationProvider,
+    ProviderError, ProviderInfo, TranslateRequest, TranslationProvider, base_diagnostics,
+    http::SharedHttpClient, mask_secret, normalize_source_lang,
 };
 
 pub struct GoogleTranslateV2Provider {
@@ -26,26 +25,27 @@ impl GoogleTranslateV2Provider {
         let mut extracted_from_query = false;
         let mut removed_trailing_query = false;
 
-        if trimmed.contains("key=") {
-            if let Some(start) = trimmed.find("key=") {
-                let query = &trimmed[start..];
-                if let Some(value) = query.strip_prefix("key=") {
-                    let candidate = value.split('&').next().unwrap_or(value).trim();
-                    if !candidate.is_empty() {
-                        normalized = candidate.to_string();
-                        extracted_from_query = candidate != trimmed;
-                    }
+        if trimmed.contains("key=")
+            && let Some(start) = trimmed.find("key=")
+        {
+            let query = &trimmed[start..];
+            if let Some(value) = query.strip_prefix("key=") {
+                let candidate = value.split('&').next().unwrap_or(value).trim();
+                if !candidate.is_empty() {
+                    normalized = candidate.to_string();
+                    extracted_from_query = candidate != trimmed;
                 }
             }
         }
 
-        if normalized.starts_with("AIza") && normalized.contains('&') {
-            if let Some(candidate) = normalized.split('&').next() {
-                if !candidate.is_empty() && candidate != normalized {
-                    normalized = candidate.to_string();
-                    removed_trailing_query = true;
-                }
-            }
+        if normalized.starts_with("AIza")
+            && normalized.contains('&')
+            && let Some(candidate) = normalized.split('&').next()
+            && !candidate.is_empty()
+            && candidate != normalized
+        {
+            normalized = candidate.to_string();
+            removed_trailing_query = true;
         }
 
         let diagnostics = json!({

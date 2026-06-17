@@ -65,7 +65,6 @@ build/
 
 # --- Local-only: not published to Git (dev, installer, internal docs) ---
 AGENTS.md
-docs/VOICESUB_ENGINEERING_CONTRACT.ru.md
 start-voicesub.bat
 build-release.ps1
 build-release-msi.ps1
@@ -77,12 +76,14 @@ xtask/
 src-tauri/windows/hooks.nsh
 src-tauri/windows/installer.nsi
 legacy/
+docs/COMMIT_CONVENTIONS.md
 
 # --- OS / IDE ---
 .vscode/
 .idea/
 .cursor/
 .codex/
+.agents/
 .DS_Store
 Thumbs.db
 *.swp

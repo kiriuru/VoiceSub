@@ -9,14 +9,14 @@ use tauri::{AppHandle, Manager, State, WebviewUrl, WebviewWindow, WebviewWindowB
 
 use tracing::{debug, info, warn};
 
-use voicesub_twitch::{SourceTextReplacementSettings, TwitchTtsSettings};
-use voicesub_audio::{PlaybackHub, CHANNEL_SPEECH, CHANNEL_TWITCH};
+use voicesub_audio::{CHANNEL_SPEECH, CHANNEL_TWITCH, PlaybackHub};
 use voicesub_tts::{
-    bind_window_process, build_tts_module_url, speech_queue_item_id, tts_webview_data_dir,
-    validate_twitch_oauth_url, ChannelEnqueueResult, SpeechQueueItem, TtsConfig, TtsModuleService,
-    TtsSpeechPipeline, TtsSpeechSettings, TTS_WINDOW_LABEL,
+    ChannelEnqueueResult, SpeechQueueItem, TTS_WINDOW_LABEL, TtsConfig, TtsModuleService,
+    TtsSpeechPipeline, TtsSpeechSettings, bind_window_process, build_tts_module_url,
+    speech_queue_item_id, tts_webview_data_dir, validate_twitch_oauth_url,
 };
 use voicesub_twitch::TwitchConnectionStatus;
+use voicesub_twitch::{SourceTextReplacementSettings, TwitchTtsSettings};
 
 use crate::webview_memory::{self, SharedWebviewMemoryManager};
 
@@ -174,19 +174,13 @@ pub fn sync_playback_devices(state: &TtsState) {
     state.pipeline.sync_enabled_from_config();
 }
 
-
-
 #[tauri::command]
 
 pub fn tts_get_config(state: State<'_, TtsState>) -> Result<TtsConfig, String> {
-
     debug!(target: "voicesub.tts.ipc", "tts_get_config");
 
     state.service.load_config().map_err(|e| e.to_string())
-
 }
-
-
 
 #[tauri::command]
 
@@ -218,8 +212,6 @@ pub fn tts_set_enabled(
     webview_memory::refresh_from_state(&app, memory.inner());
     Ok(config)
 }
-
-
 
 #[tauri::command]
 
@@ -336,83 +328,52 @@ pub fn tts_stop_channel(state: State<'_, TtsState>, channel: String) -> Result<(
         .map_err(|e| e.to_string())
 }
 
-
-
 #[tauri::command]
 
 pub fn tts_list_output_devices() -> Result<Vec<voicesub_audio::AudioOutputDevice>, String> {
-
     debug!(target: "voicesub.tts.ipc", "tts_list_output_devices");
 
     voicesub_audio::list_output_devices_on_thread().map_err(|e| e.to_string())
-
 }
-
-
 
 #[tauri::command]
 
 pub fn tts_get_audio_routing() -> Result<String, String> {
-
     Ok(if voicesub_audio::is_per_process_routing_enabled() {
-
         "winapi".to_string()
-
     } else {
-
         "browser".to_string()
-
     })
-
 }
-
-
 
 #[tauri::command]
 
 pub fn tts_bind_window_audio(
-
     app: AppHandle,
 
     state: State<'_, TtsState>,
-
 ) -> Result<TtsConfig, String> {
-
     let window = app
-
         .get_webview_window(TTS_WINDOW_LABEL)
-
         .ok_or_else(|| "TTS window is not open".to_string())?;
 
     bind_tts_window_audio(&state.service, &window)
-
 }
-
-
 
 #[tauri::command]
 
 pub fn tts_update_speech_settings(
-
     state: State<'_, TtsState>,
 
     speech: TtsSpeechSettings,
-
 ) -> Result<TtsConfig, String> {
-
     info!(target: "voicesub.tts.ipc", "tts_update_speech_settings");
 
     state
-
         .service
-
         .update_speech_settings(speech)
-
         .map_err(|e| e.to_string())
-
 }
-
-
 
 #[tauri::command]
 
@@ -433,24 +394,16 @@ pub fn tts_update_voice_settings(
         .map_err(|e| e.to_string())
 }
 
-
-
 #[tauri::command]
 
 pub fn tts_plan_subtitle_speech(
-
     state: State<'_, TtsState>,
 
     payload: Value,
-
 ) -> Result<Vec<SpeechQueueItem>, String> {
-
     let sequence = payload
-
         .get("sequence")
-
         .and_then(|v| v.as_u64())
-
         .unwrap_or(0);
 
     debug!(
@@ -464,24 +417,17 @@ pub fn tts_plan_subtitle_speech(
     );
 
     Ok(state.service.plan_subtitle_speech(&payload))
-
 }
-
-
 
 #[tauri::command]
 
 pub fn tts_reset_subtitle_planner(state: State<'_, TtsState>) -> Result<(), String> {
-
     info!(target: "voicesub.tts.ipc", "tts_reset_subtitle_planner");
 
     state.service.reset_subtitle_planner();
 
     Ok(())
-
 }
-
-
 
 #[tauri::command]
 pub fn tts_channel_enqueue(
@@ -552,10 +498,7 @@ pub fn tts_get_resource_telemetry() -> voicesub_audio::ResourceTelemetry {
 }
 
 #[tauri::command]
-pub fn tts_channel_force_idle(
-    state: State<'_, TtsState>,
-    channel: String,
-) -> Result<(), String> {
+pub fn tts_channel_force_idle(state: State<'_, TtsState>, channel: String) -> Result<(), String> {
     info!(target: "voicesub.tts.ipc", channel = %channel, "tts_channel_force_idle");
     state
         .service
@@ -603,8 +546,6 @@ pub fn tts_enqueue(
         .map_err(|e| e.to_string())
 }
 
-
-
 #[tauri::command]
 pub fn tts_twitch_get_status(state: State<'_, TtsState>) -> Result<TwitchConnectionStatus, String> {
     let status = state.service.twitch_status();
@@ -644,13 +585,10 @@ pub fn tts_update_twitch_settings(
         enabled = twitch.enabled,
         "tts_update_twitch_settings"
     );
-    let config = state
-        .service
-        .update_twitch_settings(twitch)
-        .map_err(|e| {
-            warn!(target: "voicesub.tts.ipc", error = %e, "tts_update_twitch_settings failed");
-            e.to_string()
-        })?;
+    let config = state.service.update_twitch_settings(twitch).map_err(|e| {
+        warn!(target: "voicesub.tts.ipc", error = %e, "tts_update_twitch_settings failed");
+        e.to_string()
+    })?;
     let label = TtsModuleService::device_label_for_channel(&config, CHANNEL_TWITCH);
     state
         .playback
@@ -758,32 +696,19 @@ async fn open_tts_window(
 
     info!(target: "voicesub.tts.ipc", url = %url, "creating tts window");
 
-    let parsed = url
-
-        .parse::<url::Url>()
-
-        .map_err(|e| e.to_string())?;
+    let parsed = url.parse::<url::Url>().map_err(|e| e.to_string())?;
 
     let data_dir: PathBuf = tts_webview_data_dir(state.service.config_path());
     let _ = fs::create_dir_all(&data_dir);
 
     let window = WebviewWindowBuilder::new(&app, TTS_WINDOW_LABEL, WebviewUrl::External(parsed))
-
         .title("VoiceSub TTS")
-
         .inner_size(720.0, 560.0)
-
         .min_inner_size(480.0, 420.0)
-
         .resizable(true)
-
         .data_directory(data_dir)
-
         .build()
-
         .map_err(|e| e.to_string())?;
-
-
 
     if voicesub_audio::is_per_process_routing_enabled() {
         let _ = bind_tts_window_audio(&state.service, &window);
@@ -801,8 +726,6 @@ async fn open_tts_window(
     Ok(())
 }
 
-
-
 fn bind_tts_window_audio(
     service: &TtsModuleService,
     window: &WebviewWindow,
@@ -816,11 +739,8 @@ fn bind_tts_window_audio(
 }
 
 fn window_process_id(window: &WebviewWindow) -> Option<u32> {
-
     #[cfg(windows)]
-
     {
-
         use windows::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId;
 
         let hwnd = window.hwnd().ok()?;
@@ -828,24 +748,16 @@ fn window_process_id(window: &WebviewWindow) -> Option<u32> {
         let mut pid = 0u32;
 
         unsafe {
-
             GetWindowThreadProcessId(hwnd, Some(&mut pid));
-
         }
 
         if pid == 0 { None } else { Some(pid) }
-
     }
 
     #[cfg(not(windows))]
-
     {
-
         let _ = window;
 
         None
-
     }
-
 }
-

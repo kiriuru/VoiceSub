@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tracing::trace;
 
 use crate::queue::SpeechQueueItem;
@@ -144,16 +144,21 @@ impl SubtitleSpeechPlanner {
             let Some(obj) = item.as_object() else {
                 continue;
             };
-            let kind = obj
-                .get("kind")
-                .and_then(|v| v.as_str())
-                .unwrap_or("source");
+            let kind = obj.get("kind").and_then(|v| v.as_str()).unwrap_or("source");
             if obj.get("visible").and_then(|v| v.as_bool()) == Some(false) {
-                tts_trace::trace("planner", "skip_invisible", json!({ "sequence": sequence, "kind": kind }));
+                tts_trace::trace(
+                    "planner",
+                    "skip_invisible",
+                    json!({ "sequence": sequence, "kind": kind }),
+                );
                 continue;
             }
             if obj.get("success").and_then(|v| v.as_bool()) == Some(false) {
-                tts_trace::trace("planner", "skip_failed", json!({ "sequence": sequence, "kind": kind }));
+                tts_trace::trace(
+                    "planner",
+                    "skip_failed",
+                    json!({ "sequence": sequence, "kind": kind }),
+                );
                 continue;
             }
 
@@ -172,14 +177,15 @@ impl SubtitleSpeechPlanner {
                 continue;
             }
 
-            let slot_id = obj
-                .get("slot_id")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
+            let slot_id = obj.get("slot_id").and_then(|v| v.as_str()).unwrap_or("");
 
             let is_source = kind.eq_ignore_ascii_case("source");
             if is_source && !settings.speak_source {
-                tts_trace::trace("planner", "skip_source_disabled", json!({ "sequence": sequence }));
+                tts_trace::trace(
+                    "planner",
+                    "skip_source_disabled",
+                    json!({ "sequence": sequence }),
+                );
                 continue;
             }
             if !is_source && !translation_slot_allowed(settings, slot_id) {
@@ -227,7 +233,9 @@ impl SubtitleSpeechPlanner {
         if current_sequence > self.max_sequence_seen {
             self.max_sequence_seen = current_sequence;
         }
-        let cutoff = self.max_sequence_seen.saturating_sub(SPOKEN_KEYS_SEQUENCE_WINDOW);
+        let cutoff = self
+            .max_sequence_seen
+            .saturating_sub(SPOKEN_KEYS_SEQUENCE_WINDOW);
         let over_capacity = self.spoken_keys.len() > SPOKEN_KEYS_MAX;
         if !over_capacity && cutoff == 0 {
             return;
@@ -269,7 +277,11 @@ fn stable_text_hash(text: &str) -> u64 {
     hash
 }
 
-fn speech_lang_for_item(item: &serde_json::Map<String, Value>, is_source: bool, payload: &Value) -> String {
+fn speech_lang_for_item(
+    item: &serde_json::Map<String, Value>,
+    is_source: bool,
+    payload: &Value,
+) -> String {
     let from_item = if is_source {
         item.get("lang").and_then(|v| v.as_str())
     } else {
@@ -449,10 +461,7 @@ mod tests {
             planner.spoken_keys_len()
         );
 
-        let repeat = completed_payload(
-            500,
-            vec![json!({"kind": "source", "text": "line 500"})],
-        );
+        let repeat = completed_payload(500, vec![json!({"kind": "source", "text": "line 500"})]);
         assert!(planner.plan(&repeat, &settings).is_empty());
     }
 

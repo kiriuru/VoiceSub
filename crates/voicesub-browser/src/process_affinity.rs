@@ -15,19 +15,20 @@ fn env_truthy(name: &str) -> Option<bool> {
 }
 
 fn parse_usize_env(name: &str) -> Option<usize> {
-    std::env::var(name)
-        .ok()
-        .and_then(|raw| {
-            let trimmed = raw.trim();
-            if trimmed.is_empty() {
-                return None;
-            }
-            if let Some(hex) = trimmed.strip_prefix("0x").or_else(|| trimmed.strip_prefix("0X")) {
-                usize::from_str_radix(hex, 16).ok()
-            } else {
-                trimmed.parse().ok()
-            }
-        })
+    std::env::var(name).ok().and_then(|raw| {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            return None;
+        }
+        if let Some(hex) = trimmed
+            .strip_prefix("0x")
+            .or_else(|| trimmed.strip_prefix("0X"))
+        {
+            usize::from_str_radix(hex, 16).ok()
+        } else {
+            trimmed.parse().ok()
+        }
+    })
 }
 
 /// Resolve affinity mask for the browser worker process.
@@ -75,7 +76,7 @@ pub fn apply_browser_worker_affinity(pid: u32) {
     {
         use windows::Win32::Foundation::CloseHandle;
         use windows::Win32::System::Threading::{
-            OpenProcess, SetProcessAffinityMask, PROCESS_SET_INFORMATION,
+            OpenProcess, PROCESS_SET_INFORMATION, SetProcessAffinityMask,
         };
 
         unsafe {
@@ -89,7 +90,10 @@ pub fn apply_browser_worker_affinity(pid: u32) {
             let ok = SetProcessAffinityMask(handle, mask);
             let _ = CloseHandle(handle);
             if ok.is_err() {
-                warn!(pid, mask, "browser worker affinity: SetProcessAffinityMask failed");
+                warn!(
+                    pid,
+                    mask, "browser worker affinity: SetProcessAffinityMask failed"
+                );
             } else {
                 debug!(pid, mask, "browser worker affinity applied");
             }
@@ -109,19 +113,25 @@ mod tests {
 
     #[test]
     fn affinity_mask_resolution_cases() {
-        std::env::remove_var(ENV_AFFINITY);
-        std::env::remove_var(ENV_AFFINITY_MASK);
-        std::env::remove_var(ENV_EXCLUDE_LOW);
+        unsafe {
+            std::env::remove_var(ENV_AFFINITY);
+            std::env::remove_var(ENV_AFFINITY_MASK);
+            std::env::remove_var(ENV_EXCLUDE_LOW);
 
-        std::env::set_var(ENV_AFFINITY, "0");
+            std::env::set_var(ENV_AFFINITY, "0");
+        }
         assert!(resolve_browser_worker_affinity_mask().is_none());
-        std::env::remove_var(ENV_AFFINITY);
+        unsafe {
+            std::env::remove_var(ENV_AFFINITY);
 
-        std::env::set_var(ENV_AFFINITY_MASK, "0xFC");
+            std::env::set_var(ENV_AFFINITY_MASK, "0xFC");
+        }
         assert_eq!(resolve_browser_worker_affinity_mask(), Some(0xFC));
-        std::env::remove_var(ENV_AFFINITY_MASK);
+        unsafe {
+            std::env::remove_var(ENV_AFFINITY_MASK);
 
-        std::env::set_var(ENV_EXCLUDE_LOW, "2");
+            std::env::set_var(ENV_EXCLUDE_LOW, "2");
+        }
         let cores = std::thread::available_parallelism()
             .map(|count| count.get())
             .unwrap_or(0);
@@ -131,6 +141,8 @@ mod tests {
             let mask = resolve_browser_worker_affinity_mask().expect("mask");
             assert_eq!(mask & 0b11, 0);
         }
-        std::env::remove_var(ENV_EXCLUDE_LOW);
+        unsafe {
+            std::env::remove_var(ENV_EXCLUDE_LOW);
+        }
     }
 }

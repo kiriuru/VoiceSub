@@ -1,8 +1,8 @@
 use std::sync::{Arc, Mutex};
 
 use serde_json::json;
-use voicesub_browser::{structured_log_from_runtime_logger, BrowserAsrGateway, StructuredLogFn};
-use voicesub_logging::{set_config_full_logging_enabled, StructuredRuntimeLogger};
+use voicesub_browser::{BrowserAsrGateway, StructuredLogFn, structured_log_from_runtime_logger};
+use voicesub_logging::{StructuredRuntimeLogger, set_config_full_logging_enabled};
 
 #[derive(Debug, Clone)]
 struct LogRecord {
@@ -59,19 +59,26 @@ fn tracks_connection_and_logs_final_not_partial() {
         "rearm_count": 2,
     }));
     gateway.note_partial(7, Some("en"), Some(11));
-    gateway.note_final(12, Some("en"), Some(12));
+    gateway.note_final(12, Some("en"), Some(12), false);
 
     let events = logger.events();
     assert!(events.contains(&"browser_worker_connected".to_string()));
     assert!(events.contains(&"browser_recognition_started".to_string()));
     assert!(events.contains(&"browser_degraded".to_string()));
-    assert!(!events.iter().any(|event| event == "browser_external_partial"));
+    assert!(
+        !events
+            .iter()
+            .any(|event| event == "browser_external_partial")
+    );
     assert!(events.contains(&"browser_external_final".to_string()));
 
     gateway.worker_disconnected();
     let diagnostics = gateway.diagnostics();
     assert!(!diagnostics.worker_connected);
-    assert_eq!(diagnostics.recognition_state.as_deref(), Some("disconnected"));
+    assert_eq!(
+        diagnostics.recognition_state.as_deref(),
+        Some("disconnected")
+    );
 }
 
 #[test]
@@ -83,10 +90,12 @@ fn note_partial_does_not_emit_structured_events() {
     for index in 0..40 {
         gateway.note_partial(5, Some("en"), Some(index));
     }
-    assert!(!logger
-        .events()
-        .iter()
-        .any(|event| event == "browser_external_partial"));
+    assert!(
+        !logger
+            .events()
+            .iter()
+            .any(|event| event == "browser_external_partial")
+    );
 }
 
 #[test]
@@ -104,8 +113,16 @@ fn samples_routine_recognition_started_events() {
         "visibility_state": "visible",
         "rearm_count": 24,
     }));
-    assert!(!logger.events().contains(&"browser_worker_status".to_string()));
-    assert!(!logger.events().contains(&"browser_recognition_started".to_string()));
+    assert!(
+        !logger
+            .events()
+            .contains(&"browser_worker_status".to_string())
+    );
+    assert!(
+        !logger
+            .events()
+            .contains(&"browser_recognition_started".to_string())
+    );
 
     logger.records.lock().unwrap().clear();
     gateway.update_status(&json!({
@@ -116,7 +133,11 @@ fn samples_routine_recognition_started_events() {
         "visibility_state": "visible",
         "rearm_count": 25,
     }));
-    assert!(logger.events().contains(&"browser_recognition_started".to_string()));
+    assert!(
+        logger
+            .events()
+            .contains(&"browser_recognition_started".to_string())
+    );
 }
 
 #[test]
@@ -268,10 +289,7 @@ fn stores_overlap_fields_in_diagnostics() {
 
 #[test]
 fn structured_log_from_runtime_logger_writes_browser_channel() {
-    let dir = std::env::temp_dir().join(format!(
-        "voicesub-browser-gateway-{}",
-        std::process::id()
-    ));
+    let dir = std::env::temp_dir().join(format!("voicesub-browser-gateway-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
 
@@ -280,7 +298,7 @@ fn structured_log_from_runtime_logger_writes_browser_channel() {
     let structured = structured_log_from_runtime_logger(runtime_logger.clone());
     let mut gateway = BrowserAsrGateway::new(Some(structured));
     gateway.worker_connected();
-    gateway.note_final(4, Some("en"), Some(1));
+    gateway.note_final(4, Some("en"), Some(1), false);
 
     let joined = std::fs::read_to_string(runtime_logger.log_path()).unwrap_or_default();
     assert!(joined.contains("browser_worker_connected"));
@@ -289,4 +307,32 @@ fn structured_log_from_runtime_logger_writes_browser_channel() {
 
     set_config_full_logging_enabled(false);
     let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn reset_ingest_session_preserves_worker_connection() {
+    let mut gateway = BrowserAsrGateway::new(None);
+    gateway.worker_connected();
+    gateway.update_status(&json!({
+        "reason": "recognition-started",
+        "generation_id": 3,
+        "session_id": "browser-worker-test",
+        "client_segment_id": "seg-1",
+    }));
+    gateway.note_final(2, Some("ru"), Some(3), true);
+    gateway.note_stale_worker_event_ignored();
+
+    let before = gateway.diagnostics();
+    assert!(before.worker_connected);
+    assert_eq!(before.generation_id, 3);
+    assert_eq!(before.stale_worker_events_ignored, 1);
+    assert_eq!(before.session_id.as_deref(), Some("browser-worker-test"));
+
+    gateway.reset_ingest_session();
+    let after = gateway.diagnostics();
+    assert!(after.worker_connected);
+    assert_eq!(after.generation_id, 0);
+    assert_eq!(after.stale_worker_events_ignored, 0);
+    assert!(after.session_id.is_none());
+    assert!(!after.forced_final);
 }

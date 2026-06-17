@@ -129,7 +129,9 @@ mod tests {
             .enqueue(CHANNEL_TWITCH, item("t1"), 8)
             .expect("twitch enqueue");
         let _ = queues.begin_next(CHANNEL_SPEECH).expect("speech begin");
-        queues.force_idle(CHANNEL_SPEECH).expect("speech force idle");
+        queues
+            .force_idle(CHANNEL_SPEECH)
+            .expect("speech force idle");
         assert_eq!(
             queues
                 .begin_next(CHANNEL_SPEECH)
@@ -165,8 +167,18 @@ mod tests {
             .expect("twitch enqueue");
         let _ = queues.begin_next(CHANNEL_SPEECH).expect("speech begin");
         let _ = queues.begin_next(CHANNEL_TWITCH).expect("twitch begin");
-        assert!(queues.begin_next(CHANNEL_SPEECH).expect("blocked").is_none());
-        assert!(queues.begin_next(CHANNEL_TWITCH).expect("blocked").is_none());
+        assert!(
+            queues
+                .begin_next(CHANNEL_SPEECH)
+                .expect("blocked")
+                .is_none()
+        );
+        assert!(
+            queues
+                .begin_next(CHANNEL_TWITCH)
+                .expect("blocked")
+                .is_none()
+        );
         queues.force_idle_all();
         assert_eq!(
             queues

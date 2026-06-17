@@ -3,8 +3,8 @@
 use std::sync::Arc;
 
 use serde::Serialize;
-use serde_json::{json, Value};
-use tokio::sync::{mpsc, Mutex};
+use serde_json::{Value, json};
+use tokio::sync::{Mutex, mpsc};
 use tracing::warn;
 
 use crate::operational_fsm::BrowserAsrOperationalFsm;
@@ -109,7 +109,6 @@ pub struct IngestedAsrUpdate {
     pub session_id: Option<String>,
     pub client_segment_id: Option<String>,
     pub forced_final: bool,
-    pub transport_id: u64,
     pub worker_message_sequence: Option<u64>,
 }
 
@@ -225,10 +224,8 @@ impl BrowserAsrService {
             inner.fsm.note_worker_disconnected();
             true
         };
-        if should_notify {
-            if let Some(cb) = &self.on_worker_disconnected {
-                cb();
-            }
+        if should_notify && let Some(cb) = &self.on_worker_disconnected {
+            cb();
         }
     }
 
@@ -261,7 +258,6 @@ impl BrowserAsrService {
             session_id: payload_opt_str(payload, "session_id"),
             client_segment_id: payload_opt_str(payload, "client_segment_id"),
             forced_final: payload_bool(payload, "forced_final"),
-            transport_id,
             worker_message_sequence: payload.get("worker_message_sequence").and_then(|v| {
                 v.as_u64()
                     .or_else(|| v.as_i64().and_then(|n| u64::try_from(n).ok()))
@@ -308,11 +304,7 @@ impl BrowserAsrService {
         snap
     }
 
-    pub async fn has_active_transport(&self) -> bool {
-        self.inner.lock().await.outbound.is_some()
-    }
-
-    async fn apply_status_snapshot(&self, transport_id: u64, payload: &Value) {
+    async fn apply_status_snapshot(&self, _transport_id: u64, payload: &Value) {
         let mut inner = self.inner.lock().await;
         inner.snapshot.worker_connected = true;
         inner.snapshot.recognition_state = payload
@@ -375,7 +367,6 @@ impl BrowserAsrService {
             payload_u64(payload, "media_track_leak_guard_count");
         let degraded = inner.snapshot.degraded_reason.clone();
         inner.fsm.note_status_aggregate(true, degraded.as_deref());
-        let _ = transport_id;
     }
 
     async fn accept_payload(&self, transport_id: u64, payload: &Value) -> bool {
@@ -392,16 +383,16 @@ impl BrowserAsrService {
         let session_id = payload_opt_str(payload, "session_id");
         let generation_id = payload_u64(payload, "generation_id");
 
-        if let (Some(sid), Some(active_sid)) = (&session_id, &inner.active_session_id) {
-            if sid != active_sid {
-                if generation_id > 0 && generation_id <= inner.active_generation_id {
-                    inner.snapshot.browser_stale_events_ignored += 1;
-                    return false;
-                }
-                inner.active_session_id = session_id.clone();
-                inner.active_generation_id = generation_id;
-                return true;
+        if let (Some(sid), Some(active_sid)) = (&session_id, &inner.active_session_id)
+            && sid != active_sid
+        {
+            if generation_id > 0 && generation_id <= inner.active_generation_id {
+                inner.snapshot.browser_stale_events_ignored += 1;
+                return false;
             }
+            inner.active_session_id = session_id.clone();
+            inner.active_generation_id = generation_id;
+            return true;
         }
         if session_id.is_some() && inner.active_session_id.is_none() {
             inner.active_session_id = session_id;

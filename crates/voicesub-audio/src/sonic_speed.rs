@@ -9,16 +9,24 @@ use crate::error::AudioError;
 
 type SonicStream = *mut std::ffi::c_void;
 
-extern "C" {
+unsafe extern "C" {
     fn sonicCreateStream(sample_rate: c_int, num_channels: c_int) -> SonicStream;
     fn sonicDestroyStream(stream: SonicStream);
     fn sonicSetSpeed(stream: SonicStream, speed: f32);
     fn sonicSetPitch(stream: SonicStream, pitch: f32);
     fn sonicSetQuality(stream: SonicStream, quality: c_int);
-    fn sonicWriteFloatToStream(stream: SonicStream, samples: *const f32, num_samples: c_int) -> c_int;
+    fn sonicWriteFloatToStream(
+        stream: SonicStream,
+        samples: *const f32,
+        num_samples: c_int,
+    ) -> c_int;
     fn sonicFlushStream(stream: SonicStream) -> c_int;
     fn sonicSamplesAvailable(stream: SonicStream) -> c_int;
-    fn sonicReadFloatFromStream(stream: SonicStream, samples: *mut f32, max_samples: c_int) -> c_int;
+    fn sonicReadFloatFromStream(
+        stream: SonicStream,
+        samples: *mut f32,
+        max_samples: c_int,
+    ) -> c_int;
 }
 
 /// Incremental libsonic processor for chunked MP3 decode + playback.
@@ -34,7 +42,9 @@ impl SonicProcessor {
         unsafe {
             let stream = sonicCreateStream(sample_rate as c_int, channels as c_int);
             if stream.is_null() {
-                return Err(AudioError::PlaybackFailed("sonic stream init failed".into()));
+                return Err(AudioError::PlaybackFailed(
+                    "sonic stream init failed".into(),
+                ));
             }
             sonicSetSpeed(stream, speed);
             sonicSetPitch(stream, 1.0);
@@ -92,7 +102,9 @@ impl SonicProcessor {
             out.extend(chunk);
         }
         if out.is_empty() {
-            return Err(AudioError::PlaybackFailed("sonic produced no output".into()));
+            return Err(AudioError::PlaybackFailed(
+                "sonic produced no output".into(),
+            ));
         }
         Ok(out)
     }
@@ -128,7 +140,7 @@ pub fn change_speech_speed(
 
 #[cfg(test)]
 mod tests {
-    use super::{change_speech_speed, SonicProcessor};
+    use super::{SonicProcessor, change_speech_speed};
 
     #[test]
     fn sonic_shortens_for_faster_rate() {

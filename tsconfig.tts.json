@@ -1,0 +1,28 @@
+{
+  "compilerOptions": {
+    "target": "ES2024",
+    "lib": ["ES2024", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "resolveJsonModule": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "types": ["svelte"]
+  },
+  "include": [
+    "src-tts/**/*.ts",
+    "src-tts/**/*.svelte",
+    "src-tts/env.d.ts",
+    "src/lib/**/*.ts"
+  ],
+  "exclude": [
+    "src-tts/**/*.test.ts",
+    "src/**/*.test.ts",
+    "src-worker/**",
+    "vitest.lib.config.ts",
+    "vitest.lib.setup.ts",
+    "vitest.worker.config.ts",
+    "vitest.renderer.config.ts",
+    "tests/renderer/**"
+  ]
+}

@@ -1,7 +1,7 @@
 {
   "name": "voicesub",
   "private": true,
-  "version": "0.5.2",
+  "version": "0.5.3",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,18 +9,28 @@
     "build:worker": "vite build --config vite.worker.config.ts",
     "build:tts": "vite build --config vite.tts.config.ts",
     "i18n:export": "node scripts/export-i18n.mjs",
+    "i18n:bundle": "node scripts/build-locale-bundle.mjs",
     "check": "svelte-check --tsconfig ./tsconfig.json",
+    "check:tts": "svelte-check --tsconfig ./tsconfig.tts.json",
+    "check:all": "npm run check && npm run check:tts",
     "test:worker": "vitest run --config vitest.worker.config.ts",
     "test:renderer": "vitest run --config vitest.renderer.config.ts",
     "test:lib": "vitest run --config vitest.lib.config.ts",
-    "test:frontend": "npm run test:lib && npm run test:worker && npm run test:renderer"
+    "test:frontend": "npm run test:lib && npm run test:worker && npm run test:renderer",
+    "prepare": "husky"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.2.0"
   },
+  "overrides": {
+    "esbuild": "^0.28.1"
+  },
   "devDependencies": {
+    "@commitlint/cli": "^19.8.1",
+    "@commitlint/config-conventional": "^19.8.1",
     "@sveltejs/vite-plugin-svelte": "^5.0.3",
     "happy-dom": "^20.10.2",
+    "husky": "^9.1.7",
     "lucide-svelte": "^1.0.1",
     "svelte": "^5.19.0",
     "svelte-check": "^4.1.4",

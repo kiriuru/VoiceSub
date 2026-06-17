@@ -83,7 +83,11 @@ fn golden_config_migrate_unversioned_schema() {
         .filter_map(|v| v.as_str())
         .collect();
     assert_eq!(slots, expected_slots);
-    assert!(actual["subtitle_style"]["custom_presets"].get("stream").is_some());
+    assert!(
+        actual["subtitle_style"]["custom_presets"]
+            .get("stream")
+            .is_some()
+    );
 }
 
 #[test]

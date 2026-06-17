@@ -15,7 +15,7 @@ pub fn strip_configured_symbols(text: &str, symbols: &[String]) -> String {
     if entries.is_empty() {
         return text.to_string();
     }
-    entries.sort_by(|a, b| b.chars().count().cmp(&a.chars().count()));
+    entries.sort_by_key(|entry| std::cmp::Reverse(entry.chars().count()));
 
     let mut result = text.to_string();
     for symbol in entries {

@@ -1,4 +1,4 @@
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use voicesub_logging::tts_trace;
 
 pub fn trace(component: &str, event: &str, fields: Value) {

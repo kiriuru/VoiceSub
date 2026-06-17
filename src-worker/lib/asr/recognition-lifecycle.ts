@@ -134,7 +134,7 @@ export function performControlledStart(manager: AsrManagerHost, reason: string):
     createOverlapRecognitionPair(manager, generationId);
     invokeRecognitionStart(
       manager,
-      manager.state.recognitionOverlapSlots![0],
+      manager.state.recognitionOverlapSlots![0]!,
       reason,
       startLogThrottle,
       "overlap slot0"
@@ -206,7 +206,7 @@ export function scheduleRestart(
   manager.state.restartCount = Number(manager.state.restartCount || 0) + 1;
   manager.state.lastRestartReason = normalizedReason;
   manager.setSupervisorStateInternal(
-    delayMs > manager.restartDelayByReasonMs.normal_onend ? "backoff" : "restarting"
+    delayMs > (manager.restartDelayByReasonMs.normal_onend ?? 0) ? "backoff" : "restarting"
   );
   manager.setStatusInternal("restarting");
   const capturedGeneration = Number(manager.state.generationId || 0);

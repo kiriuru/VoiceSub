@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::sync::{Mutex, OnceLock};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::diagnostics::is_subtitle_trace_enabled;
 use crate::jsonl_trace::JsonlTraceLog;
@@ -39,12 +39,7 @@ pub fn subtitle_trace(lane: &str, component: &str, event: &str, fields: Value) {
     );
 }
 
-pub fn subtitle_trace_mapping(
-    lane: &str,
-    component: &str,
-    event: &str,
-    payload: Option<&Value>,
-) {
+pub fn subtitle_trace_mapping(lane: &str, component: &str, event: &str, payload: Option<&Value>) {
     match payload {
         Some(fields) => subtitle_trace(lane, component, event, fields.clone()),
         None => subtitle_trace(lane, component, event, json!({})),

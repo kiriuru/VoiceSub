@@ -1,7 +1,7 @@
 use std::sync::Mutex;
 use std::time::Instant;
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::trace::SubtitleLog;
 use crate::types::SubtitlePayloadEvent;
@@ -169,8 +169,8 @@ fn sort_json_value(value: &Value) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicU64, Ordering};
 
     use crate::types::LifecycleState;
 

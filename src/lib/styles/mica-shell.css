@@ -1,0 +1,44 @@
+/* Tauri desktop shell — transparent body lets Windows Mica show through (tauri.conf.json). */
+
+html[data-shell="tauri"] {
+  --bg-app: transparent;
+  --glass-0: rgba(8, 10, 14, 0.42);
+  --glass-1: rgba(16, 18, 26, 0.55);
+  --glass-2: rgba(22, 24, 34, 0.68);
+}
+
+html[data-shell="tauri"][data-ui-theme="light"] {
+  --glass-0: rgba(248, 250, 252, 0.45);
+  --glass-1: rgba(255, 255, 255, 0.62);
+  --glass-2: rgba(255, 255, 255, 0.78);
+}
+
+html[data-shell="tauri"] body,
+html[data-shell="tauri"] #app {
+  background-color: transparent;
+  background-image: none;
+}
+
+html[data-shell="tauri"] .app-shell.standard-shell,
+html[data-shell="tauri"] .standard-main {
+  background: transparent;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  html[data-shell="tauri"] {
+    --bg-app: rgba(10, 12, 18, 0.98);
+    --glass-1: rgba(16, 18, 26, 0.94);
+    --glass-2: rgba(22, 24, 34, 0.97);
+  }
+
+  html[data-shell="tauri"][data-ui-theme="light"] {
+    --bg-app: #f6f8fc;
+    --glass-1: rgba(255, 255, 255, 0.96);
+    --glass-2: #ffffff;
+  }
+
+  html[data-shell="tauri"] body,
+  html[data-shell="tauri"] #app {
+    background-color: var(--bg-app);
+  }
+}

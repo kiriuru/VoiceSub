@@ -22,17 +22,17 @@ pub fn select_payload_text(payload: &SubtitlePayloadEvent, mode: &str) -> String
             .map(|item| item.text.clone())
             .unwrap_or_default();
     }
-    if let Some(index_str) = mode.strip_prefix("translation_") {
-        if let Ok(index) = index_str.parse::<usize>() {
-            let translations: Vec<_> = visible
-                .iter()
-                .filter(|item| item.kind == "translation")
-                .collect();
-            return translations
-                .get(index.saturating_sub(1))
-                .map(|item| item.text.clone())
-                .unwrap_or_default();
-        }
+    if let Some(index_str) = mode.strip_prefix("translation_")
+        && let Ok(index) = index_str.parse::<usize>()
+    {
+        let translations: Vec<_> = visible
+            .iter()
+            .filter(|item| item.kind == "translation")
+            .collect();
+        return translations
+            .get(index.saturating_sub(1))
+            .map(|item| item.text.clone())
+            .unwrap_or_default();
     }
     String::new()
 }
@@ -54,13 +54,10 @@ pub fn should_throttle_partial_update(
     if elapsed_ms >= partial_throttle_ms {
         return false;
     }
-    let growth_chars =
-        normalized.chars().count() as i64 - previous.chars().count() as i64;
+    let growth_chars = normalized.chars().count() as i64 - previous.chars().count() as i64;
     let word_tail_growth =
         normalized.split_whitespace().count() > previous.split_whitespace().count();
-    growth_chars >= 0
-        && (growth_chars as u64) < min_partial_delta_chars
-        && !word_tail_growth
+    growth_chars >= 0 && (growth_chars as u64) < min_partial_delta_chars && !word_tail_growth
 }
 
 pub fn select_first_visible_text(payload: &SubtitlePayloadEvent) -> String {

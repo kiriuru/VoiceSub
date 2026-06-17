@@ -1,7 +1,7 @@
 import { buildOverlapTelemetrySnapshot } from "./overlap-logic";
 import type { BrowserAsrState } from "./types";
 
-export function buildLastError(state: BrowserAsrState): string | null {
+function buildLastError(state: BrowserAsrState): string | null {
   const parts = [state.lastErrorKind, state.lastError].filter(Boolean);
   return parts.length ? parts.join(": ") : null;
 }
@@ -25,7 +25,7 @@ export function buildWorkerPayload(ctx: {
     provider_name: state.providerName || state.browserMode || "browser_google",
     desired_running: Boolean(state.desiredRunning),
     active_recognition: Boolean(state.recognition),
-    active_media_stream: Boolean(state.mediaStream),
+    active_media_stream: Boolean(state.microphoneMonitor?.stream),
     recognition_state: state.recognitionState || "idle",
     browser_supervisor_state: state.browserSupervisorState || "idle",
     supervisor_state: state.browserSupervisorState || "idle",

@@ -296,8 +296,8 @@ fn play_mp3_blocking(
         sink.append(decoder.amplify(volume));
     } else {
         let (pcm, sample_rate, channels) = decode_mp3_to_pcm(bytes)?;
-        play_pcm_sonic_streaming(
-            &sink,
+        play_pcm_sonic_streaming(SonicStreamContext {
+            sink: &sink,
             pcm,
             sample_rate,
             channels,
@@ -306,7 +306,7 @@ fn play_mp3_blocking(
             rx,
             device_label,
             output_cache,
-        )?;
+        })?;
     }
 
     let poll = Duration::from_millis(PLAYBACK_POLL_MS);
@@ -393,26 +393,36 @@ fn drain_sonic_to_sink(
     Ok(())
 }
 
-/// Tempo-stretch decoded PCM via libsonic and append output to sink incrementally.
-fn play_pcm_sonic_streaming(
-    sink: &Sink,
+struct SonicStreamContext<'a> {
+    sink: &'a Sink,
     pcm: Vec<f32>,
     sample_rate: u32,
     channels: u16,
     volume: f32,
     rate: f32,
-    rx: &Receiver<WorkerCommand>,
-    device_label: &mut String,
-    output_cache: &mut Option<OutputCache>,
-) -> Result<(), AudioError> {
-    poll_worker_control(rx, device_label, output_cache)?;
-    let mut sonic = SonicProcessor::new(sample_rate, channels, rate)?;
-    sonic.write(&pcm)?;
-    drop(pcm);
+    rx: &'a Receiver<WorkerCommand>,
+    device_label: &'a mut String,
+    output_cache: &'a mut Option<OutputCache>,
+}
+
+/// Tempo-stretch decoded PCM via libsonic and append output to sink incrementally.
+fn play_pcm_sonic_streaming(ctx: SonicStreamContext<'_>) -> Result<(), AudioError> {
+    poll_worker_control(ctx.rx, ctx.device_label, ctx.output_cache)?;
+    let mut sonic = SonicProcessor::new(ctx.sample_rate, ctx.channels, ctx.rate)?;
+    sonic.write(&ctx.pcm)?;
+    drop(ctx.pcm);
     sonic.flush()?;
-    drain_sonic_to_sink(&mut sonic, sink, channels, sample_rate, volume)?;
-    if sink.empty() {
-        return Err(AudioError::PlaybackFailed("sonic produced no output".into()));
+    drain_sonic_to_sink(
+        &mut sonic,
+        ctx.sink,
+        ctx.channels,
+        ctx.sample_rate,
+        ctx.volume,
+    )?;
+    if ctx.sink.empty() {
+        return Err(AudioError::PlaybackFailed(
+            "sonic produced no output".into(),
+        ));
     }
     Ok(())
 }
@@ -455,10 +465,10 @@ pub fn resolve_output_device(label: &str) -> Result<cpal::Device, AudioError> {
 
     let needle = trimmed.to_lowercase();
     for device in &devices {
-        if let Ok(name) = device.name() {
-            if name.eq_ignore_ascii_case(trimmed) {
-                return Ok(device.clone());
-            }
+        if let Ok(name) = device.name()
+            && name.eq_ignore_ascii_case(trimmed)
+        {
+            return Ok(device.clone());
         }
     }
     for device in &devices {
@@ -480,10 +490,10 @@ pub fn resolve_output_device(label: &str) -> Result<cpal::Device, AudioError> {
                 continue;
             }
             for device in &devices {
-                if let Ok(name) = device.name() {
-                    if names_match(&name, &entry.label) {
-                        return Ok(device.clone());
-                    }
+                if let Ok(name) = device.name()
+                    && names_match(&name, &entry.label)
+                {
+                    return Ok(device.clone());
                 }
             }
         }
@@ -509,10 +519,10 @@ mod tests {
     use super::*;
 
     use super::{
-        decode_mp3_to_pcm, names_match, open_mp3_decoder, play_mp3_blocking, resolve_output_device,
-        SONIC_DRAIN_SAMPLES,
+        SONIC_DRAIN_SAMPLES, decode_mp3_to_pcm, names_match, open_mp3_decoder, play_mp3_blocking,
+        resolve_output_device,
     };
-    use crate::sonic_speed::{change_speech_speed, SonicProcessor};
+    use crate::sonic_speed::{SonicProcessor, change_speech_speed};
 
     #[test]
     fn names_match_partial() {
@@ -534,13 +544,10 @@ mod tests {
         let mut cache = None;
         let result = play_mp3_blocking(&mut label, &mut cache, vec![], 1.0, 1.0, &rx);
         assert!(result.is_err());
-        assert!(
-            result
-                .err()
-                .expect("error")
-                .to_string()
-                .contains("empty audio buffer")
-        );
+        match result {
+            Err(err) => assert!(err.to_string().contains("empty audio buffer")),
+            Ok(_) => panic!("expected empty audio buffer error"),
+        }
         drop(tx);
     }
 
@@ -548,13 +555,10 @@ mod tests {
     fn open_mp3_decoder_rejects_empty() {
         let result = open_mp3_decoder(vec![]);
         assert!(result.is_err());
-        assert!(
-            result
-                .err()
-                .expect("error")
-                .to_string()
-                .contains("empty audio buffer")
-        );
+        match result {
+            Err(err) => assert!(err.to_string().contains("empty audio buffer")),
+            Ok(_) => panic!("expected empty audio buffer error"),
+        }
     }
 
     #[test]
@@ -602,13 +606,9 @@ mod tests {
     fn rejects_corrupt_mp3_bytes() {
         let result = open_mp3_decoder(vec![0xFF, 0xFB, 0x00, 0x00]);
         assert!(result.is_err());
-        assert!(
-            result
-                .err()
-                .expect("error")
-                .to_string()
-                .contains("mp3 decode failed")
-        );
+        match result {
+            Err(err) => assert!(err.to_string().contains("mp3 decode failed")),
+            Ok(_) => panic!("expected mp3 decode error"),
+        }
     }
-
 }

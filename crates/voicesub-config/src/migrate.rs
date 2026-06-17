@@ -1,4 +1,4 @@
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::defaults::CURRENT_CONFIG_VERSION;
 
@@ -23,10 +23,7 @@ fn parse_version(value: &Value) -> i64 {
 }
 
 fn normalize_provider(raw: &Value, fallback: &str) -> String {
-    crate::normalize::canonical_translation_provider(
-        raw.as_str().unwrap_or(fallback),
-        fallback,
-    )
+    crate::normalize::canonical_translation_provider(raw.as_str().unwrap_or(fallback), fallback)
 }
 
 fn build_translation_lines(translation: &Map<String, Value>) -> Vec<Value> {
@@ -137,10 +134,10 @@ pub fn migrate_sst_payload(payload: Value) -> Value {
         root.insert("ui".into(), Value::Object(ui));
 
         let mut translation = as_object(root.get("translation").unwrap_or(&Value::Null));
-        if translation.get("target_languages").is_none() {
-            if let Some(targets) = root.get("targets").and_then(|v| v.as_array()) {
-                translation.insert("target_languages".into(), Value::Array(targets.clone()));
-            }
+        if translation.get("target_languages").is_none()
+            && let Some(targets) = root.get("targets").and_then(|v| v.as_array())
+        {
+            translation.insert("target_languages".into(), Value::Array(targets.clone()));
         }
         root.insert("translation".into(), Value::Object(translation));
     }
@@ -170,7 +167,7 @@ pub fn migrate_sst_payload(payload: Value) -> Value {
     Value::Object(root)
 }
 
-/// VoiceSub roadmap §9 — SST v7 JSON → active VoiceSub semantics.
+/// SST v7 JSON → active VoiceSub semantics.
 pub fn apply_voicesub_import_rules(payload: Value) -> Value {
     let mut root = as_object(&payload);
     let mut asr = as_object(root.get("asr").unwrap_or(&Value::Null));
@@ -245,10 +242,12 @@ mod tests {
             "asr": { "mode": "local" }
         }));
         assert_eq!(imported["asr"]["mode"], "browser_google");
-        assert!(imported["asr"]["import_hint"]
-            .as_str()
-            .unwrap()
-            .contains("Parakeet"));
+        assert!(
+            imported["asr"]["import_hint"]
+                .as_str()
+                .unwrap()
+                .contains("Parakeet")
+        );
     }
 
     #[test]

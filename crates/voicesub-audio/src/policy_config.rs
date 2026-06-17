@@ -5,11 +5,11 @@ use std::ffi::c_void;
 use std::ptr;
 
 use tracing::{debug, info, warn};
-use windows::core::{Interface, GUID, HSTRING, HRESULT, IUnknown, PCWSTR};
 use windows::Win32::Media::Audio::{EDataFlow, ERole};
+use windows::core::{GUID, HRESULT, HSTRING, IUnknown, Interface, PCWSTR};
 
-use crate::trace;
 use crate::AudioError;
+use crate::trace;
 
 const IID_POLICY_CONFIG_21H2: GUID = GUID::from_values(
     0xab3d4648,
@@ -76,40 +76,38 @@ impl PolicyFactoryBinding {
         ))
     }
 
-    unsafe fn set_persisted(
-        &self,
-        process_id: u32,
-        device_id: &str,
-    ) -> Result<(), AudioError> {
-        let factory = self.factory.as_raw();
-        let vtable = *(factory as *const *const *const c_void);
-        let set_persisted =
-            std::mem::transmute::<*const c_void, SetPersistedFn>(*vtable.add(SET_PERSISTED_VTABLE_INDEX));
-        let wide = widestring(device_id);
-        let hr = set_persisted(
-            factory,
-            process_id,
-            windows::Win32::Media::Audio::eRender,
-            windows::Win32::Media::Audio::eConsole,
-            PCWSTR(wide.as_ptr()),
-        );
-        if hr.is_err() {
-            let message = format!(
-                "SetPersistedDefaultAudioEndpoint(pid={process_id}) failed: {hr:?}"
+    unsafe fn set_persisted(&self, process_id: u32, device_id: &str) -> Result<(), AudioError> {
+        unsafe {
+            let factory = self.factory.as_raw();
+            let vtable = *(factory as *const *const *const c_void);
+            let set_persisted = std::mem::transmute::<*const c_void, SetPersistedFn>(
+                *vtable.add(SET_PERSISTED_VTABLE_INDEX),
             );
-            warn!(target: "voicesub.tts.audio", process_id, error = %message, "policy config routing failed");
-            trace::trace(
-                "policy_config",
-                "set_persisted_failed",
-                serde_json::json!({
-                    "process_id": process_id,
-                    "device_id": device_id,
-                    "error": message,
-                }),
+            let wide = widestring(device_id);
+            let hr = set_persisted(
+                factory,
+                process_id,
+                windows::Win32::Media::Audio::eRender,
+                windows::Win32::Media::Audio::eConsole,
+                PCWSTR(wide.as_ptr()),
             );
-            return Err(AudioError::RoutingFailed(message));
+            if hr.is_err() {
+                let message =
+                    format!("SetPersistedDefaultAudioEndpoint(pid={process_id}) failed: {hr:?}");
+                warn!(target: "voicesub.tts.audio", process_id, error = %message, "policy config routing failed");
+                trace::trace(
+                    "policy_config",
+                    "set_persisted_failed",
+                    serde_json::json!({
+                        "process_id": process_id,
+                        "device_id": device_id,
+                        "error": message,
+                    }),
+                );
+                return Err(AudioError::RoutingFailed(message));
+            }
+            Ok(())
         }
-        Ok(())
     }
 }
 
@@ -126,11 +124,7 @@ fn ro_get_activation_factory(class_id: &HSTRING, iid: &GUID) -> Result<IUnknown,
 
     let mut factory: *mut c_void = ptr::null_mut();
     unsafe {
-        let hr = RoGetActivationFactory(
-            std::mem::transmute_copy(class_id),
-            iid,
-            &mut factory,
-        );
+        let hr = RoGetActivationFactory(std::mem::transmute_copy(class_id), iid, &mut factory);
         if hr.is_err() || factory.is_null() {
             return Err(AudioError::RoutingFailed(format!(
                 "RoGetActivationFactory failed: {hr:?}"
@@ -141,10 +135,7 @@ fn ro_get_activation_factory(class_id: &HSTRING, iid: &GUID) -> Result<IUnknown,
 }
 
 /// Apply persisted render endpoint for a specific process id.
-pub fn set_persisted_process_endpoint(
-    process_id: u32,
-    device_id: &str,
-) -> Result<(), AudioError> {
+pub fn set_persisted_process_endpoint(process_id: u32, device_id: &str) -> Result<(), AudioError> {
     if process_id == 0 {
         return Err(AudioError::InvalidProcessId);
     }

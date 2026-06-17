@@ -1,14 +1,136 @@
 # Журнал изменений VoiceSub / SST Desktop
 
-Единая история изменений desktop-линии: **VoiceSub** `0.5.2` (текущая линия), **VoiceSub** `0.5.1`, **VoiceSub** `0.5.0` (первый релиз новой линии, baseline — SST `0.4.4`) и **SST Desktop** `0.4.4` и ниже (frozen reference в `F:\AI\stream-sub-translator`).
+Единая история изменений desktop-линии: **VoiceSub** `0.5.3` (текущая линия), **VoiceSub** `0.5.2`, **VoiceSub** `0.5.1`, **VoiceSub** `0.5.0` (первый релиз новой линии, baseline — SST `0.4.4`) и **SST Desktop** `0.4.4` и ниже (frozen reference в `F:\AI\stream-sub-translator`).
 
 Этот файл — канонический changelog. Installer delta SST `0.4.1`: [DESKTOP_RELEASE_CHANGELOG_0.4.1.md](./DESKTOP_RELEASE_CHANGELOG_0.4.1.md). Старые per-version delta (`0.3.x`, `0.4.0`) удалены — история только здесь.
 
 **Формат записей (как [GitHub Release v0.2.9.2](https://github.com/kiriuru/stream_sub_translator/releases/tag/v0.2.9.2)):** одно предложение о версии; буллеты «что вошло» — только факты изменений; для desktop-exe / installer — блок «формат release» (структура поставки, без перечисления старых профилей как новинки).
 
+## 0.5.3
+
+Patch release. `PROJECT_VERSION` — **0.5.3**; `config_version` **8** (без изменений). Относительно [v0.5.2](https://github.com/kiriuru/VoiceSub/releases/tag/v0.5.2): редизайн dashboard navigation (Material 3 shell), доработка loopback API auth на всех trusted surfaces, исправления GitHub update check для мигрированных SST config, обновление browser worker UI, консолидация документации после завершения порта, cleanup dead code / obsolete i18n, Rust edition 2024 + CI. HTTP/WebSocket контракты **OBS overlay** (`/overlay`) и **browser worker** (`/ws/asr_worker`) **не менялись** (payload).
+
+### HTTP — loopback API auth (завершение)
+
+- **`loopback_auth.rs`** — per-session `x-voicesub-token` middleware для `/api/*`; constant-time compare; публичные исключения: `GET /live`, static assets.
+- **HTML injection** — trusted pages (dashboard, `/google-asr`, `/tts`) получают `window.__VOICESUB_API_TOKEN__` при serve; Tauri IPC `get_loopback_api_token`.
+- **Shared client** — `src/lib/loopback-api.ts` + `loopback-api-client.ts`; worker и TTS импортируют тот же fetch wrapper.
+- **`ui-config-sync`** — debounced POST на `/api/settings/save` только с валидным токеном.
+- **OAuth callback** (Twitch TTS) — init loopback token до API calls.
+- **Тесты:** `loopback-api.test.ts`, `loopback-api-bootstrap.test.ts`, `runtime_lifecycle` HTML injection, `authed_api.rs` helper для integration smoke.
+
+### HTTP — background tasks diagnostics
+
+- **`BackgroundTaskRegistry`** — snapshot `http_server`, `runtime_heartbeat`, `startup_check` в runtime metrics/diagnostics.
+- Startup update check помечает registry и сбрасывает флаг по завершении.
+
+### Updates — GitHub release check
+
+- **SST config migration** — `normalize_updates_config`: для `github_repo` = `kiriuru/VoiceSub` / legacy slug и `enabled=false` без явного user opt-out включает проверку обновлений (SST по умолчанию отключал updates).
+- **Stale cache bypass** — если `latest_known_version` < `PROJECT_VERSION`, interval gate не блокирует новый poll (после локального апгрейда).
+- **Dashboard** — `postClientLog` при ошибке `checkUpdates` на boot; structured `tracing::info` при `updates.enabled=false`.
+- **Тесты:** `normalize_updates_*` в `voicesub-config`; version compare в `update_service.rs`.
+
+### Dashboard — Material 3 navigation shell
+
+- **`navigation.ts`** — primary destinations: Live, Translation, Subtitles, OBS, Modules, More; hub sub-screens для More и Subtitles.
+- **Standard layout** — `StandardShell` + `NavRail` + `TopAppBar` + `RuntimeBar`; hub panels `MoreSettingsHub`, `SubtitlesSettingsHub`.
+- **Compact layout** — `CompactShell` + `BottomNav`; те же destinations, phone-style UX.
+- **Новые компоненты** — `SaveSnackbar` (auto-dismiss save/restart hints), `ScrollToTopFab`, `RuntimeDetailsSheet`, `RuntimeStatusStrip`, `RuntimeMiniStrip`, `SubtitleOutputPreview`, `ModulesPanel`, `PanelSectionNav`, `PanelTopNavLayout`.
+- **Удалено** — `TabNav.svelte`, `AppChrome.svelte` (заменены shell-компонентами).
+- **`OverviewSection`** — переработан live preview + runtime controls под новую навигацию.
+- **Стили** — `shell.css`, `mica-shell.css`, обновлены `tokens.css`, `surfaces.css`, `compact-layout.css`, `bento.css`.
+- **i18n** — ключи `nav.*` для rail/bottom nav (en, ru, ja, ko, zh).
+- **Тесты:** `navigation.test.ts`, `panel-sections.test.ts`, `runtime-status.test.ts`, `scroll-to-top.test.ts`, `shell-platform.test.ts`.
+
+### Browser Speech worker — UI
+
+- **`WorkerApp.svelte`** — компактный shell, выравнивание с dashboard theme tokens.
+- **CSS** — `worker-shell.css` удалён; стили в `worker.css`.
+- **`ui-theme.ts`** — упрощён; palette через shared tokens.
+- **Loopback** — `initLoopbackApiToken` при boot worker.
+
+### TTS module — loopback + styling
+
+- Shared `loopback-api-client`; token init на mount.
+- CSS refresh (`tts-module.css`); мелкие правки `TwitchPanel`, trace helpers.
+
+### OBS overlay — logging hardening (follow-up)
+
+- Убраны оставшиеся `fetch`/`sendBeacon` на `/api/logs/ui-trace` и `/api/logs/client-event` из `overlay.js`.
+- Debug overlay — только `console` / query `?debug=1` / `?debug-subtitles=1`.
+- **`writeDebug`** — `console.debug` только при `?debug=1` (раньше `console.log` писал каждый WS-кадр в production).
+
+### Codebase cleanup — dead code & i18n prune
+
+- **HTTP:** `POST /api/runtime/start` — удалён неиспользуемый `device_id` из тела запроса (клиент шлёт только `config_payload`).
+- **Browser ASR:** поле `transport_id` убрано из `IngestedAsrUpdate` (маршрутизация по параметру handler, не по полю struct).
+- **TTS:** удалены deprecated `enqueue_speech` (Rust), `legacyEnqueue` / `bootstrapTtsTheme` (TS); IPC `tts_enqueue` оставлен для обратной совместимости → используйте `tts_channel_enqueue`.
+- **i18n:** удалены устаревшие ключи SST (Parakeet ASR, RNNoise tuning UI, `diagnostics.local_parakeet.line`) из `scripts/i18n-source/`; каталоги **876** ключей × 5 локалей.
+- **i18n pipeline:** `npm run i18n:bundle` → `scripts/build-locale-bundle.mjs` (регенерация `locales-bundle.js` + копия в `bin/overlay/shared/js/i18n/`).
+- **Diagnostics UI:** `rnnoise_message` убран из `diagnostics-normalizer.ts` (API-заглушка в `asr_diagnostics.rs` без изменений).
+- **Тесты:** контракт dashboard preview перенесён на `SubtitleOutputPreview.svelte` (`tests/renderer/dashboard-panel.contract.test.ts`).
+
+### Toolchain — Rust 2024
+
+- Workspace **edition 2024**, **rust-version 1.85**.
+- **`rustfmt.toml`** — единый формат; `cargo fmt --all` по workspace.
+- Массовое выравнивание `let` chains / import order в crates (поведение без изменений).
+
+### DevOps — CI и commit conventions
+
+- **`.github/workflows/ci.yml`** — Windows: `rustfmt`, `clippy -D warnings`, `cargo test --workspace`; Ubuntu: `svelte-check`, Vitest, `npm run build`.
+- **Husky** + **commitlint** (Conventional Commits); `docs/COMMIT_CONVENTIONS.md`, `.commitlintrc.cjs`.
+
+### Документация
+
+- **`AGENTS.md`** — переписан под post-port канон (без SST port / legacy / roadmap).
+- Удалены: `VOICESUB_ENGINEERING_CONTRACT.ru.md`, `docs/plans/voicesub_roadmap.ru.md`, вся папка `docs/plans/`.
+- **`TECHNICAL_ARCHITECTURE`** (en/ru) — актуализированы: без legacy/SST port framing; единый канон для агентов и разработки.
+- **`README`**, **`WIKI`**, **`TECHNICAL_ARCHITECTURE`** — cleanup pass: i18n pipeline, overlay debug, API/TTS deprecations.
+
+### Контракты (что не менялось vs 0.5.2)
+
+| Surface | Transport | Изменение в 0.5.3 |
+| --- | --- | --- |
+| OBS overlay | `ws://…/ws/events` | **нет** (payload); debug logging gated `?debug=1` |
+| Browser worker ASR | `/ws/asr_worker` | **нет** (только UI/loopback для settings API worker page) |
+| Subtitle/translation lifecycle | Rust core | **нет** |
+| `config_version` | TOML | **нет** |
+| `POST /api/runtime/start` | HTTP JSON body | удалён неиспользуемый `device_id` (клиенты шлют только `config_payload`) |
+| TTS IPC | Tauri | `tts_channel_enqueue` preferred; `tts_enqueue` deprecated compat |
+
+### Breaking / migration notes
+
+- **Нет смены `config_version`.** TOML из 0.5.2 совместимы.
+- **SST `config.json` import** — `updates.enabled` может стать `true` после normalize (если repo VoiceSub и не было явного opt-out).
+- **Dashboard navigation** — те же настройки, новая структура меню; command palette обновлён под `NavTarget`.
+
+### Формат desktop release
+
+- **`VoiceSub_0.5.3_x64-setup.exe`** — Tauri 2 NSIS (`installMode: currentUser`).
+- Сборка: `build-release-msi.bat` → `build-release.ps1` → `F:\AI\VoiceSub - release\v0.5.3\`.
+
+### Тесты
+
+```powershell
+cargo test --workspace
+npm run build
+npm run test:frontend
+```
+
+- **Новое:** loopback/navigation/shell Vitest suite; `normalize_updates_*`; `authed_api` integration helper; `dashboard_nav.rs` unit tests.
+
 ## 0.5.2
 
 Patch release. `PROJECT_VERSION` — **0.5.2**; `config_version` **8** (без изменений). Относительно [v0.5.1](https://github.com/kiriuru/VoiceSub/releases/tag/v0.5.1): hot path TTS speech/twitch перенесён в Rust; dashboard и TTS UI получают live state через Tauri in-process events вместо localhost WebSocket; исправлен алгоритм OBS Closed Captions (clear/timing/dedup); стабилизация Chrome worker profile/launch. HTTP/WebSocket контракты **OBS overlay** (`/overlay`) и **browser worker** (`/ws/asr_worker`) **не менялись**.
+
+### HTTP — loopback API auth + overlay liveness
+
+- **`/api/*`** — per-session заголовок `x-voicesub-token` (CSRF/cross-origin hardening); токен в trusted HTML (dashboard, worker, TTS) + Tauri `get_loopback_api_token`.
+- **`GET /live`** — публичный минимальный liveness (`{"ok":true}`) для OBS overlay; **`/api/health`** остаётся protected.
+- **OBS overlay** — убраны HTTP POST на `/api/logs/*`; debug только `console` / `?debug=1` / `?debug-subtitles=1`; cache-bust `overlay.js?v=20260615a`.
+- **Follow-up:** worker/TTS `initLoopbackApiToken` при boot; OAuth callback после init; `ui-config-sync` пропускает POST без токена; тесты injection на `/google-asr` и `/tts`; dedup `authed_api` test helper.
 
 ### TTS — Rust speech pipeline (hot path)
 
@@ -225,7 +347,7 @@ npm run test:frontend
 
 ## 0.5.0
 
-Major release. Преемник frozen SST `0.4.4`. Все пункты ниже — **изменения относительно SST `0.4.4`**. `PROJECT_VERSION` в `voicesub-types::version.rs` — **0.5.0**; `config_version` **8** (`user-data/config.toml`). Продукт переименован в **VoiceSub**; HTTP/WebSocket **контракты сохранены по смыслу** (parity-порт subtitle/translation lifecycle), но **стек и поставка полностью новые**. GitHub release: [v0.5.0](https://github.com/kiriuru/stream_sub_translator/releases/tag/v0.5.0). Formal Phase 1 DoD golden gate — **deferred** (roadmap §12).
+Major release. Преемник frozen SST `0.4.4`. Все пункты ниже — **изменения относительно SST `0.4.4`**. `PROJECT_VERSION` в `voicesub-types::version.rs` — **0.5.0**; `config_version` **8** (`user-data/config.toml`). Продукт переименован в **VoiceSub**; HTTP/WebSocket **контракты сохранены по смыслу** (parity-порт subtitle/translation lifecycle), но **стек и поставка полностью новые**. GitHub release: [v0.5.0](https://github.com/kiriuru/stream_sub_translator/releases/tag/v0.5.0). Formal Phase 1 DoD golden gate — **deferred**.
 
 ### Формат release (NSIS)
 
@@ -319,8 +441,7 @@ Major release. Преемник frozen SST `0.4.4`. Все пункты ниже
 
 - `docs/TECHNICAL_ARCHITECTURE.md`, `docs/TECHNICAL_ARCHITECTURE.en.md` — VoiceSub **0.5.2** (Rust TTS pipeline, RuntimeEventBus, OBS CC send fixes).
 - `README.md`, `README.ru.md`, `docs/WIKI.en.md`, `docs/WIKI.ru.md` — актуализированы под новый стек.
-- Roadmap: `docs/plans/voicesub_roadmap.ru.md`.
-- **2026-06-10 sync:** MSI → NSIS; overlay TTL cleanup; update check (не stub); баннер обновлений; `AGENTS.md`; roadmap §12.
+- **2026-06-10 sync:** MSI → NSIS; overlay TTL cleanup; update check (не stub); баннер обновлений; `AGENTS.md`.
 
 ### Тесты
 
@@ -332,11 +453,11 @@ npm run test:frontend
 
 - Phase 0 automated soak: `voicesub-http/tests/http_ws_smoke.rs::phase0_soak_checklist_automated`.
 - `voicesub-config`: `normalizes_updates_defaults_for_legacy_configs`; `voicesub-types`: version/update payload; `overlay_contract.rs`; `translation-helpers.validation.test.ts`; `roundtrip_twitch_ignore_users`.
-- Golden parity full suite — **deferred** (roadmap §12).
+- Golden parity full suite — **deferred**.
 
 ## 0.4.4
 
-> **Frozen line.** SST `0.4.4` — read-only reference (`F:\AI\stream-sub-translator`). Активная разработка — VoiceSub `0.5.2`.
+> **Frozen line.** SST `0.4.4` — read-only reference (`F:\AI\stream-sub-translator`). Активная разработка — VoiceSub `0.5.3`.
 
 Patch release. `PROJECT_VERSION` в `backend/versioning.py` — **0.4.4**; `config_version` **7**. Публичные HTTP/WebSocket route contracts и subtitle/translation lifecycle **не менялись**.
 

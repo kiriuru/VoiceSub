@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use axum::{
     extract::Query,
-    http::{header, StatusCode},
+    http::{StatusCode, header},
     response::{IntoResponse, Response},
 };
 use serde::Deserialize;

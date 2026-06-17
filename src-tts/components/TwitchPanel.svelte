@@ -122,6 +122,8 @@
       twitch.oauth_token.trim().length > 0
     );
   });
+  const isConnected = $derived(status.state === "connected");
+  const isConnecting = $derived(status.state === "connecting");
   const canDisconnect = $derived(isConnected || isConnecting);
   const connectDisabledReason = $derived.by(() => {
     if (busy || isConnecting || isConnected) return "";
@@ -139,9 +141,6 @@
       channelRows = rows.length > 0 ? rows : [""];
     }
   });
-  const isConnected = $derived(status.state === "connected");
-  const isConnecting = $derived(status.state === "connecting");
-
   const channelBadgeLabel = $derived.by(() => {
     const configured = channelsFromRows(channelRows).channels;
     const joined =
@@ -517,7 +516,7 @@
   });
 </script>
 
-<section class="glass-panel bento-tile panel-padding stack">
+<section class="surface-card bento-tile panel-padding stack">
   <div class="section-heading section-heading--stacked">
     <p class="eyebrow">{tr("tts.twitch.eyebrow")}</p>
     <h2>{tr("tts.twitch.title")}</h2>
@@ -1182,11 +1181,17 @@
       class="tts-telemetry-help-popover"
       class:tts-telemetry-help-popover--pending={!nickHelpPositioned}
       role="dialog"
+      aria-modal="true"
       aria-labelledby="tts-twitch-nick-help-title"
+      tabindex="-1"
       bind:this={nickHelpPopoverEl}
       style:top="{nickHelpPos.top}px"
       style:left="{nickHelpPos.left}px"
       onclick={(event) => event.stopPropagation()}
+      onkeydown={(event) => {
+        event.stopPropagation();
+        if (event.key === "Escape") closeNickHelp();
+      }}
     >
       <p id="tts-twitch-nick-help-title" class="tts-telemetry-help-popover__title">
         {tr("tts.twitch.nick_help_title")}

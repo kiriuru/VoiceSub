@@ -1,51 +1,54 @@
 //! Tracing setup and log directory helpers.
 
+#[cfg(test)]
+mod env_test;
+
+mod browser_trace;
 mod compact_log_line;
 mod diagnostics;
 mod jsonl_trace;
 mod lifecycle;
 mod log_rotation;
+mod obs_trace;
+mod pipeline_trace;
 mod redaction;
 mod rotating_log_file;
 mod session;
 mod structured_log_compact;
 mod structured_runtime_logger;
-mod browser_trace;
-mod obs_trace;
-mod pipeline_trace;
 mod subtitle_trace;
 mod tts_trace;
 mod ui_trace;
 mod ws_trace;
 
 pub use diagnostics::{
-    is_config_full_logging_enabled, is_deep_diagnostics_enabled, is_runtime_events_verbose_enabled,
-    is_browser_trace_enabled, is_obs_trace_enabled, is_pipeline_trace_enabled,
+    is_browser_trace_enabled, is_config_full_logging_enabled, is_deep_diagnostics_enabled,
+    is_obs_trace_enabled, is_pipeline_trace_enabled, is_runtime_events_verbose_enabled,
     is_subtitle_trace_enabled, is_tts_trace_enabled, is_ui_trace_enabled, is_ws_trace_enabled,
     set_config_full_logging_enabled, should_persist_client_log,
 };
 pub use lifecycle::{
-    complete_graceful_shutdown, install_lifecycle_hooks, log_shutdown_begin, log_shutdown_step,
-    read_session_lifecycle_record, session_lifecycle_path, SessionExitState, SessionLifecycleRecord,
+    SessionExitState, SessionLifecycleRecord, complete_graceful_shutdown, install_lifecycle_hooks,
+    log_shutdown_begin, log_shutdown_step, read_session_lifecycle_record, session_lifecycle_path,
 };
 
-pub use redaction::{redact_data, redact_text, REDACTED_VALUE};
-pub use compact_log_line::{should_write_runtime_event, structured_event_level};
-pub use session::{ClientLogResult, SessionLogDiagnostics, SessionLogManager};
-pub use structured_runtime_logger::{runtime_trace, StructuredRuntimeLogger};
 pub use browser_trace::{browser_trace, configure_browser_trace_log};
+pub use compact_log_line::{should_write_runtime_event, structured_event_level};
 pub use obs_trace::{configure_obs_trace_log, obs_trace};
 pub use pipeline_trace::{configure_pipeline_trace_log, pipeline_trace};
-pub use ws_trace::{configure_ws_trace_log, ws_trace};
+pub use redaction::{REDACTED_VALUE, redact_data, redact_text};
+pub use session::{ClientLogResult, SessionLogDiagnostics, SessionLogManager};
+pub use structured_runtime_logger::{StructuredRuntimeLogger, runtime_trace};
 pub use subtitle_trace::{configure_subtitle_trace_log, subtitle_trace, subtitle_trace_mapping};
 pub use tts_trace::{configure_tts_trace_log, tts_trace};
 pub use ui_trace::{configure_ui_trace_log, ui_trace, ui_trace_mapping};
+pub use ws_trace::{configure_ws_trace_log, ws_trace};
 
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::rotating_log_file::default_core_log_writer;
 
@@ -102,7 +105,8 @@ pub fn init_tracing_backbone(project_root: &Path) {
     } else {
         "warn".to_string()
     };
-    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(default_filter));
+    let filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(default_filter));
     let _ = tracing_subscriber::registry()
         .with(filter)
         .with(fmt::layer().with_target(true))

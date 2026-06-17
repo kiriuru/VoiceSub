@@ -1,3 +1,5 @@
+import { apiFetch } from "./loopback-api-client";
+
 type TraceFields = Record<string, unknown>;
 
 let fullLoggingEnabled = false;
@@ -23,7 +25,7 @@ export function ttsTrace(phase: string, event: string, fields: TraceFields = {})
     return;
   }
 
-  void fetch("/api/logs/ui-trace", {
+  void apiFetch("/api/logs/ui-trace", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -34,7 +36,7 @@ export function ttsTrace(phase: string, event: string, fields: TraceFields = {})
     }),
   }).catch(() => {});
 
-  void fetch("/api/logs/client-event", {
+  void apiFetch("/api/logs/client-event", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({

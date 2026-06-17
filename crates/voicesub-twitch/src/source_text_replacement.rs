@@ -6,8 +6,10 @@ use serde_json::Value;
 
 use crate::settings::TwitchTtsSettings;
 
-const BUILTIN_PAIRS_JSON: &str =
-    include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../data/source_text_builtin_pairs.json"));
+const BUILTIN_PAIRS_JSON: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../data/source_text_builtin_pairs.json"
+));
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct SourceTextReplacementPair {
@@ -103,12 +105,11 @@ pub fn settings_from_section_value(section: &Value) -> SourceTextReplacementSett
         _ => true,
     };
     SourceTextReplacementSettings {
-        enabled: obj.get("enabled").and_then(|v| v.as_bool()).unwrap_or(false),
-        include_builtin: bool_field(
-            obj,
-            &["include_builtin", "include_builtin_profanity"],
-            true,
-        ),
+        enabled: obj
+            .get("enabled")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
+        include_builtin: bool_field(obj, &["include_builtin", "include_builtin_profanity"], true),
         case_insensitive: bool_field(obj, &["case_insensitive"], true),
         whole_words,
         pairs: parse_pairs(obj.get("pairs")),
@@ -142,7 +143,9 @@ fn normalize_custom_pairs(pairs: &[SourceTextReplacementPair]) -> Vec<(String, S
     out
 }
 
-pub fn effective_replacement_pairs(settings: &SourceTextReplacementSettings) -> Vec<(String, String)> {
+pub fn effective_replacement_pairs(
+    settings: &SourceTextReplacementSettings,
+) -> Vec<(String, String)> {
     if !settings.enabled {
         return Vec::new();
     }
@@ -242,10 +245,7 @@ pub fn profanity_settings_for_twitch(chat: &TwitchTtsSettings) -> SourceTextRepl
 }
 
 /// Builtin profanity list only (`include_builtin_profanity` on Twitch settings).
-pub fn apply_builtin_profanity(
-    text: &str,
-    settings: &SourceTextReplacementSettings,
-) -> String {
+pub fn apply_builtin_profanity(text: &str, settings: &SourceTextReplacementSettings) -> String {
     if !settings.include_builtin {
         return text.to_string();
     }
@@ -418,9 +418,6 @@ mod tests {
                 target: "duck".into(),
             }],
         };
-        assert_eq!(
-            apply_source_text_replacement("fuck", &settings),
-            "duck"
-        );
+        assert_eq!(apply_source_text_replacement("fuck", &settings), "duck");
     }
 }

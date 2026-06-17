@@ -2,16 +2,14 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use serde_json::Value;
-use voicesub_logging::{browser_trace, StructuredRuntimeLogger};
+use voicesub_logging::{StructuredRuntimeLogger, browser_trace};
 
 pub type StructuredLogFn = Arc<dyn Fn(&str, &str, Value) + Send + Sync>;
 
 pub const BROWSER_LOG_CHANNEL: &str = "browser_recognition";
 pub const BROWSER_LOG_SOURCE: &str = "browser_asr_gateway";
 
-pub fn structured_log_from_runtime_logger(
-    logger: Arc<StructuredRuntimeLogger>,
-) -> StructuredLogFn {
+pub fn structured_log_from_runtime_logger(logger: Arc<StructuredRuntimeLogger>) -> StructuredLogFn {
     Arc::new(move |channel, event, fields| {
         let mut map = BTreeMap::new();
         if let Some(obj) = fields.as_object() {
