@@ -7,7 +7,8 @@
   <a href="./docs/WIKI.en.md">Wiki (EN)</a> • <a href="./docs/WIKI.ru.md">Wiki (RU)</a> •
   <a href="./docs/TECHNICAL_ARCHITECTURE.en.md">Technical Docs (EN)</a> •
   <a href="./docs/TECHNICAL_ARCHITECTURE.md">Technical Docs (RU)</a> •
-  <a href="./docs/CHANGELOG.md">Changelog</a>
+  <a href="./docs/CHANGELOG.en.md">Changelog (EN)</a> •
+  <a href="./docs/CHANGELOG.md">Changelog (RU)</a>
 </p>
 
 VoiceSub **`0.5.4`** (current line) is a Windows desktop app for streamers who need real-time subtitles with optional translation. It combines browser-based speech recognition, subtitle styling, routing, and OBS output in one local workflow. Default bind is `127.0.0.1:8765` — no cloud backend, no accounts.
@@ -100,7 +101,7 @@ npm run test:frontend
 
 ## Development
 
-Current patch line **`0.5.4`** — see [CHANGELOG](./docs/CHANGELOG.md).
+Current patch line **`0.5.4`** — see [CHANGELOG (EN)](./docs/CHANGELOG.en.md) / [(RU)](./docs/CHANGELOG.md).
 
 ## License
 

@@ -1,5 +1,7 @@
 # Журнал изменений VoiceSub / SST Desktop
 
+<p align="center"><a href="./CHANGELOG.en.md">English</a> • <a href="./CHANGELOG.md">Русский</a></p>
+
 Единая история изменений desktop-линии: **VoiceSub** `0.5.4` (текущая линия), **VoiceSub** `0.5.3`, **VoiceSub** `0.5.2`, **VoiceSub** `0.5.1`, **VoiceSub** `0.5.0` (первый релиз новой линии, baseline — SST `0.4.4`) и **SST Desktop** `0.4.4` и ниже.
 
 
