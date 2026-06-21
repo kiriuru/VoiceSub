@@ -105,7 +105,7 @@ export function presetLabel(key: string, catalog: StylePresetCatalog): string {
   return key.replaceAll("_", " ");
 }
 
-export function presetDescription(key: string, catalog: StylePresetCatalog): string {
+function presetDescription(key: string, catalog: StylePresetCatalog): string {
   const entry = catalog[key];
   if (entry && typeof entry === "object" && typeof entry.description === "string") {
     return entry.description;

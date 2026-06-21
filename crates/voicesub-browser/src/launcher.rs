@@ -180,7 +180,7 @@ fn spawn_chrome_process(
                 && matches!(&err, BrowserLaunchError::Spawn(io) if is_access_denied(io)) =>
         {
             warn!(
-                "chrome launch: HIGH_PRIORITY_CLASS denied (ERROR_ACCESS_DENIED); retrying without priority boost"
+                "chrome launch: ABOVE_NORMAL_PRIORITY_CLASS denied (ERROR_ACCESS_DENIED); retrying without priority boost"
             );
             try_spawn_chrome(chrome_path, chrome_args, false)
         }
@@ -205,10 +205,13 @@ fn try_spawn_chrome(
         use std::os::windows::process::CommandExt;
         const CREATE_NEW_PROCESS_GROUP: u32 = 0x00000200;
         const DETACHED_PROCESS: u32 = 0x00000008;
-        const HIGH_PRIORITY_CLASS: u32 = 0x00000080;
+        // ABOVE_NORMAL keeps the ASR worker responsive (anti-throttling + EcoQoS opt-out
+        // still apply) without HIGH_PRIORITY_CLASS preempting foreground apps and starving
+        // the rest of the system (review §7).
+        const ABOVE_NORMAL_PRIORITY_CLASS: u32 = 0x00008000;
         let mut flags = CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS;
         if use_high_priority {
-            flags |= HIGH_PRIORITY_CLASS;
+            flags |= ABOVE_NORMAL_PRIORITY_CLASS;
         }
         command.creation_flags(flags);
     }

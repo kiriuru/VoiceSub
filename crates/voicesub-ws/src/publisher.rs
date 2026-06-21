@@ -108,7 +108,6 @@ impl WsEventPublisher {
 struct SyncBroadcastJob {
     hub: EventsHub,
     message: Value,
-    event_bus: Option<RuntimeEventBus>,
 }
 
 fn sync_broadcast_loop(rx: mpsc::Receiver<SyncBroadcastJob>) {
@@ -117,9 +116,7 @@ fn sync_broadcast_loop(rx: mpsc::Receiver<SyncBroadcastJob>) {
         .build()
         .expect("ws publisher broadcast runtime");
     for job in rx {
-        if let Some(bus) = &job.event_bus {
-            bus.publish(job.message.clone());
-        }
+        // event_bus was already published in broadcast_now before this job was enqueued.
         rt.block_on(job.hub.broadcast(job.message));
     }
 }
@@ -153,7 +150,6 @@ fn broadcast_now(events: &EventsHub, message: Value, event_bus: Option<&RuntimeE
         .send(SyncBroadcastJob {
             hub: events.clone(),
             message,
-            event_bus: event_bus.cloned(),
         })
         .is_err()
     {
@@ -166,6 +162,7 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     use super::*;
+    use crate::event_bus::RuntimeEventBus;
     use crate::event_sequence::EventSequencer;
 
     #[test]
@@ -180,5 +177,31 @@ mod tests {
             .unwrap()
             .enrich("runtime_status", json!({ "running": true }));
         assert_eq!(body["event_type"], "runtime_status");
+    }
+
+    /// Verify that broadcast_now publishes to event_bus exactly once even when called
+    /// outside a Tokio runtime (the sync-fallback path must not double-publish).
+    #[test]
+    fn broadcast_now_publishes_event_bus_exactly_once_outside_tokio() {
+        let hub = EventsHub::new();
+        let bus = RuntimeEventBus::new();
+        let bus_for_thread = bus.clone();
+
+        std::thread::spawn(move || {
+            broadcast_now(
+                &hub,
+                json!({"type": "test_event"}),
+                Some(&bus_for_thread),
+            );
+        })
+        .join()
+        .unwrap();
+
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        assert_eq!(
+            bus.diagnostics().publish_count,
+            1,
+            "event_bus must be published exactly once"
+        );
     }
 }

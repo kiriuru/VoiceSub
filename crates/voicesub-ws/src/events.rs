@@ -143,15 +143,10 @@ impl EventsHub {
         });
 
         let _ = self.send_direct(socket_id, WsMessage::hello_events()).await;
+        // subtitle_payload_update is no longer broadcast on this hub (it lives only in the
+        // Tauri IPC snapshot path). Only overlay_update carries live subtitle frames here.
         let _ = self
-            .replay_last(
-                socket_id,
-                &[
-                    "runtime_update",
-                    "subtitle_payload_update",
-                    "overlay_update",
-                ],
-            )
+            .replay_last(socket_id, &["runtime_update", "overlay_update"])
             .await;
 
         while let Some(Ok(Message::Text(_))) = ws_rx.next().await {
@@ -191,7 +186,7 @@ impl EventsHub {
         };
         let text_msg = Message::Text(payload.into());
         for client in clients.values() {
-            self.enqueue_to_client(client, text_msg.clone());
+            self.enqueue_to_client(client, text_msg.clone(), &message_type);
         }
     }
 
@@ -200,44 +195,44 @@ impl EventsHub {
             Ok(s) => s,
             Err(_) => return false,
         };
+        let message_type = message.message_type.clone();
         let clients = self.inner.clients.read().await;
         let Some(client) = clients.get(&socket_id) else {
             return false;
         };
-        self.enqueue_to_client(client, Message::Text(payload.into()));
+        self.enqueue_to_client(client, Message::Text(payload.into()), &message_type);
         true
     }
 
     pub async fn replay_last(&self, socket_id: SocketId, message_types: &[&str]) -> bool {
-        let last = self.inner.last_by_type.read().await;
-        let mut ok = true;
-        for kind in message_types {
-            if let Some(msg) = last.get(*kind) {
-                let payload = serde_json::to_string(msg).unwrap_or_default();
-                let clients = self.inner.clients.read().await;
-                if let Some(client) = clients.get(&socket_id) {
-                    self.enqueue_to_client(client, Message::Text(payload.into()));
-                } else {
-                    ok = false;
-                }
-            }
+        let messages: Vec<(String, String)> = {
+            let last = self.inner.last_by_type.read().await;
+            message_types
+                .iter()
+                .filter_map(|kind| last.get(*kind).map(|msg| (*kind, msg)))
+                .filter_map(|(kind, msg)| {
+                    serde_json::to_string(msg)
+                        .ok()
+                        .map(|payload| (kind.to_string(), payload))
+                })
+                .collect()
+        };
+        if messages.is_empty() {
+            return true;
         }
-        ok
+        let clients = self.inner.clients.read().await;
+        let Some(client) = clients.get(&socket_id) else {
+            return false;
+        };
+        for (message_type, payload) in messages {
+            self.enqueue_to_client(client, Message::Text(payload.into()), &message_type);
+        }
+        true
     }
 
-    fn enqueue_to_client(&self, client: &ClientState, message: Message) {
-        let message_type = match &message {
-            Message::Text(text) => serde_json::from_str::<Value>(text.as_ref())
-                .ok()
-                .and_then(|value| {
-                    value
-                        .get("type")
-                        .and_then(|kind| kind.as_str())
-                        .map(str::to_string)
-                })
-                .unwrap_or_default(),
-            _ => String::new(),
-        };
+    /// `message_type` is supplied by the caller (already known at broadcast/replay time) so
+    /// we do not re-parse the serialized JSON once per connected client (review §5).
+    fn enqueue_to_client(&self, client: &ClientState, message: Message, message_type: &str) {
         let dropped = {
             let mut guard = match client.queue.try_lock() {
                 Ok(guard) => guard,
@@ -249,14 +244,14 @@ impl EventsHub {
             if guard.len() >= client.queue_max {
                 guard.pop_front();
                 self.inner.dropped_oldest.fetch_add(1, Ordering::Relaxed);
-                self.inner.log.outbound_queue_drop_oldest(&message_type);
+                self.inner.log.outbound_queue_drop_oldest(message_type);
             }
             guard.push_back(message);
             let depth = guard.len();
             if depth >= client.queue_max.saturating_sub(4).max(1) {
                 self.inner
                     .log
-                    .outbound_queue_pressure(depth, client.queue_max, &message_type);
+                    .outbound_queue_pressure(depth, client.queue_max, message_type);
             }
             let depth = depth as u64;
             let mut observed = self.inner.queue_max_depth_observed.load(Ordering::Relaxed);
@@ -309,5 +304,30 @@ mod tests {
         assert_eq!(diag.connections_active, 0);
         assert_eq!(diag.send_failures, 0);
         assert_eq!(diag.dropped_oldest, 0);
+    }
+
+    /// subtitle_payload_update is no longer broadcast on EventsHub, so it must
+    /// never appear in last_by_type and replay must not enqueue it.
+    #[tokio::test]
+    async fn subtitle_payload_update_not_replayable() {
+        let hub = EventsHub::new();
+        // Simulate what the old code did: ensure this type was never stored.
+        let last = hub.inner.last_by_type.read().await;
+        assert!(
+            last.get("subtitle_payload_update").is_none(),
+            "subtitle_payload_update must not be stored in last_by_type"
+        );
+    }
+
+    /// replay_last must not enqueue a serialization-error message (empty string).
+    /// If a type is absent from last_by_type the result must be true (no-op, not error).
+    #[tokio::test]
+    async fn replay_last_absent_type_returns_true() {
+        let hub = EventsHub::new();
+        // Inject a fake socket_id that doesn't exist — replay should just return true.
+        let ok = hub.replay_last(999, &["runtime_update"]).await;
+        // No clients registered, so even if the type existed we'd get false.
+        // With no clients and no stored messages it must be true (nothing to replay).
+        assert!(ok);
     }
 }

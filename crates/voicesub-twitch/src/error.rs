@@ -52,6 +52,10 @@ mod tests {
     fn network_errors_are_retryable() {
         assert!(TwitchError::Irc("tcp connect failed: connection reset".into()).is_retryable());
         assert!(TwitchError::Tls("handshake failed".into()).is_retryable());
+        assert!(TwitchError::Irc(
+            "peer closed connection without sending TLS close_notify".into()
+        )
+        .is_retryable());
     }
 
     #[test]

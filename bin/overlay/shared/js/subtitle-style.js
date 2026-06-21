@@ -8,6 +8,12 @@
     "translation_5",
   ];
 
+  // OBS Browser Source: above this length we hint the compositor to contain
+  // layout/paint. Animation policy is separate (see resolveFreshFragmentEffect).
+  const OVERLAY_DENSE_PARTIAL_CHARS = 200;
+  // OBS: animate only small per-frame deltas; large ASR bursts display instantly.
+  const OVERLAY_MAX_ANIMATED_DELTA_CHARS = 12;
+
   const DEFAULT_BASE_STYLE = {
     font_family: '"Segoe UI", Tahoma, Geneva, Verdana, sans-serif',
     font_size_px: 30,
@@ -464,6 +470,66 @@
     return "revision";
   }
 
+  function resolveFreshFragmentEffect(slotEffect, options, deltaLength, totalLength) {
+    const base = String(slotEffect || "none");
+    if (base === "none") {
+      return "none";
+    }
+    if (!options?.overlay) {
+      return base;
+    }
+    void totalLength;
+    if (deltaLength > OVERLAY_MAX_ANIMATED_DELTA_CHARS) {
+      return "none";
+    }
+    return base;
+  }
+
+  function _transientSurfaceClassName(entry, options) {
+    const slot = entry.style_slot || "source";
+    const base = `subtitle-line__surface subtitle-slot-${slot} effect-none`;
+    if (options?.overlay && String(entry.text || "").length >= OVERLAY_DENSE_PARTIAL_CHARS) {
+      return `${base} is-dense-partial`;
+    }
+    return base;
+  }
+
+  // Commit the animated fresh suffix into the static prefix via append-only
+  // merge (O(delta) not O(total)). This is the unified streaming-text pattern
+  // used by LLM chat UIs: never rewrite the committed prefix on extension.
+  function mergeFreshIntoStatic(surface) {
+    const staticSpan = surface.querySelector(".subtitle-fragment-static");
+    const freshSpan = surface.querySelector(".subtitle-fragment-fresh");
+    if (!staticSpan || !freshSpan) {
+      return;
+    }
+    const freshText = freshSpan.textContent || "";
+    if (freshText) {
+      staticSpan.append(freshText);
+    }
+    if (freshSpan.parentNode === surface) {
+      surface.removeChild(freshSpan);
+    }
+  }
+
+  function appendFreshFragment(surface, delta, slotEffect, options) {
+    if (!delta) {
+      return "none";
+    }
+    const totalLength = surface.textContent?.length || 0;
+    const resolvedEffect = resolveFreshFragmentEffect(
+      slotEffect,
+      options,
+      delta.length,
+      totalLength + delta.length
+    );
+    const freshSpan = document.createElement("span");
+    freshSpan.className = `subtitle-fragment-fresh ${effectClassName(resolvedEffect)}`;
+    freshSpan.textContent = delta;
+    surface.appendChild(freshSpan);
+    return resolvedEffect;
+  }
+
   function appendTransientFragments(surface, entry, slotEffect, previousPartialText, options) {
     const currentText = String(entry.text || "");
     const sharedLength = commonPrefixLength(currentText, previousPartialText);
@@ -480,20 +546,14 @@
     staticSpan.className = "subtitle-fragment-static";
     staticSpan.textContent = staticPart;
     surface.appendChild(staticSpan);
-    if (freshPart) {
-      const freshSpan = document.createElement("span");
-      const effectClass = effectClassName(slotEffect || "none");
-      freshSpan.className = `subtitle-fragment-fresh ${effectClass}`;
-      freshSpan.textContent = freshPart;
-      surface.appendChild(freshSpan);
-    }
+    const resolvedEffect = appendFreshFragment(surface, freshPart, slotEffect, options);
     if (options && typeof options.onTrace === "function") {
       try {
         options.onTrace({
           slot: entry.style_slot || "source",
           kind: entry.kind || "source",
           transient: true,
-          effect: String(slotEffect || "none"),
+          effect: String(resolvedEffect || slotEffect || "none"),
           current_text_length: currentText.length,
           previous_text_length: String(previousPartialText || "").length,
           shared_length: sharedLength,
@@ -538,61 +598,47 @@
     }
   }
 
-  // Update an *existing* transient surface element in place for a pure-extension
-  // partial frame. Returns true when the in-place update succeeded; false when
-  // the previous surface structure was unsuitable and the caller must fall back
-  // to a full rebuild.
+  // Unified in-place partial updater: append-only static prefix + animated
+  // fresh delta. Same code path for all text lengths; OBS overlay only skips
+  // animation on large per-frame bursts (see resolveFreshFragmentEffect).
   //
-  // Why this exists: the default render path wipes `container.innerHTML` and
-  // recreates every node every frame. For partials that grow by one or two
-  // characters at a time, that means even the "static" prefix span is a brand
-  // new DOM node on each frame, which the browser may paint as a tiny layout
-  // flash. By keeping the same `surface` + `staticSpan` DOM elements across
-  // consecutive partial frames and only swapping in a new `fresh` span for the
-  // newly-appended characters, we get:
-  //   * static prefix that is byte-for-byte stable across frames (no flash)
-  //   * fresh suffix as a brand-new DOM node, so its CSS animation fires once
-  //     per growth step (and exactly on the new characters)
+  // On pure extension: commit the previous fresh suffix into static via append
+  // (O(δ) not O(n)), then mount a new fresh span for the frame delta only.
+  // Revision/jump returns false so the caller rebuilds fragments in-place.
   function updateTransientSurfaceInPlace(surface, entry, slotEffect, previousText, options) {
     const currentText = String(entry.text || "");
+    if (currentText === previousText) {
+      return true;
+    }
     const sharedLength = commonPrefixLength(currentText, previousText);
     const isPureExtension =
       previousText.length > 0 && sharedLength === previousText.length;
-    if (!isPureExtension && currentText !== previousText) {
+    if (!isPureExtension) {
       return false;
     }
-    const staticSpan = surface.querySelector(".subtitle-fragment-static");
+    let staticSpan = surface.querySelector(".subtitle-fragment-static");
     if (!staticSpan) {
       return false;
     }
-    const oldFreshSpan = surface.querySelector(".subtitle-fragment-fresh");
-    const newStaticText = currentText.slice(0, sharedLength);
-    const newFreshText = currentText.slice(sharedLength);
-    if (staticSpan.textContent !== newStaticText) {
-      staticSpan.textContent = newStaticText;
+    mergeFreshIntoStatic(surface);
+    staticSpan = surface.querySelector(".subtitle-fragment-static");
+    if (!staticSpan) {
+      return false;
     }
-    if (oldFreshSpan && oldFreshSpan.parentNode === surface) {
-      surface.removeChild(oldFreshSpan);
-    }
-    if (newFreshText) {
-      const freshSpan = document.createElement("span");
-      const effectClass = effectClassName(slotEffect || "none");
-      freshSpan.className = `subtitle-fragment-fresh ${effectClass}`;
-      freshSpan.textContent = newFreshText;
-      surface.appendChild(freshSpan);
-    }
+    const delta = currentText.slice(previousText.length);
+    const resolvedEffect = appendFreshFragment(surface, delta, slotEffect, options);
     if (options && typeof options.onTrace === "function") {
       try {
         options.onTrace({
           slot: entry.style_slot || "source",
           kind: entry.kind || "source",
           transient: true,
-          effect: String(slotEffect || "none"),
+          effect: String(resolvedEffect || slotEffect || "none"),
           current_text_length: currentText.length,
           previous_text_length: previousText.length,
           shared_length: sharedLength,
-          static_chars: newStaticText.length,
-          fresh_chars: newFreshText.length,
+          static_chars: staticSpan.textContent?.length || 0,
+          fresh_chars: delta.length,
           transition: classifyPartialTransition(currentText, previousText, sharedLength),
           reused_surface: true,
         });
@@ -995,9 +1041,10 @@
                 : null;
               _setClassNameIfChanged(
                 surface,
-                `subtitle-line__surface subtitle-slot-${entry.style_slot} effect-none`
+                _transientSurfaceClassName(entry, options)
               );
               const reused = updateTransientSurfaceInPlace(surface, entry, slotEffect, previousText, {
+                ...options,
                 onTrace: partialTraceHook,
               });
               if (!reused) {
@@ -1010,6 +1057,7 @@
                   surface.removeChild(surface.firstChild);
                 }
                 appendTransientFragments(surface, entry, slotEffect, previousText, {
+                  ...options,
                   onTrace: partialTraceHook,
                 });
               } else {
@@ -1199,7 +1247,7 @@
               entry,
               slotEffect,
               previousText,
-              { onTrace: partialTraceHook },
+              { ...options, onTrace: partialTraceHook },
             );
             if (reused) {
               surface = previousSurface;
@@ -1207,19 +1255,20 @@
               reusedPartialSurfaceCount += 1;
               surface.dataset.row = String(rowIndex);
               surface.dataset.index = String(entryIndex);
-              surface.className = `subtitle-line__surface subtitle-slot-${entry.style_slot} ${surfaceEffectClass}`;
+              surface.className = _transientSurfaceClassName(entry, options);
               applyStyleMap(surface, buildCssVariables(lineStyle, stageScale));
             }
           }
           if (!surface) {
             surface = document.createElement("div");
-            surface.className = `subtitle-line__surface subtitle-slot-${entry.style_slot} ${surfaceEffectClass}`;
+            surface.className = _transientSurfaceClassName(entry, options);
             surface.dataset.slot = entry.style_slot || "source";
             surface.dataset.kind = entry.kind || "source";
             surface.dataset.row = String(rowIndex);
             surface.dataset.index = String(entryIndex);
             applyStyleMap(surface, buildCssVariables(lineStyle, stageScale));
             appendTransientFragments(surface, entry, slotEffect, previousText, {
+              ...options,
               onTrace: partialTraceHook,
             });
           }
@@ -1435,6 +1484,8 @@
 
   window.SubtitleStyleRenderer = {
     LINE_SLOT_NAMES,
+    OVERLAY_DENSE_PARTIAL_CHARS,
+    OVERLAY_MAX_ANIMATED_DELTA_CHARS,
     buildStyleFromPreset,
     normalizeStyleConfig,
     resolveEffectiveStyle,
@@ -1442,6 +1493,8 @@
     effectClassName,
     commonPrefixLength,
     classifyPartialTransition,
+    mergeFreshIntoStatic,
+    resolveFreshFragmentEffect,
     updateTransientSurfaceInPlace,
     _shapeSignatureForRows,
     _shapeSignatureForEntry,

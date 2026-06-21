@@ -18,11 +18,10 @@ fn optional_string(value: Option<&Value>) -> Option<String> {
 
 /// Merge engine readiness with dispatcher runtime metrics (SST `summarize_translation_diagnostics`).
 pub fn summarize_translation_diagnostics(
-    translation_config: &Value,
+    _translation_config: &Value,
     readiness: Value,
     dispatcher_snapshot: &Value,
 ) -> Value {
-    let _ = translation_config;
     let snapshot = dispatcher_snapshot.as_object().cloned().unwrap_or_default();
     let mut merged = readiness.as_object().cloned().unwrap_or_default();
 

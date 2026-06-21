@@ -12,10 +12,7 @@
   let selected = new Set<number>();
 
   $: loc = $locale;
-  function tr(key: string, vars?: Record<string, string | number>) {
-    loc;
-    return t(key, vars);
-  }
+  $: tr = (key: string, vars?: Record<string, string | number>) => t(key, vars, loc);
 
   type SourceTextReplacementBlock = {
     enabled?: boolean;

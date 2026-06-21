@@ -7,6 +7,7 @@ mod launch_config;
 mod launch_stability;
 mod launcher;
 mod operational_fsm;
+mod orphan_guard;
 mod process_affinity;
 mod profile_bloat_guard;
 mod service;
@@ -29,6 +30,7 @@ pub use launcher::{
     BrowserLaunchError, BrowserWorkerLauncher, LaunchResult, browser_worker_launch_skipped,
 };
 pub use operational_fsm::{BrowserAsrOperationalFsm, BrowserOperationalPhase};
+pub use orphan_guard::{clear_worker_pid, reap_orphan_worker, record_worker_pid};
 pub use process_affinity::{apply_browser_worker_affinity, resolve_browser_worker_affinity_mask};
 pub use service::{
     BrowserAsrDiagnostics, BrowserAsrService, IngestCallback, IngestedAsrUpdate, StatusCallback,

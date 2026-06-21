@@ -224,7 +224,7 @@ impl TranslationEngine {
             if !line.enabled {
                 continue;
             }
-            let provider_name = Self::supported_provider(&line.provider);
+            let provider_name = canonical_provider_name(&line.provider);
             let provider = self.providers.get(&provider_name);
             let provider_group = provider
                 .map(|p| p.info().group.to_string())
@@ -250,7 +250,7 @@ impl TranslationEngine {
         let provider_names: Vec<_> = lines.iter().map(|l| l.provider_name.as_str()).collect();
         let provider_groups: Vec<_> = lines.iter().map(|l| l.provider_group.as_str()).collect();
         let provider_name = if provider_names.is_empty() {
-            Self::supported_provider(
+            canonical_provider_name(
                 translation_config
                     .get("provider")
                     .and_then(|v| v.as_str())
@@ -289,7 +289,12 @@ impl TranslationEngine {
     ) -> (TranslationItem, Value) {
         match self.plan_line_translate(source_text, source_lang, line, &options) {
             LineTranslatePlan::Done(item, diagnostics) => (item, diagnostics),
-            LineTranslatePlan::Fetch(work) => self.execute_line_fetch(work).await,
+            LineTranslatePlan::Fetch(work) => {
+                let cache_key = work.cache_key.clone();
+                let (item, diagnostics) = Self::run_line_fetch(work).await;
+                Self::cache_translation_result(&self.cache, &cache_key, &item);
+                (item, diagnostics)
+            }
         }
     }
 
@@ -308,7 +313,13 @@ impl TranslationEngine {
         };
         match plan {
             LineTranslatePlan::Done(item, diagnostics) => (item, diagnostics),
-            LineTranslatePlan::Fetch(work) => Self::execute_line_fetch_shared(engine, work).await,
+            LineTranslatePlan::Fetch(work) => {
+                let cache_key = work.cache_key.clone();
+                let (item, diagnostics) = Self::run_line_fetch(work).await;
+                let guard = engine.lock().await;
+                Self::cache_translation_result(&guard.cache, &cache_key, &item);
+                (item, diagnostics)
+            }
         }
     }
 
@@ -425,8 +436,8 @@ impl TranslationEngine {
         })
     }
 
-    async fn execute_line_fetch(&mut self, work: LineFetchWork) -> (TranslationItem, Value) {
-        let (item, diagnostics) = Self::translate_with_retry(TranslateRetryRequest {
+    async fn run_line_fetch(work: LineFetchWork) -> (TranslationItem, Value) {
+        Self::translate_with_retry(TranslateRetryRequest {
             provider: work.provider,
             source_text: &work.source_text,
             source_lang: &work.normalized_source,
@@ -438,39 +449,13 @@ impl TranslationEngine {
             line: &work.line,
             budget_seconds: work.budget_seconds,
         })
-        .await;
-
-        if item.success && !item.text.is_empty() && self.cache.enabled() {
-            self.cache.insert(work.cache_key, item.text.clone());
-        }
-        (item, diagnostics)
+        .await
     }
 
-    async fn execute_line_fetch_shared(
-        engine: Arc<AsyncMutex<Self>>,
-        work: LineFetchWork,
-    ) -> (TranslationItem, Value) {
-        let (item, diagnostics) = Self::translate_with_retry(TranslateRetryRequest {
-            provider: work.provider,
-            source_text: &work.source_text,
-            source_lang: &work.normalized_source,
-            target_lang: &work.normalized_target,
-            provider_settings: &work.call_settings,
-            retries: work.retries,
-            slot_id: work.slot_id,
-            label: work.label,
-            line: &work.line,
-            budget_seconds: work.budget_seconds,
-        })
-        .await;
-
-        if item.success && !item.text.is_empty() {
-            let guard = engine.lock().await;
-            if guard.cache.enabled() {
-                guard.cache.insert(work.cache_key, item.text.clone());
-            }
+    fn cache_translation_result(cache: &TranslationCache, cache_key: &str, item: &TranslationItem) {
+        if item.success && !item.text.is_empty() && cache.enabled() {
+            cache.insert(cache_key.to_string(), item.text.clone());
         }
-        (item, diagnostics)
     }
 
     pub async fn translate_targets(
@@ -482,7 +467,7 @@ impl TranslationEngine {
         target_languages: &[String],
         retries: u32,
     ) -> TranslationBatch {
-        let provider_name = Self::supported_provider(provider_name);
+        let provider_name = canonical_provider_name(provider_name);
         let clean_targets: Vec<String> = target_languages
             .iter()
             .map(|lang| lang.trim().to_ascii_lowercase())
@@ -774,12 +759,8 @@ impl TranslationEngine {
         }
     }
 
-    fn supported_provider(raw: &str) -> String {
-        canonical_provider_name(raw)
-    }
-
     fn normalized_lines(config: &Value) -> Vec<NormalizedLine> {
-        let default_provider = Self::supported_provider(
+        let default_provider = canonical_provider_name(
             config
                 .get("provider")
                 .and_then(|v| v.as_str())
@@ -812,7 +793,7 @@ impl TranslationEngine {
                 if slot_id.is_empty() || target_lang.is_empty() {
                     continue;
                 }
-                let provider = Self::supported_provider(
+                let provider = canonical_provider_name(
                     obj.get("provider")
                         .and_then(|v| v.as_str())
                         .unwrap_or(&default_provider),
@@ -923,7 +904,7 @@ impl TranslationEngine {
         );
         payload.insert(
             "provider".to_string(),
-            Self::supported_provider(
+            canonical_provider_name(
                 translation_config
                     .get("provider")
                     .and_then(|v| v.as_str())

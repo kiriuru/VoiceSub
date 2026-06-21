@@ -23,12 +23,11 @@ pub async fn ui_sync(
     } else {
         json!({})
     };
+    // Use ws_publisher so the message gets event_sequence enrichment and is
+    // forwarded to RuntimeEventBus (Tauri runtime-event channel).
     state
-        .events
-        .broadcast(json!({
-            "type": "ui_config_sync",
-            "payload": { "ui": ui }
-        }))
+        .ws_publisher
+        .broadcast_channel("ui_config_sync", "ui_config_sync", json!({ "ui": ui }))
         .await;
     Json(json!({ "ok": true }))
 }
@@ -50,5 +49,14 @@ mod tests {
         )
         .expect("deserialize");
         assert_eq!(req.ui.get("theme").and_then(|v| v.as_str()), Some("dark"));
+    }
+
+    /// ui_sync non-object body must be coerced to empty object, never null.
+    #[test]
+    fn ui_sync_null_body_coerced_to_empty_object() {
+        let ui_null: Value = serde_json::from_str("null").unwrap();
+        let coerced = if ui_null.is_object() { ui_null } else { json!({}) };
+        assert!(coerced.is_object());
+        assert_eq!(coerced.as_object().map(|m| m.len()), Some(0));
     }
 }

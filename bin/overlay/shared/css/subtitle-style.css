@@ -80,6 +80,10 @@
   overflow-wrap: anywhere;
 }
 
+.is-overlay-shell .subtitle-line__surface.is-dense-partial {
+  contain: layout style;
+}
+
 .subtitle-line__surface.effect-fade {
   animation: subtitle-fade-in 220ms ease-out both;
 }

@@ -118,11 +118,6 @@ export function resolveBrowserLifecycleConfig(
       Number.parseInt(String(backend.force_final_min_stable_ms || browserLifecycleDefaults.forceFinalMinStableMs), 10) ||
         browserLifecycleDefaults.forceFinalMinStableMs
     ),
-    overlapPrestartAfterMs: Math.max(
-      1000,
-      Number.parseInt(String(backend.overlap_prestart_after_ms || browserLifecycleDefaults.overlapPrestartAfterMs), 10) ||
-        browserLifecycleDefaults.overlapPrestartAfterMs
-    ),
     overlapBuddyGhostTimeoutMs: Math.max(
       2000,
       Number.parseInt(

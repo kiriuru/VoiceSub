@@ -69,10 +69,7 @@ impl HttpState {
             return;
         };
         self.ws_publisher
-            .broadcast_overlay_body("overlay_update", "overlay_update", body.clone())
-            .await;
-        self.ws_publisher
-            .broadcast_overlay_body("subtitle_payload_update", "overlay_update", body)
+            .broadcast_overlay_body("overlay_update", "overlay_update", body)
             .await;
     }
 }

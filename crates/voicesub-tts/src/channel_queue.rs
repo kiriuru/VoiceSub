@@ -3,11 +3,9 @@
 use std::sync::Mutex;
 
 use tracing::debug;
+use voicesub_audio::{CHANNEL_SPEECH, CHANNEL_TWITCH};
 
-use crate::queue::{SpeechQueue, SpeechQueueItem, SpeechQueueState};
-
-pub const CHANNEL_SPEECH: &str = "speech";
-pub const CHANNEL_TWITCH: &str = "twitch";
+use crate::queue::{SpeechQueue, SpeechQueueItem};
 
 #[derive(Debug, Default)]
 pub struct DualChannelSpeechQueue {
@@ -34,6 +32,14 @@ impl DualChannelSpeechQueue {
         }
     }
 
+    fn lock_message(channel: &str) -> &'static str {
+        if channel == CHANNEL_TWITCH {
+            "twitch queue lock"
+        } else {
+            "speech queue lock"
+        }
+    }
+
     pub fn enqueue(
         &self,
         channel: &str,
@@ -41,14 +47,19 @@ impl DualChannelSpeechQueue {
         max_items: u32,
     ) -> Result<(usize, Vec<SpeechQueueItem>), ChannelQueueError> {
         let queue = self.queue_for(channel)?;
-        let mut guard = queue.lock().expect("speech queue lock");
+        let mut guard = queue
+            .lock()
+            .unwrap_or_else(|_| panic!("{}", Self::lock_message(channel)));
         let dropped = guard.enqueue_with_cap(item, max_items);
         Ok((guard.len(), dropped))
     }
 
     pub fn begin_next(&self, channel: &str) -> Result<Option<SpeechQueueItem>, ChannelQueueError> {
         let queue = self.queue_for(channel)?;
-        Ok(queue.lock().expect("speech queue lock").begin_next())
+        Ok(queue
+            .lock()
+            .unwrap_or_else(|_| panic!("{}", Self::lock_message(channel)))
+            .begin_next())
     }
 
     pub fn mark_finished(
@@ -59,44 +70,60 @@ impl DualChannelSpeechQueue {
         let queue = self.queue_for(channel)?;
         Ok(queue
             .lock()
-            .expect("speech queue lock")
+            .unwrap_or_else(|_| panic!("{}", Self::lock_message(channel)))
             .mark_finished(item_id))
     }
 
     pub fn clear(&self, channel: &str) -> Result<(), ChannelQueueError> {
         let queue = self.queue_for(channel)?;
-        queue.lock().expect("speech queue lock").clear();
+        queue
+            .lock()
+            .unwrap_or_else(|_| panic!("{}", Self::lock_message(channel)))
+            .clear();
         debug!(target: "voicesub.tts", channel, "channel queue cleared");
         Ok(())
     }
 
     pub fn clear_all(&self) {
-        self.speech.lock().expect("speech queue lock").clear();
-        self.twitch.lock().expect("speech queue lock").clear();
+        self.speech
+            .lock()
+            .expect("speech queue lock")
+            .clear();
+        self.twitch
+            .lock()
+            .expect("twitch queue lock")
+            .clear();
         debug!(target: "voicesub.tts", "all channel queues cleared");
     }
 
     pub fn snapshot(&self, channel: &str) -> Result<Vec<SpeechQueueItem>, ChannelQueueError> {
         let queue = self.queue_for(channel)?;
-        Ok(queue.lock().expect("speech queue lock").snapshot())
-    }
-
-    pub fn state(&self, channel: &str) -> Result<SpeechQueueState, ChannelQueueError> {
-        let queue = self.queue_for(channel)?;
-        Ok(queue.lock().expect("speech queue lock").state())
+        Ok(queue
+            .lock()
+            .unwrap_or_else(|_| panic!("{}", Self::lock_message(channel)))
+            .snapshot())
     }
 
     pub fn force_idle(&self, channel: &str) -> Result<(), ChannelQueueError> {
         let queue = self.queue_for(channel)?;
-        queue.lock().expect("speech queue lock").force_idle();
+        queue
+            .lock()
+            .unwrap_or_else(|_| panic!("{}", Self::lock_message(channel)))
+            .force_idle();
         debug!(target: "voicesub.tts", channel, "channel queue forced idle");
         Ok(())
     }
 
     /// Reset stuck `Speaking` on both channels without dropping queued items.
     pub fn force_idle_all(&self) {
-        self.speech.lock().expect("speech queue lock").force_idle();
-        self.twitch.lock().expect("twitch queue lock").force_idle();
+        self.speech
+            .lock()
+            .expect("speech queue lock")
+            .force_idle();
+        self.twitch
+            .lock()
+            .expect("twitch queue lock")
+            .force_idle();
         debug!(target: "voicesub.tts", "all channel queues forced idle");
     }
 }

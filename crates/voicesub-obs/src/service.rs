@@ -3,7 +3,6 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex as StdMutex};
 use std::time::{Duration, Instant};
 
-use chrono::Utc;
 use serde_json::{Value, json};
 use tokio::sync::{Mutex, Notify};
 use tokio::task::JoinHandle;
@@ -1007,5 +1006,5 @@ async fn set_connection_state(inner: &Inner, state: ConnectionState, error: Opti
 }
 
 fn utc_now_iso() -> String {
-    Utc::now().to_rfc3339()
+    voicesub_types::utc_now_rfc3339()
 }

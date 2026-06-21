@@ -1,4 +1,4 @@
-import { writable, derived, get } from "svelte/store";
+import { writable, get } from "svelte/store";
 import { publishUiLocaleSync } from "../ui-config-sync";
 import type { LocaleCode } from "../types";
 
@@ -62,5 +62,3 @@ export function t(key: string, vars?: Interpolation, code?: LocaleCode): string 
   }
   return text;
 }
-
-export const tStore = derived(locale, ($locale) => (key: string, vars?: Interpolation) => t(key, vars, $locale));

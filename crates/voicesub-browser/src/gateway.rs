@@ -87,7 +87,6 @@ pub struct GatewayDiagnostics {
     pub overlap_prestarted: bool,
     pub overlap_active_listening: bool,
     pub overlap_buddy_listening: bool,
-    pub overlap_speech_prestart_done: bool,
     pub overlap_prestart_timer_armed: bool,
 }
 
@@ -509,9 +508,6 @@ fn apply_status_payload(state: &mut GatewayDiagnostics, payload: &serde_json::Ma
     apply_bool(state, payload, "overlap_buddy_listening", |s, v| {
         s.overlap_buddy_listening = v
     });
-    apply_bool(state, payload, "overlap_speech_prestart_done", |s, v| {
-        s.overlap_speech_prestart_done = v
-    });
     apply_bool(state, payload, "overlap_prestart_timer_armed", |s, v| {
         s.overlap_prestart_timer_armed = v
     });
@@ -689,7 +685,6 @@ struct CoreStatusSnapshot {
     overlap_prestarted: bool,
     overlap_active_listening: bool,
     overlap_buddy_listening: bool,
-    overlap_speech_prestart_done: bool,
     overlap_prestart_timer_armed: bool,
 }
 
@@ -792,7 +787,6 @@ fn core_status_snapshot(state: &GatewayDiagnostics) -> CoreStatusSnapshot {
         overlap_prestarted: state.overlap_prestarted,
         overlap_active_listening: state.overlap_active_listening,
         overlap_buddy_listening: state.overlap_buddy_listening,
-        overlap_speech_prestart_done: state.overlap_speech_prestart_done,
         overlap_prestart_timer_armed: state.overlap_prestart_timer_armed,
     }
 }
@@ -823,7 +817,6 @@ fn overlap_status_fields(state: &GatewayDiagnostics) -> Value {
         "overlap_prestarted": state.overlap_prestarted,
         "overlap_active_listening": state.overlap_active_listening,
         "overlap_buddy_listening": state.overlap_buddy_listening,
-        "overlap_speech_prestart_done": state.overlap_speech_prestart_done,
         "overlap_prestart_timer_armed": state.overlap_prestart_timer_armed,
     })
 }

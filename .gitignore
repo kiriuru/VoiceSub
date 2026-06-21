@@ -23,11 +23,6 @@ bin/modules/tts/runtime/**
 !bin/modules/tts/runtime/README.md
 !bin/modules/tts/runtime/.gitkeep
 
-# Optional Parakeet module weights (when sidecar exists)
-bin/modules/parakeet/models/**
-!bin/modules/parakeet/models/README.md
-!bin/modules/parakeet/models/.gitkeep
-
 # --- Python / legacy SST artifacts (must not re-enter the tree) ---
 __pycache__/
 *.py[cod]
@@ -64,6 +59,7 @@ user-data/
 build/
 
 # --- Local-only: not published to Git (dev, installer, internal docs) ---
+tools/
 AGENTS.md
 start-voicesub.bat
 build-release.ps1

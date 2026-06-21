@@ -75,6 +75,11 @@ pub struct RuntimeStateSnapshot {
     pub translation: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub diagnostics: Option<Value>,
+    /// Last Twitch connection status so a lagged consumer (TTS window) can restore its
+    /// connection UI after dropping broadcast messages. Chat messages are ephemeral and
+    /// intentionally not replayed (review MED#7).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub twitch_connection: Option<Value>,
 }
 
 impl RuntimeStateSnapshot {
@@ -86,6 +91,7 @@ impl RuntimeStateSnapshot {
             overlay: None,
             translation: None,
             diagnostics: None,
+            twitch_connection: None,
         }
     }
 }

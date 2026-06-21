@@ -22,6 +22,8 @@ export type SubtitleStyleRenderer = {
   ) => string;
   commonPrefixLength: (a: string, b: string) => number;
   disposeRenderContainer: (container: HTMLElement) => void;
+  OVERLAY_DENSE_PARTIAL_CHARS?: number;
+  OVERLAY_MAX_ANIMATED_DELTA_CHARS?: number;
 };
 
 declare global {

@@ -108,19 +108,16 @@ impl SubtitleSpeechPlanner {
             .get("lifecycle_state")
             .and_then(|v| v.as_str())
             .unwrap_or("idle");
-        if lifecycle != "completed_only" {
+        if !lifecycle_allows_planning(lifecycle) {
             trace!(
                 target: "voicesub.tts",
                 lifecycle,
-                "planner skip: lifecycle not completed_only"
+                "planner skip: lifecycle not speakable"
             );
             return Vec::new();
         }
 
-        let sequence = payload
-            .get("sequence")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0);
+        let sequence = plan_sequence(payload, lifecycle);
         if sequence == 0 {
             trace!(target: "voicesub.tts", "planner skip: sequence is zero");
             return Vec::new();
@@ -136,6 +133,7 @@ impl SubtitleSpeechPlanner {
         trace!(
             target: "voicesub.tts",
             sequence,
+            lifecycle,
             visible_items = items.len(),
             "planner evaluating payload"
         );
@@ -145,6 +143,14 @@ impl SubtitleSpeechPlanner {
                 continue;
             };
             let kind = obj.get("kind").and_then(|v| v.as_str()).unwrap_or("source");
+            if skip_item_for_lifecycle(lifecycle, kind) {
+                tts_trace::trace(
+                    "planner",
+                    "skip_active_partial_source",
+                    json!({ "sequence": sequence, "lifecycle": lifecycle }),
+                );
+                continue;
+            }
             if obj.get("visible").and_then(|v| v.as_bool()) == Some(false) {
                 tts_trace::trace(
                     "planner",
@@ -257,6 +263,29 @@ impl SubtitleSpeechPlanner {
     }
 }
 
+fn lifecycle_allows_planning(lifecycle: &str) -> bool {
+    lifecycle == "completed_only" || lifecycle == "completed_with_partial"
+}
+
+fn plan_sequence(payload: &Value, lifecycle: &str) -> u64 {
+    if lifecycle == "completed_with_partial" {
+        return payload
+            .get("completed_sequence")
+            .and_then(|v| v.as_u64())
+            .filter(|&sequence| sequence > 0)
+            .unwrap_or(0);
+    }
+    payload
+        .get("sequence")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0)
+}
+
+/// Never speak the live partial source line while a completed block is still visible.
+fn skip_item_for_lifecycle(lifecycle: &str, kind: &str) -> bool {
+    lifecycle == "completed_with_partial" && kind.eq_ignore_ascii_case("source")
+}
+
 fn speech_key(sequence: u64, kind: &str, slot_id: &str, text: &str) -> String {
     format!(
         "{sequence}:{kind}:{slot_id}:{:016x}",
@@ -336,16 +365,64 @@ mod tests {
     }
 
     #[test]
-    fn ignores_partial_lifecycle() {
+    fn ignores_partial_only_lifecycle() {
         let mut planner = SubtitleSpeechPlanner::new();
         let settings = TtsSpeechSettings::default();
         let payload = json!({
             "sequence": 2,
-            "lifecycle_state": "completed_with_partial",
+            "lifecycle_state": "partial_only",
             "visible_items": [{"kind": "source", "text": "partial phrase"}],
             "active_partial_text": "partial phrase"
         });
         assert!(planner.plan(&payload, &settings).is_empty());
+    }
+
+    #[test]
+    fn completed_with_partial_without_completed_sequence_is_skipped() {
+        let mut planner = SubtitleSpeechPlanner::new();
+        let settings = TtsSpeechSettings {
+            speak_source: false,
+            speak_translations: true,
+            translation_slots: vec!["translation_2".into()],
+            ..TtsSpeechSettings::default()
+        };
+        let payload = json!({
+            "sequence": 9,
+            "lifecycle_state": "completed_with_partial",
+            "completed_block_visible": true,
+            "active_partial_text": "live partial",
+            "visible_items": [
+                {"kind": "source", "text": "live partial"},
+                {"kind": "translation", "text": "late EN", "slot_id": "translation_2", "target_lang": "en"},
+            ],
+        });
+        assert!(planner.plan(&payload, &settings).is_empty());
+    }
+
+    #[test]
+    fn speaks_late_translation_on_completed_with_partial() {
+        let mut planner = SubtitleSpeechPlanner::new();
+        let settings = TtsSpeechSettings {
+            speak_source: false,
+            speak_translations: true,
+            translation_slots: vec!["translation_2".into()],
+            ..TtsSpeechSettings::default()
+        };
+        let payload = json!({
+            "sequence": 5,
+            "completed_sequence": 4,
+            "lifecycle_state": "completed_with_partial",
+            "completed_block_visible": true,
+            "active_partial_text": "next phrase",
+            "visible_items": [
+                {"kind": "source", "text": "next phrase"},
+                {"kind": "translation", "text": "previous EN", "slot_id": "translation_2", "target_lang": "en"},
+            ],
+        });
+        let lines = planner.plan(&payload, &settings);
+        assert_eq!(lines.len(), 1);
+        assert_eq!(lines[0].text, "previous EN");
+        assert_eq!(lines[0].source, "subtitle_translation_2");
     }
 
     #[test]
@@ -505,5 +582,40 @@ mod tests {
             ],
         );
         assert!(planner.plan(&payload, &settings).is_empty());
+    }
+
+    #[test]
+    fn default_min_chars_blocks_single_character_lines() {
+        let mut planner = SubtitleSpeechPlanner::new();
+        let settings = TtsSpeechSettings::default();
+        assert_eq!(settings.min_chars, 2);
+        let payload = completed_payload(
+            8,
+            vec![
+                json!({"kind": "source", "text": "."}),
+                json!({"kind": "translation", "text": "!", "slot_id": "translation_1"}),
+                json!({"kind": "translation", "text": "ok", "slot_id": "translation_2"}),
+            ],
+        );
+        let lines = planner.plan(&payload, &settings);
+        assert_eq!(lines.len(), 1);
+        assert_eq!(lines[0].text, "ok");
+        assert_eq!(lines[0].source, "subtitle_translation_2");
+    }
+
+    #[test]
+    fn min_chars_one_allows_single_character_when_configured() {
+        let mut planner = SubtitleSpeechPlanner::new();
+        let settings = TtsSpeechSettings {
+            min_chars: 1,
+            ..TtsSpeechSettings::default()
+        };
+        let payload = completed_payload(
+            9,
+            vec![json!({"kind": "translation", "text": ".", "slot_id": "translation_1"})],
+        );
+        let lines = planner.plan(&payload, &settings);
+        assert_eq!(lines.len(), 1);
+        assert_eq!(lines[0].text, ".");
     }
 }

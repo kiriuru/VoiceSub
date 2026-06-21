@@ -92,6 +92,7 @@ describe("normalizeConfigPayload SST parity", () => {
     expect(out.obs_closed_captions?.output_mode).toBe("translation_2");
   });
 
+  // Deprecated keys: still normalized/synced for legacy configs (no runtime effect).
   it("syncs lifecycle pause/hard_max with asr.realtime and completed TTLs", () => {
     const out = normalizeConfigPayload({
       subtitle_lifecycle: {

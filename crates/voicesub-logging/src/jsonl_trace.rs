@@ -61,10 +61,5 @@ impl JsonlTraceLog {
 }
 
 fn utc_now_iso() -> String {
-    use std::time::Duration;
-    let secs = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or(Duration::ZERO)
-        .as_secs();
-    format!("{secs}")
+    voicesub_types::utc_now_rfc3339()
 }

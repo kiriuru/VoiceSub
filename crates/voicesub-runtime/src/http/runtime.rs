@@ -136,6 +136,11 @@ impl RuntimeOrchestrator {
                 } else {
                     Some(result.pid)
                 };
+                // Persist the live worker PID so a crash before graceful stop can reap the
+                // leftover high-priority Chrome on next startup (review §8).
+                if let Some(pid) = inner.worker_pid {
+                    voicesub_browser::record_worker_pid(&state.paths.user_data_dir, pid);
+                }
                 inner.running = true;
                 inner.phase = "listening";
                 inner.started_at_utc = Some(started_at);
@@ -190,6 +195,9 @@ impl RuntimeOrchestrator {
         {
             tracing::info!(pid, "browser worker process terminated");
         }
+        // Graceful stop: drop the persisted PID so startup reaping does not target a PID
+        // that may later be reused by another process (review §8).
+        voicesub_browser::clear_worker_pid(&state.paths.user_data_dir);
 
         state.subtitle.reset().await;
         state.flush_overlay_presentations_to_clients().await;

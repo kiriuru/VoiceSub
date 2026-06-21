@@ -16,7 +16,6 @@ export interface BrowserLifecycleConfig {
   forceFinalOnInterruption: boolean;
   forceFinalMinChars: number;
   forceFinalMinStableMs: number;
-  overlapPrestartAfterMs: number;
   overlapBuddyGhostTimeoutMs: number;
   overlapBuddyGhostActiveMicMs: number;
 }
@@ -82,11 +81,8 @@ export interface BrowserAsrState {
   recognitionOverlapActiveSlot: number | null;
   recognitionOverlapPrestarted: boolean;
   recognitionOverlapSlotListening: boolean[] | null;
-  recognitionOverlapPrestartTimer: ReturnType<typeof setTimeout> | null;
-  recognitionOverlapActiveListenSinceMs: number | null;
   recognitionOverlapSlotListenSinceMs: [number | null, number | null] | null;
   recognitionOverlapSlotActivityAtMs: [number | null, number | null] | null;
-  recognitionOverlapActiveSpeechPrestartDone: boolean;
   webSpeechPhraseHintsSuppressed: boolean;
   webSpeechLanguageSoftFallbackUsed: boolean;
   recognitionGenerationId: number;
@@ -97,6 +93,8 @@ export interface BrowserAsrState {
   currentSegmentLastFinalText: string;
   currentPartialStableSinceMs: number;
   currentSegmentForcedFinalized: boolean;
+  currentSegmentPeakPartialChars: number;
+  longSegmentFlushCount: number;
   lastForcedFinal: LastForcedFinal | null;
   duplicatePartialSuppressed: number;
   duplicateFinalSuppressed: number;

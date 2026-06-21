@@ -282,6 +282,7 @@ impl SubtitlePresentation {
 
         SubtitlePayloadEvent {
             sequence,
+            completed_sequence: Some(sequence),
             source_lang: source_lang.into(),
             source_text: source_text.into(),
             provider: record
@@ -420,6 +421,7 @@ impl SubtitlePresentation {
                 .unwrap_or_default();
             let payload = SubtitlePayloadEvent {
                 sequence: active_partial_sequence.unwrap_or(0),
+                completed_sequence: core.completed_sequence(),
                 source_lang,
                 source_text: active_partial_text,
                 provider: source_item.provider.clone(),
@@ -618,6 +620,7 @@ impl SubtitlePresentation {
             .map(|p| !p.visible_items.is_empty())
             .unwrap_or(false);
         payload.lifecycle_state = lifecycle_state;
+        payload.completed_sequence = core.completed_sequence();
         payload.completed_block_visible = completed_block_visible;
         payload.completed_expires_at_utc = core.completed_expires_at_utc();
         payload.active_partial_text = visible_partial_text;

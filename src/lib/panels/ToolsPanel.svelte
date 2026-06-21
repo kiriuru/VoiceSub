@@ -108,7 +108,6 @@
     status = "";
     try {
       await downloadDiagnostics();
-      await refreshLists();
       status = tr("tools.config.export_diagnostics");
     } catch (err) {
       error = err instanceof Error ? err.message : tr("tools.runtime.export_failed");
@@ -282,6 +281,7 @@
   </label>
   <p class="muted">{tr("tools.runtime.full_logging.hint")}</p>
   <p class="muted mono-block">{formatObsCcRuntimeStatus(diagnostics.obs, tr)}</p>
+  <p class="muted">{tr("tools.runtime.note")}</p>
   </article>
   </div>
 

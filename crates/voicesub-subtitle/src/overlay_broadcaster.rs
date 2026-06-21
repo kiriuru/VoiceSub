@@ -75,7 +75,6 @@ impl OverlayBroadcaster {
                 .or_insert_with(|| json!("overlay_update"));
         }
 
-        let payload_signature = dedupe_signature(&body);
         body["created_at_ms"] = json!((self.clocks.wall_clock_ms)());
         let now_monotonic = (self.clocks.monotonic)();
         let lifecycle_state = body
@@ -92,38 +91,50 @@ impl OverlayBroadcaster {
             1.0
         };
 
-        let last_signature = self
-            .last_payload_signature
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .clone();
-        let last_publish = *self
-            .last_publish_monotonic
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
-        if !skip_time_dedupe
-            && last_signature.as_deref() == Some(payload_signature.as_str())
-            && last_publish
-                .map(|previous| {
-                    now_monotonic.duration_since(previous).as_secs_f64()
-                        < signature_dedupe_cooldown_s
-                })
-                .unwrap_or(false)
-        {
-            self.log.overlay_publish(
-                false,
-                payload,
-                &format!(
-                    "signature_dedupe lifecycle={lifecycle_state} cooldown_s={signature_dedupe_cooldown_s}"
-                ),
-            );
-            return false;
+        // Active states (partial / completed_with_partial) always broadcast, so the
+        // expensive `dedupe_signature` (deep clone + recursive key sort + serialize) only
+        // runs on the stable states where dedupe can actually fire (review §4). On skip
+        // frames we clear the stored signature so the next stable frame is never deduped
+        // against a partial it never compared.
+        if skip_time_dedupe {
+            *self
+                .last_payload_signature
+                .lock()
+                .unwrap_or_else(|e| e.into_inner()) = None;
+        } else {
+            let payload_signature = dedupe_signature(&body);
+            let last_signature = self
+                .last_payload_signature
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .clone();
+            let last_publish = *self
+                .last_publish_monotonic
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            if last_signature.as_deref() == Some(payload_signature.as_str())
+                && last_publish
+                    .map(|previous| {
+                        now_monotonic.duration_since(previous).as_secs_f64()
+                            < signature_dedupe_cooldown_s
+                    })
+                    .unwrap_or(false)
+            {
+                self.log.overlay_publish(
+                    false,
+                    payload,
+                    &format!(
+                        "signature_dedupe lifecycle={lifecycle_state} cooldown_s={signature_dedupe_cooldown_s}"
+                    ),
+                );
+                return false;
+            }
+            *self
+                .last_payload_signature
+                .lock()
+                .unwrap_or_else(|e| e.into_inner()) = Some(payload_signature);
         }
 
-        *self
-            .last_payload_signature
-            .lock()
-            .unwrap_or_else(|e| e.into_inner()) = Some(payload_signature);
         *self
             .last_publish_monotonic
             .lock()
@@ -255,6 +266,39 @@ mod tests {
         payload.created_at_ms = Some(222);
         assert!(!broadcaster.publish(&payload));
         assert_eq!(messages.lock().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn partial_frame_clears_completed_dedupe_anchor() {
+        // A skipped (partial) frame between two identical completed frames must clear the
+        // signature anchor, so the second completed frame broadcasts again (review §4).
+        let messages = Arc::new(Mutex::new(Vec::new()));
+        let messages_cb = messages.clone();
+        let tick = Arc::new(AtomicU64::new(0));
+        let tick_cb = tick.clone();
+        let start = Instant::now();
+        let broadcaster = OverlayBroadcaster::with_clocks(
+            Arc::new(move |message| {
+                messages_cb.lock().unwrap().push(message);
+            }),
+            SubtitleLog::default(),
+            Box::new(move || {
+                start + std::time::Duration::from_millis(tick_cb.fetch_add(10, Ordering::SeqCst))
+            }),
+            Box::new(|| 1_700_000_000_000),
+        );
+
+        let mut completed = sample_payload(LifecycleState::CompletedOnly);
+        completed.active_partial_text.clear();
+        completed.completed_block_visible = true;
+        assert!(broadcaster.publish(&completed));
+
+        let partial = sample_payload(LifecycleState::PartialOnly);
+        assert!(broadcaster.publish(&partial));
+
+        // Identical completed frame is broadcast again because the anchor was cleared.
+        assert!(broadcaster.publish(&completed));
+        assert_eq!(messages.lock().unwrap().len(), 3);
     }
 
     #[test]

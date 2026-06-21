@@ -1,4 +1,5 @@
 import type { BrowserAsrState } from "./types";
+import { browserLifecycleDefaults } from "../worker/worker-defaults";
 import { INSTANCE_DEFAULTS, RESTART_DELAY_BY_REASON_MS } from "./session-defaults";
 
 export function createBrowserAsrStateSeed(existing?: Partial<BrowserAsrState>): BrowserAsrState {
@@ -46,11 +47,8 @@ export function createBrowserAsrStateSeed(existing?: Partial<BrowserAsrState>): 
     recognitionOverlapActiveSlot: null,
     recognitionOverlapPrestarted: false,
     recognitionOverlapSlotListening: null,
-    recognitionOverlapPrestartTimer: null,
-    recognitionOverlapActiveListenSinceMs: null,
     recognitionOverlapSlotListenSinceMs: null,
     recognitionOverlapSlotActivityAtMs: null,
-    recognitionOverlapActiveSpeechPrestartDone: false,
     webSpeechPhraseHintsSuppressed: Boolean(seed.webSpeechPhraseHintsSuppressed),
     webSpeechLanguageSoftFallbackUsed: Boolean(seed.webSpeechLanguageSoftFallbackUsed),
     recognitionGenerationId: 0,
@@ -61,16 +59,26 @@ export function createBrowserAsrStateSeed(existing?: Partial<BrowserAsrState>): 
     currentSegmentLastFinalText: seed.currentSegmentLastFinalText || "",
     currentPartialStableSinceMs: Number(seed.currentPartialStableSinceMs || 0),
     currentSegmentForcedFinalized: Boolean(seed.currentSegmentForcedFinalized),
+    currentSegmentPeakPartialChars: Number(seed.currentSegmentPeakPartialChars || 0),
+    longSegmentFlushCount: Number(seed.longSegmentFlushCount || 0),
     lastForcedFinal: seed.lastForcedFinal ?? null,
     duplicatePartialSuppressed: Number(seed.duplicatePartialSuppressed || 0),
     duplicateFinalSuppressed: Number(seed.duplicateFinalSuppressed || 0),
     lateForcedFinalSuppressed: Number(seed.lateForcedFinalSuppressed || 0),
-    minimumReconnectIntervalMs: Number(seed.minimumReconnectIntervalMs || 500),
-    normalRestartDelayMs: Number(seed.normalRestartDelayMs || 350),
-    noSpeechRestartDelayMs: Number(seed.noSpeechRestartDelayMs || 350),
-    networkReconnectInitialMs: Number(seed.networkReconnectInitialMs || 1000),
-    networkReconnectMaxMs: Number(seed.networkReconnectMaxMs || 30000),
-    maxBrowserSessionAgeMs: Number(seed.maxBrowserSessionAgeMs || 180000),
+    minimumReconnectIntervalMs: Number(
+      seed.minimumReconnectIntervalMs || browserLifecycleDefaults.minimumReconnectIntervalMs
+    ),
+    normalRestartDelayMs: Number(seed.normalRestartDelayMs || browserLifecycleDefaults.normalRestartDelayMs),
+    noSpeechRestartDelayMs: Number(
+      seed.noSpeechRestartDelayMs || browserLifecycleDefaults.noSpeechRestartDelayMs
+    ),
+    networkReconnectInitialMs: Number(
+      seed.networkReconnectInitialMs || browserLifecycleDefaults.networkReconnectInitialMs
+    ),
+    networkReconnectMaxMs: Number(seed.networkReconnectMaxMs || browserLifecycleDefaults.networkReconnectMaxMs),
+    maxBrowserSessionAgeMs: Number(
+      seed.maxBrowserSessionAgeMs || browserLifecycleDefaults.maxBrowserSessionAgeMs
+    ),
     networkErrorBurstCount: Number(seed.networkErrorBurstCount || 0),
     networkErrorBurstStartedAtMs: Number(seed.networkErrorBurstStartedAtMs || 0),
     lastNetworkPreflightAtMs: Number(seed.lastNetworkPreflightAtMs || 0),
@@ -78,10 +86,14 @@ export function createBrowserAsrStateSeed(existing?: Partial<BrowserAsrState>): 
     networkPreflightInFlight: Boolean(seed.networkPreflightInFlight),
     wakeLockActive: Boolean(seed.wakeLockActive),
     wakeLockSupported: typeof navigator !== "undefined" && Boolean(navigator?.wakeLock?.request),
-    prepareCycleBeforeMs: Number(seed.prepareCycleBeforeMs || 15000),
+    prepareCycleBeforeMs: Number(
+      seed.prepareCycleBeforeMs || browserLifecycleDefaults.prepareCycleBeforeMs
+    ),
     forceFinalOnInterruption: seed.forceFinalOnInterruption !== false,
-    forceFinalMinChars: Number(seed.forceFinalMinChars || 3),
-    forceFinalMinStableMs: Number(seed.forceFinalMinStableMs || 700),
+    forceFinalMinChars: Number(seed.forceFinalMinChars || browserLifecycleDefaults.forceFinalMinChars),
+    forceFinalMinStableMs: Number(
+      seed.forceFinalMinStableMs || browserLifecycleDefaults.forceFinalMinStableMs
+    ),
     micTrackReadyState: seed.micTrackReadyState ?? null,
     micTrackMuted: Boolean(seed.micTrackMuted),
     micRms: Number(seed.micRms || 0),
@@ -105,22 +117,11 @@ export function createBrowserAsrStateSeed(existing?: Partial<BrowserAsrState>): 
     onSound: Boolean(seed.onSound),
     forceFinalizationTimeoutMs: Number(seed.forceFinalizationTimeoutMs || 1600),
     actualContinuous: seed.actualContinuous !== false,
-    stuckStoppingTimeoutMs: Number(seed.stuckStoppingTimeoutMs || 2500),
+    stuckStoppingTimeoutMs: Number(
+      seed.stuckStoppingTimeoutMs || browserLifecycleDefaults.stuckStoppingTimeoutMs
+    ),
     browserLifecycleConfig: seed.browserLifecycleConfig || {
-      minimumReconnectIntervalMs: 500,
-      normalRestartDelayMs: 350,
-      noSpeechRestartDelayMs: 350,
-      networkReconnectInitialMs: 1000,
-      networkReconnectMaxMs: 30000,
-      stuckStoppingTimeoutMs: 2500,
-      maxBrowserSessionAgeMs: 180000,
-      prepareCycleBeforeMs: 15000,
-      forceFinalOnInterruption: true,
-      forceFinalMinChars: 3,
-      forceFinalMinStableMs: 700,
-      overlapPrestartAfterMs: 4000,
-      overlapBuddyGhostTimeoutMs: 6000,
-      overlapBuddyGhostActiveMicMs: 3000,
+      ...browserLifecycleDefaults,
     },
     currentConfigPayload: seed.currentConfigPayload ?? null,
     microphoneMonitor: seed.microphoneMonitor ?? null,

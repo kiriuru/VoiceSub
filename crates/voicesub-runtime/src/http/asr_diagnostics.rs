@@ -3,7 +3,7 @@ use voicesub_browser::BrowserAsrDiagnostics;
 
 use super::partial_emit::PartialEmitSettings;
 
-/// Browser-only ASR diagnostics snapshot (SST dashboard parity; GPU/torch fields are inert stubs).
+/// Browser Web Speech diagnostics snapshot for dashboard/runtime API.
 pub fn assemble_browser_asr_diagnostics(
     asr_mode: &str,
     browser_lang: &str,
@@ -25,27 +25,13 @@ pub fn assemble_browser_asr_diagnostics(
 
     let mut body = serde_json::Map::new();
     body.insert("mode".into(), json!(asr_mode));
-    body.insert("provider_preference".into(), json!(asr_mode));
-    body.insert("effective_provider".into(), json!(asr_mode));
     body.insert("provider".into(), json!(asr_mode));
     body.insert("provider_label".into(), json!("Browser Google Speech"));
     body.insert("provider_kind".into(), json!("browser_worker"));
-    body.insert("provider_mode_kind".into(), json!("browser_speech"));
     body.insert("uses_browser_worker".into(), json!(true));
     body.insert("uses_backend_audio_capture".into(), json!(false));
     body.insert("true_streaming".into(), json!(true));
-    body.insert("requested_provider".into(), json!(asr_mode));
-    body.insert("requested_device_policy".into(), json!("browser_window"));
-    body.insert("requested_device".into(), json!("browser_window"));
-    body.insert("cuda_available".into(), json!(false));
-    body.insert("supports_gpu".into(), json!(false));
     body.insert("supports_partials".into(), json!(true));
-    body.insert("supports_streaming".into(), json!(true));
-    body.insert("gpu_requested".into(), json!(false));
-    body.insert("gpu_available".into(), json!(false));
-    body.insert("torch_built_with_cuda".into(), json!(false));
-    body.insert("torch_cuda_is_available".into(), json!(false));
-    body.insert("torch_device_count".into(), json!(0));
     body.insert(
         "degraded_mode".into(),
         json!(browser_worker.degraded_reason.is_some()),
@@ -56,14 +42,6 @@ pub fn assemble_browser_asr_diagnostics(
         json!("webkitSpeechRecognition"),
     );
     body.insert("partials_supported".into(), json!(true));
-    body.insert("recognition_noise_reduction_enabled".into(), json!(false));
-    body.insert("rnnoise_strength".into(), json!(0));
-    body.insert("rnnoise_available".into(), json!(false));
-    body.insert("rnnoise_active".into(), json!(false));
-    body.insert(
-        "rnnoise_message".into(),
-        json!("RNNoise is not used in browser speech mode."),
-    );
     body.insert("provider_phase".into(), json!(provider_phase));
     body.insert("provider_message".into(), json!(worker_message));
     if let Some(last_error) = browser_worker.last_error.clone() {
@@ -96,7 +74,6 @@ pub fn assemble_browser_asr_diagnostics(
         "partial_coalescing_ms".into(),
         json!(partial_emit.partial_coalescing_ms),
     );
-    body.insert("streaming_decode".into(), json!(true));
     Value::Object(body)
 }
 
@@ -161,7 +138,7 @@ fn model_status_body(
         } else if is_runtime_running {
             "Waiting for browser speech worker connection."
         } else {
-            "Browser speech worker mode (no local ASR model)."
+            "Browser speech worker mode."
         },
         "provider": asr_mode,
         "loaded": loaded,
@@ -195,6 +172,8 @@ mod tests {
         assert_eq!(body["partial_emit_mode"], "word_growth");
         assert_eq!(body["partial_min_new_words"], 2);
         assert_eq!(body["uses_browser_worker"], true);
+        assert!(body.get("torch_built_with_cuda").is_none());
+        assert!(body.get("rnnoise_active").is_none());
     }
 
     #[test]

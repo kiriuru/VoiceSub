@@ -11,6 +11,7 @@ use super::{
     ProviderError, ProviderInfo, TranslateRequest, TranslationProvider, base_diagnostics, http,
     http::SharedHttpClient,
 };
+use serde_json::json;
 
 /// Deterministic provider for dispatcher integration tests (SST `_StubTranslationEngine`).
 pub struct StubTranslationProvider {
@@ -47,7 +48,6 @@ impl TranslationProvider for StubTranslationProvider {
     }
 
     async fn translate(&self, request: TranslateRequest<'_>) -> Result<String, ProviderError> {
-        let _ = self.transport.client();
         let settings = request.settings;
         let slot_id = settings.get("__slot_id").map(String::as_str).unwrap_or("");
         let fail_slot = http::setting(settings, "fail_slot");
@@ -60,6 +60,10 @@ impl TranslationProvider for StubTranslationProvider {
     }
 
     fn diagnostics(&self, settings: &HashMap<String, String>) -> Value {
-        base_diagnostics(&self.info(), settings)
+        let mut diagnostics = base_diagnostics(&self.info(), settings);
+        if let Some(obj) = diagnostics.as_object_mut() {
+            obj.insert("http_client_bound".into(), json!(self.transport.is_bound()));
+        }
+        diagnostics
     }
 }

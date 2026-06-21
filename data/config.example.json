@@ -1,8 +1,10 @@
 {
-  "config_version": 7,
+  "config_version": 8,
   "profile": "default",
   "ui": {
     "language": "",
+    "layout": "standard",
+    "show_translation_results": true,
     "theme": "dark",
     "palette": {
       "accent": "#6cc7ff",
@@ -11,65 +13,33 @@
     }
   },
   "source_lang": "auto",
-  "targets": [
-    "en"
-  ],
+  "targets": ["en"],
   "asr": {
-    "mode": "local",
-    "desktop_profile_lock": "",
-    "provider_preference": "official_eu_parakeet_low_latency",
-    "prefer_gpu": true,
-    "rnnoise_enabled": false,
-    "rnnoise_strength": 70,
+    "mode": "browser_google",
     "browser": {
-      "recognition_language": "ru-RU",
+      "recognition_language": "en-US",
       "worker_launch_browser": "auto",
       "interim_results": true,
       "continuous_results": true,
       "force_finalization_enabled": true,
       "force_finalization_timeout_ms": 1600,
       "minimum_reconnect_interval_ms": 500,
-      "normal_restart_delay_ms": 350,
-      "no_speech_restart_delay_ms": 350,
-      "network_reconnect_initial_ms": 1000,
+      "normal_restart_delay_ms": 150,
+      "no_speech_restart_delay_ms": 150,
+      "network_reconnect_initial_ms": 500,
       "network_reconnect_max_ms": 30000,
-      "stuck_stopping_timeout_ms": 2500,
+      "stuck_stopping_timeout_ms": 2000,
       "max_browser_session_age_ms": 180000,
-      "prepare_cycle_before_ms": 15000,
+      "prepare_cycle_before_ms": 30000,
       "force_final_on_interruption": true,
-      "force_final_min_chars": 3,
-      "force_final_min_stable_ms": 700,
-      "experimental": {
-        "start_with_audio_track": true,
-        "fallback_to_default_start": true,
-        "keep_stream_alive": true,
-        "audio_track_constraints": {
-          "echoCancellation": false,
-          "noiseSuppression": false,
-          "autoGainControl": false
-        }
-      }
+      "force_final_min_chars": 8,
+      "force_final_min_stable_ms": 750
     },
     "realtime": {
-      "vad_mode": 3,
-      "energy_gate_enabled": false,
-      "min_rms_for_recognition": 0.0018,
-      "min_voiced_ratio": 0.0,
-      "first_partial_min_speech_ms": 180,
-      "partial_emit_interval_ms": 450,
-      "min_speech_ms": 180,
-      "max_segment_ms": 5500,
-      "silence_hold_ms": 180,
-      "finalization_hold_ms": 350,
-      "chunk_window_ms": 0,
-      "chunk_overlap_ms": 0,
-      "partial_min_delta_chars": 4,
-      "partial_coalescing_ms": 160,
-      "streaming_decode": true,
       "partial_emit_mode": "word_growth",
       "partial_min_new_words": 1,
-      "vad_speech_attack_frames": 2,
-      "vad_speech_preroll_frames": 5
+      "partial_min_delta_chars": 0,
+      "partial_coalescing_ms": 0
     }
   },
   "overlay": {
@@ -98,44 +68,10 @@
       "avoid_duplicate_text": true
     }
   },
-  "audio": {
-    "input_device_id": null
-  },
-  "remote": {
-    "enabled": false,
-    "role": "disabled",
-    "session_id": "",
-    "pair_code": "",
-    "lan": {
-      "bind_enabled": false,
-      "bind_host": "0.0.0.0",
-      "port": 8876
-    },
-    "controller": {
-      "worker_url": "",
-      "connect_timeout_ms": 8000,
-      "reconnect_delay_ms": 2000
-    },
-    "worker": {
-      "allow_unpaired": false,
-      "heartbeat_timeout_ms": 15000
-    }
-  },
-  "updates": {
-    "enabled": true,
-    "provider": "github_releases",
-    "github_repo": "kiriuru/VoiceSub",
-    "release_channel": "stable",
-    "check_interval_hours": 12,
-    "last_checked_utc": "",
-    "latest_known_version": ""
-  },
   "translation": {
     "enabled": false,
     "provider": "google_translate_v2",
-    "target_languages": [
-      "en"
-    ],
+    "target_languages": ["en"],
     "lines": [
       {
         "slot_id": "translation_1",
@@ -148,135 +84,31 @@
     "timeout_ms": 10000,
     "queue_max_size": 8,
     "max_concurrent_jobs": 2,
-    "provider_settings": {
-      "google_translate_v2": {
-        "api_key": ""
-      },
-      "google_cloud_translation_v3": {
-        "project_id": "",
-        "access_token": "",
-        "location": "global",
-        "model": ""
-      },
-      "google_gas_url": {
-        "gas_url": ""
-      },
-      "google_web": {},
-      "azure_translator": {
-        "api_key": "",
-        "endpoint": "https://api.cognitive.microsofttranslator.com",
-        "region": ""
-      },
-      "deepl": {
-        "api_key": "",
-        "api_url": "https://api-free.deepl.com/v2/translate"
-      },
-      "libretranslate": {
-        "api_key": "",
-        "api_url": "https://libretranslate.com/translate"
-      },
-      "openai": {
-        "api_key": "",
-        "base_url": "https://api.openai.com/v1",
-        "model": "",
-        "custom_prompt": ""
-      },
-      "openrouter": {
-        "api_key": "",
-        "base_url": "https://openrouter.ai/api/v1",
-        "model": "",
-        "custom_prompt": ""
-      },
-      "lm_studio": {
-        "api_key": "",
-        "base_url": "http://127.0.0.1:1234/v1",
-        "model": "",
-        "custom_prompt": ""
-      },
-      "ollama": {
-        "api_key": "",
-        "base_url": "http://127.0.0.1:11434/v1",
-        "model": "",
-        "custom_prompt": ""
-      },
-      "public_libretranslate_mirror": {
-        "api_url": "https://translate.fedilab.app/translate"
-      },
-      "free_web_translate": {}
-    },
     "cache": {
       "enabled": true,
       "persist": true,
       "max_entries": 5000
+    },
+    "provider_limits": {},
+    "provider_settings": {
+      "google_translate_v2": {
+        "api_key": ""
+      }
     }
   },
   "subtitle_output": {
     "show_source": true,
     "show_translations": true,
     "max_translation_languages": 2,
-    "display_order": [
-      "source",
-      "translation_1"
-    ]
-  },
-  "subtitle_style": {
-    "preset": "clean_default",
-    "label": "Clean Default",
-    "description": "",
-    "built_in": true,
-    "recommended_max_visible_lines": null,
-    "base": {
-      "font_family": "\"Segoe UI\", Tahoma, Geneva, Verdana, sans-serif",
-      "font_size_px": 30,
-      "font_weight": 700,
-      "fill_color": "#ffffff",
-      "stroke_color": "#000000",
-      "stroke_width_px": 2,
-      "shadow_color": "#000000",
-      "shadow_blur_px": 10,
-      "shadow_offset_x_px": 0,
-      "shadow_offset_y_px": 3,
-      "background_color": "#000000",
-      "background_opacity": 0,
-      "background_padding_x_px": 12,
-      "background_padding_y_px": 4,
-      "background_radius_px": 10,
-      "line_spacing_em": 1.15,
-      "letter_spacing_em": 0.0,
-      "text_align": "center",
-      "line_gap_px": 8,
-      "effect": "none"
-    },
-    "line_slots": {
-      "source": {
-        "enabled": false
-      },
-      "translation_1": {
-        "enabled": false
-      },
-      "translation_2": {
-        "enabled": false
-      },
-      "translation_3": {
-        "enabled": false
-      },
-      "translation_4": {
-        "enabled": false
-      },
-      "translation_5": {
-        "enabled": false
-      }
-    }
+    "display_order": ["source", "translation_1"]
   },
   "subtitle_lifecycle": {
     "completed_block_ttl_ms": 4500,
     "completed_source_ttl_ms": 4500,
     "completed_translation_ttl_ms": 4500,
-    "pause_to_finalize_ms": 350,
     "allow_early_replace_on_next_final": true,
     "sync_source_and_translation_expiry": true,
-    "keep_completed_translation_during_active_partial": true,
-    "hard_max_phrase_ms": 5500
+    "keep_completed_translation_during_active_partial": true
   },
   "source_text_replacement": {
     "enabled": false,
@@ -287,5 +119,14 @@
   },
   "logging": {
     "full_enabled": false
+  },
+  "updates": {
+    "enabled": true,
+    "provider": "github_releases",
+    "github_repo": "kiriuru/VoiceSub",
+    "release_channel": "stable",
+    "check_interval_hours": 12,
+    "last_checked_utc": "",
+    "latest_known_version": ""
   }
 }

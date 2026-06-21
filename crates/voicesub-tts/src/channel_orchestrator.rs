@@ -15,6 +15,8 @@ use crate::service::TtsModuleService;
 
 const PREFETCH_AHEAD_MAX: usize = 4;
 const SPEAK_STUCK_TIMEOUT: Duration = Duration::from_secs(60);
+/// Safety-net wakeup for the pump while it waits for a clip's audio to finish prefetching.
+const PREFETCH_WAIT_TIMEOUT: Duration = Duration::from_millis(100);
 
 #[derive(Default)]
 pub struct CompletionWaiter {
@@ -44,18 +46,18 @@ impl CompletionWaiter {
     }
 
     pub fn cancel_channel(&self, channel: &str) {
-        let prefix = format!("{channel}:");
         self.pending
             .lock()
             .expect("completion waiter lock")
             .retain(|(ch, _), _| ch != channel);
-        let _ = prefix;
     }
 }
 
 #[derive(Default)]
 struct PrefetchJob {
     audio: Option<Result<Vec<Vec<u8>>, String>>,
+    /// A fetch task is currently running for this item (prevents duplicate fetches).
+    in_flight: bool,
 }
 
 struct ChannelState {
@@ -101,6 +103,7 @@ pub struct ChannelOrchestrator {
     runtime: tokio::runtime::Handle,
     state: AsyncMutex<ChannelState>,
     pump_notify: Notify,
+    prefetch_ready: Notify,
 }
 
 impl ChannelOrchestrator {
@@ -121,6 +124,7 @@ impl ChannelOrchestrator {
             runtime,
             state: AsyncMutex::new(ChannelState::new()),
             pump_notify: Notify::new(),
+            prefetch_ready: Notify::new(),
         })
     }
 
@@ -149,6 +153,7 @@ impl ChannelOrchestrator {
                     .queue_clear_channel(&orchestrator.channel);
                 let _ = orchestrator.playback.stop_channel(&orchestrator.channel);
             }
+            orchestrator.prefetch_ready.notify_one();
             orchestrator.pump_notify.notify_one();
         });
     }
@@ -160,14 +165,9 @@ impl ChannelOrchestrator {
         self.runtime.spawn(async move {
             match service.enqueue_channel(&channel, item.clone()) {
                 Ok(result) => {
-                    if !result.dropped_ids.is_empty() {
-                        let mut state = orchestrator.state.lock().await;
-                        for dropped_id in result.dropped_ids {
-                            state.prefetched.remove(&dropped_id);
-                        }
-                    }
-                    let mut state = orchestrator.state.lock().await;
-                    state.prefetched.entry(item.id.clone()).or_default();
+                    orchestrator
+                        .apply_enqueue_result(item.id.clone(), result.dropped_ids)
+                        .await;
                 }
                 Err(err) => {
                     warn!(
@@ -181,6 +181,26 @@ impl ChannelOrchestrator {
             orchestrator.schedule_prefetch().await;
             orchestrator.pump_notify.notify_one();
         });
+    }
+
+    /// Resume prefetch/pump after a synchronous `enqueue_channel` (manual sample test IPC).
+    pub fn wake_after_enqueue(self: &Arc<Self>, item_id: String, dropped_ids: Vec<String>) {
+        let orchestrator = Arc::clone(self);
+        self.runtime.spawn(async move {
+            orchestrator
+                .apply_enqueue_result(item_id, dropped_ids)
+                .await;
+            orchestrator.schedule_prefetch().await;
+            orchestrator.pump_notify.notify_one();
+        });
+    }
+
+    async fn apply_enqueue_result(self: &Arc<Self>, item_id: String, dropped_ids: Vec<String>) {
+        let mut state = self.state.lock().await;
+        for dropped_id in dropped_ids {
+            state.prefetched.remove(&dropped_id);
+        }
+        state.prefetched.entry(item_id).or_default();
     }
 
     pub fn clear(self: &Arc<Self>) {
@@ -199,6 +219,7 @@ impl ChannelOrchestrator {
                 .service
                 .queue_clear_channel(&orchestrator.channel);
             let _ = orchestrator.playback.stop_channel(&orchestrator.channel);
+            orchestrator.prefetch_ready.notify_one();
             orchestrator.pump_notify.notify_one();
         });
     }
@@ -247,9 +268,10 @@ impl ChannelOrchestrator {
                     break;
                 }
                 let job = state.prefetched.entry(item.id.clone()).or_default();
-                if job.audio.is_some() {
+                if job.audio.is_some() || job.in_flight {
                     continue;
                 }
+                job.in_flight = true;
                 state.prefetch_inflight += 1;
                 true
             };
@@ -288,9 +310,12 @@ impl ChannelOrchestrator {
             let mut state = self.state.lock().await;
             state.prefetch_inflight = state.prefetch_inflight.saturating_sub(1);
             if let Some(job) = state.prefetched.get_mut(&item_id) {
+                job.in_flight = false;
                 job.audio = Some(result);
             }
         }
+        // Wake both the idle pump (outer loop) and any in-flight wait for this clip.
+        self.prefetch_ready.notify_one();
         self.pump_notify.notify_one();
     }
 
@@ -329,20 +354,29 @@ impl ChannelOrchestrator {
             self.schedule_prefetch().await;
 
             let audio_result = loop {
-                let mut state = self.state.lock().await;
-                if state.epoch != epoch || !state.enabled {
-                    state.claim_in_progress = false;
-                    let _ = self.service.queue_mark_finished(&self.channel, &item.id);
-                    state.prefetched.remove(&item.id);
-                    return;
-                }
-                if let Some(job) = state.prefetched.get(&item.id)
-                    && let Some(audio) = &job.audio
+                // Create the wait future before checking so a concurrent
+                // `finish_prefetch` notification is never lost (notify_one stores a permit).
+                let notified = self.prefetch_ready.notified();
                 {
-                    break audio.clone();
+                    let mut state = self.state.lock().await;
+                    if state.epoch != epoch || !state.enabled {
+                        state.claim_in_progress = false;
+                        let _ = self.service.queue_mark_finished(&self.channel, &item.id);
+                        state.prefetched.remove(&item.id);
+                        return;
+                    }
+                    if let Some(job) = state.prefetched.get(&item.id)
+                        && let Some(audio) = &job.audio
+                    {
+                        break audio.clone();
+                    }
                 }
-                drop(state);
-                tokio::time::sleep(Duration::from_millis(4)).await;
+                // Wake on the next prefetch completion, with a short timeout as a
+                // safety net against epoch/enabled changes that bypass the notifier.
+                tokio::select! {
+                    _ = notified => {}
+                    _ = tokio::time::sleep(PREFETCH_WAIT_TIMEOUT) => {}
+                }
             };
 
             if let Err(message) = audio_result {
@@ -452,17 +486,10 @@ impl ChannelOrchestrator {
             .unwrap_or(0);
         let (base_rate, volume) = if self.channel == voicesub_audio::CHANNEL_TWITCH {
             let twitch = &config.twitch;
-            let rate = if twitch.speech_rate > 0.0 {
-                twitch.speech_rate
-            } else {
-                config.speech_rate
-            };
-            let volume = if twitch.speech_volume >= 0.0 {
-                twitch.speech_volume
-            } else {
-                config.speech_volume
-            };
-            (rate, volume)
+            (
+                twitch.effective_speech_rate(config.speech_rate),
+                twitch.effective_speech_volume(config.speech_volume),
+            )
         } else {
             (config.speech_rate, config.speech_volume)
         };
@@ -499,6 +526,7 @@ impl ChannelOrchestrator {
             "speaking watchdog forced recovery"
         );
         let _ = self.playback.stop_channel(&self.channel);
+        self.completion_waiter.cancel_channel(&self.channel);
         let _ = self.service.queue_force_idle(&self.channel);
         {
             let mut state = self.state.lock().await;
@@ -506,6 +534,7 @@ impl ChannelOrchestrator {
             state.prefetched.remove(&item_id);
         }
         self.schedule_prefetch().await;
+        self.prefetch_ready.notify_one();
         self.pump_notify.notify_one();
     }
 }
@@ -514,7 +543,7 @@ impl ChannelOrchestrator {
 mod tests {
     use super::*;
     use crate::async_runtime::shared_handle;
-    use crate::channel_queue::CHANNEL_SPEECH;
+    use voicesub_audio::CHANNEL_SPEECH;
     use crate::queue::SpeechQueueItem;
     use std::time::Duration;
     use tempfile::tempdir;

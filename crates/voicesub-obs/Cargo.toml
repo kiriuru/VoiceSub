@@ -6,6 +6,7 @@ edition.workspace = true
 [dependencies]
 voicesub-logging = { workspace = true }
 voicesub-subtitle = { workspace = true }
+voicesub-types = { workspace = true }
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -16,7 +17,6 @@ tokio-tungstenite = "0.29"
 sha2 = "0.10"
 base64 = "0.22"
 uuid = { version = "1", features = ["v4"] }
-chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 
 [dev-dependencies]
 serde_json = { workspace = true }

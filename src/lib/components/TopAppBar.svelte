@@ -71,7 +71,6 @@
 <style>
   .control-sm {
     min-height: 36px;
-    padding: 0 calc(var(--space-3) + 1.1em) 0 var(--space-3);
     font-size: 12px;
     max-width: 120px;
   }

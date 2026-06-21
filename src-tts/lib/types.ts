@@ -16,8 +16,6 @@ export interface PythonTtsStatus {
   build_hint: string;
 }
 
-export type WsConnectionStatus = "connecting" | "connected" | "disconnected";
-
 export interface TtsSpeechSettings {
   speak_source: boolean;
   speak_translations: boolean;
@@ -146,9 +144,4 @@ export interface RuntimeStatus {
   is_running?: boolean;
   phase?: string;
   status?: string;
-}
-
-export interface WsMessage {
-  type: string;
-  payload?: Record<string, unknown>;
 }

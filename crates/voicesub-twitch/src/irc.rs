@@ -79,6 +79,7 @@ pub async fn run_session(
             return SessionOutcome::Error(TwitchError::Irc(format!("tcp connect failed: {err}")));
         }
     };
+    let _ = tcp.set_nodelay(true);
 
     let connector = match build_tls_connector() {
         Ok(connector) => connector,
@@ -138,7 +139,21 @@ pub async fn run_session(
                         break;
                     }
                     Err(err) => {
-                        return SessionOutcome::Error(TwitchError::Irc(err.to_string()));
+                        if should_end_session_after_io_error(&err, joined) {
+                            warn!(
+                                target: "voicesub.twitch",
+                                error = %err,
+                                joined,
+                                "irc transport closed"
+                            );
+                            trace::trace(
+                                "irc",
+                                "transport_closed",
+                                json!({ "joined": joined, "error": err.to_string() }),
+                            );
+                            break;
+                        }
+                        return SessionOutcome::Error(irc_error_from_io(err));
                     }
                 };
                 if line.is_empty() {
@@ -166,6 +181,14 @@ pub async fn run_session(
                 if let Some(ping_payload) = line.strip_prefix("PING") {
                     let pong = format!("PONG{ping_payload}");
                     if let Err(err) = send_line(&mut writer, &pong).await {
+                        if joined || is_transient_irc_disconnect_message(&err.to_string()) {
+                            warn!(
+                                target: "voicesub.twitch",
+                                error = %err,
+                                "irc pong failed; treating as disconnect"
+                            );
+                            break;
+                        }
                         return SessionOutcome::Error(err);
                     }
                     trace::trace("irc", "pong", json!({}));
@@ -257,6 +280,31 @@ pub async fn run_session(
 const RECONNECT_INITIAL_BACKOFF: std::time::Duration = std::time::Duration::from_secs(1);
 const RECONNECT_MAX_BACKOFF: std::time::Duration = std::time::Duration::from_secs(30);
 
+/// Peer closed the IRC TLS socket without a clean shutdown — treat as disconnect, not fatal.
+pub(crate) fn is_transient_irc_disconnect_message(message: &str) -> bool {
+    let lower = message.to_ascii_lowercase();
+    lower.contains("close_notify")
+        || lower.contains("unexpected eof")
+        || lower.contains("connection reset")
+        || lower.contains("broken pipe")
+        || lower.contains("connection aborted")
+        || lower.contains("forcibly closed")
+        || lower.contains("wsaeconnreset")
+}
+
+fn reconnect_delay(base: std::time::Duration, attempt: u32) -> std::time::Duration {
+    let jitter_ms = (attempt.wrapping_mul(7919) % 400) as u64;
+    base + std::time::Duration::from_millis(jitter_ms)
+}
+
+fn irc_error_from_io(err: std::io::Error) -> TwitchError {
+    TwitchError::Irc(err.to_string())
+}
+
+fn should_end_session_after_io_error(err: &std::io::Error, joined: bool) -> bool {
+    joined || is_transient_irc_disconnect_message(&err.to_string())
+}
+
 pub async fn run_session_with_reconnect(
     live: Arc<RwLock<TwitchLiveState>>,
     mut stop_rx: watch::Receiver<bool>,
@@ -314,7 +362,7 @@ pub async fn run_session_with_reconnect(
                     }),
                 );
                 on_status("connecting", Some(&channels_label));
-                if sleep_or_stop(&mut stop_rx, backoff).await {
+                if sleep_or_stop(&mut stop_rx, reconnect_delay(backoff, attempt)).await {
                     break;
                 }
                 backoff = (backoff * 2).min(RECONNECT_MAX_BACKOFF);
@@ -356,7 +404,7 @@ pub async fn run_session_with_reconnect(
                     }),
                 );
                 on_status("connecting", Some(&channels_label));
-                if sleep_or_stop(&mut stop_rx, backoff).await {
+                if sleep_or_stop(&mut stop_rx, reconnect_delay(backoff, attempt)).await {
                     break;
                 }
                 backoff = (backoff * 2).min(RECONNECT_MAX_BACKOFF);
@@ -525,6 +573,7 @@ mod tests {
         let parsed = parse_privmsg(line).expect("privmsg");
         assert_eq!(parsed.login, "alice");
         assert_eq!(parsed.display_name, "Alice");
+        assert_eq!(parsed.channel, "#channel");
         assert_eq!(parsed.text, "Hello chat");
         assert_eq!(parsed.msg_id, "abc-123");
     }
@@ -546,5 +595,14 @@ mod tests {
     #[test]
     fn redacts_pass_line() {
         assert_eq!(redact_outbound_line("PASS oauth:secret"), "PASS oauth:***");
+    }
+
+    #[test]
+    fn transient_disconnect_includes_tls_close_notify() {
+        assert!(is_transient_irc_disconnect_message(
+            "peer closed connection without sending TLS close_notify"
+        ));
+        assert!(is_transient_irc_disconnect_message("connection reset by peer"));
+        assert!(!is_transient_irc_disconnect_message("login authentication failed"));
     }
 }

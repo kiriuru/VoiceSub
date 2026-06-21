@@ -20,6 +20,62 @@ use crate::sonic_speed::SonicProcessor;
 pub const CHANNEL_SPEECH: &str = "speech";
 pub const CHANNEL_TWITCH: &str = "twitch";
 
+pub const SPEECH_VOLUME_MAX: f32 = 1.5;
+
+/// Clamp module/TTS playback gain (0–150%).
+pub fn clamp_speech_volume(volume: f32) -> f32 {
+    if !volume.is_finite() {
+        return 1.0;
+    }
+    volume.clamp(0.0, SPEECH_VOLUME_MAX)
+}
+
+/// Apply UI volume on decoded `f32` PCM before cpal conversion.
+///
+/// ≤100%: linear attenuation. >100%: gentle compression + makeup gain + brick-wall limit
+/// at 0 dBFS (standard limiter/input-gain pattern; see Web Audio / mastering docs).
+pub fn apply_speech_volume_to_pcm(samples: &mut [f32], volume: f32) {
+    let volume = clamp_speech_volume(volume);
+    if samples.is_empty() {
+        return;
+    }
+
+    if volume <= 1.0 {
+        for sample in samples.iter_mut() {
+            *sample = (*sample * volume).clamp(-1.0, 1.0);
+        }
+        return;
+    }
+
+    const COMPRESS_THRESHOLD: f32 = 0.70;
+    const COMPRESS_RATIO: f32 = 3.0;
+
+    for sample in samples.iter_mut() {
+        let abs = sample.abs();
+        if abs <= COMPRESS_THRESHOLD {
+            continue;
+        }
+        let sign = sample.signum();
+        let excess = abs - COMPRESS_THRESHOLD;
+        *sample = sign * (COMPRESS_THRESHOLD + excess / COMPRESS_RATIO);
+    }
+
+    for sample in samples.iter_mut() {
+        *sample *= volume;
+    }
+
+    let peak = samples
+        .iter()
+        .map(|sample| sample.abs())
+        .fold(0.0_f32, f32::max);
+    if peak > 1.0 {
+        let limit_gain = 1.0 / peak;
+        for sample in samples.iter_mut() {
+            *sample *= limit_gain;
+        }
+    }
+}
+
 const PLAYBACK_POLL_MS: u64 = 10;
 const RATE_NEUTRAL_EPS: f32 = 0.02;
 const SONIC_DRAIN_SAMPLES: i32 = 16_384;
@@ -284,7 +340,7 @@ fn play_mp3_blocking(
     if bytes.is_empty() {
         return Err(AudioError::PlaybackFailed("empty audio buffer".into()));
     }
-    let volume = volume.clamp(0.0, 1.0);
+    let volume = clamp_speech_volume(volume);
     let rate = rate.clamp(0.5, 2.0);
 
     let stream_handle = ensure_output_cache(device_label.as_str(), output_cache)?;
@@ -292,16 +348,17 @@ fn play_mp3_blocking(
         Sink::try_new(stream_handle).map_err(|e| AudioError::PlaybackFailed(e.to_string()))?;
 
     if (rate - 1.0).abs() <= RATE_NEUTRAL_EPS {
-        let decoder = open_mp3_decoder(bytes)?;
-        sink.append(decoder.amplify(volume));
+        let (mut pcm, sample_rate, channels) = decode_mp3_to_pcm(bytes)?;
+        apply_speech_volume_to_pcm(&mut pcm, volume);
+        sink.append(SamplesBuffer::new(channels, sample_rate, pcm));
     } else {
-        let (pcm, sample_rate, channels) = decode_mp3_to_pcm(bytes)?;
+        let (mut pcm, sample_rate, channels) = decode_mp3_to_pcm(bytes)?;
+        apply_speech_volume_to_pcm(&mut pcm, volume);
         play_pcm_sonic_streaming(SonicStreamContext {
             sink: &sink,
             pcm,
             sample_rate,
             channels,
-            volume,
             rate,
             rx,
             device_label,
@@ -368,12 +425,11 @@ fn append_sonic_pcm_to_sink(
     pcm: Vec<f32>,
     channels: u16,
     sample_rate: u32,
-    volume: f32,
 ) {
     if pcm.is_empty() {
         return;
     }
-    sink.append(SamplesBuffer::new(channels, sample_rate, pcm).amplify(volume));
+    sink.append(SamplesBuffer::new(channels, sample_rate, pcm));
 }
 
 fn drain_sonic_to_sink(
@@ -381,14 +437,13 @@ fn drain_sonic_to_sink(
     sink: &Sink,
     channels: u16,
     sample_rate: u32,
-    volume: f32,
 ) -> Result<(), AudioError> {
     loop {
         let chunk = sonic.drain_up_to(SONIC_DRAIN_SAMPLES)?;
         if chunk.is_empty() {
             break;
         }
-        append_sonic_pcm_to_sink(sink, chunk, channels, sample_rate, volume);
+        append_sonic_pcm_to_sink(sink, chunk, channels, sample_rate);
     }
     Ok(())
 }
@@ -398,7 +453,6 @@ struct SonicStreamContext<'a> {
     pcm: Vec<f32>,
     sample_rate: u32,
     channels: u16,
-    volume: f32,
     rate: f32,
     rx: &'a Receiver<WorkerCommand>,
     device_label: &'a mut String,
@@ -417,7 +471,6 @@ fn play_pcm_sonic_streaming(ctx: SonicStreamContext<'_>) -> Result<(), AudioErro
         ctx.sink,
         ctx.channels,
         ctx.sample_rate,
-        ctx.volume,
     )?;
     if ctx.sink.empty() {
         return Err(AudioError::PlaybackFailed(
@@ -616,5 +669,46 @@ mod tests {
             Err(err) => assert!(err.to_string().contains("mp3 decode failed")),
             Ok(_) => panic!("expected mp3 decode error"),
         }
+    }
+
+    #[test]
+    fn apply_speech_volume_attenuates_below_unity() {
+        let mut samples = vec![0.5, -0.5];
+        apply_speech_volume_to_pcm(&mut samples, 0.5);
+        assert!((samples[0] - 0.25).abs() < 1e-6);
+        assert!((samples[1] + 0.25).abs() < 1e-6);
+    }
+
+    #[test]
+    fn apply_speech_volume_boosts_quiet_pcm_above_unity() {
+        let baseline = vec![0.2, -0.2, 0.1];
+        let mut at_100 = baseline.clone();
+        apply_speech_volume_to_pcm(&mut at_100, 1.0);
+        let peak_100 = at_100.iter().map(|s| s.abs()).fold(0.0_f32, f32::max);
+
+        let mut at_150 = baseline;
+        apply_speech_volume_to_pcm(&mut at_150, 1.5);
+        let peak_150 = at_150.iter().map(|s| s.abs()).fold(0.0_f32, f32::max);
+
+        assert!(peak_150 > peak_100);
+    }
+
+    #[test]
+    fn apply_speech_volume_one_fifty_is_louder_than_one_on_hot_signal() {
+        let sine: Vec<f32> = (0..4410)
+            .map(|i| (2.0 * std::f32::consts::PI * 440.0 * i as f32 / 44100.0).sin())
+            .collect();
+        let peak = sine.iter().map(|s| s.abs()).fold(0.0_f32, f32::max);
+        let baseline: Vec<f32> = sine.iter().map(|s| s * (0.95 / peak)).collect();
+
+        let mut at_100 = baseline.clone();
+        apply_speech_volume_to_pcm(&mut at_100, 1.0);
+        let rms_100 = at_100.iter().map(|s| s * s).sum::<f32>() / at_100.len() as f32;
+
+        let mut at_150 = baseline;
+        apply_speech_volume_to_pcm(&mut at_150, 1.5);
+        let rms_150 = at_150.iter().map(|s| s * s).sum::<f32>() / at_150.len() as f32;
+
+        assert!(rms_150 > rms_100 * 1.05);
     }
 }

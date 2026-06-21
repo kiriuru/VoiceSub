@@ -317,6 +317,20 @@ impl TwitchChatService {
             if let Ok(mut guard) = inner_for_cleanup.active.lock() {
                 guard.take();
             }
+            let status = inner_for_cleanup
+                .status
+                .lock()
+                .map(|guard| guard.clone())
+                .unwrap_or_default();
+            if status.state == TwitchConnectionState::Connecting {
+                inner_for_cleanup.set_status(
+                    TwitchConnectionState::Disconnected,
+                    &status.channel,
+                    &status.channels,
+                    "",
+                );
+                inner_for_cleanup.broadcast_connection();
+            }
         });
 
         self.inner

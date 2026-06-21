@@ -45,4 +45,17 @@ describe("snapshotToRuntimeMessages", () => {
     });
     expect(messages).toEqual([{ type: "runtime_update", payload: {} }]);
   });
+
+  it("replays twitch connection status for the TTS window", () => {
+    const messages = snapshotToRuntimeMessages({
+      rev: 5,
+      runtime: { running: false },
+      twitch_connection: { state: "connected", channel: "demo" },
+    });
+    expect(messages.map((message) => message.type)).toEqual([
+      "runtime_update",
+      "twitch_connection_update",
+    ]);
+    expect(messages[1]?.payload).toEqual({ state: "connected", channel: "demo" });
+  });
 });

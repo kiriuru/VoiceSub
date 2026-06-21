@@ -209,14 +209,6 @@ export function subscribeUiConfigSync(
   };
 }
 
-export function mergeUiConfigPatch(base: ConfigPayload, partial: ConfigPayload): ConfigPayload {
-  return {
-    ...base,
-    ...partial,
-    ui: { ...(base.ui || {}), ...(partial.ui || {}) },
-  };
-}
-
 /** @internal Test helper — flush debounced server sync immediately. */
 export async function flushUiConfigServerSyncForTests(): Promise<void> {
   if (uiConfigServerSyncTimer) {

@@ -1,4 +1,5 @@
 mod dashboard_nav;
+mod event_routing;
 mod shell;
 mod tts;
 
@@ -94,6 +95,17 @@ async fn launch_browser_worker(state: State<'_, AppState>) -> Result<String, Str
     Ok(format!("pid={}", result.pid))
 }
 
+/// Route a runtime event to the windows that consume it. The main dashboard receives
+/// every type; the TTS window only receives the few it acts on, keeping the high-frequency
+/// `transcript_update` / `overlay_update` stream off its IPC channel (review §1).
+/// Passing `&Value` avoids the per-event deep clone of the previous global emit (review §3).
+fn emit_runtime_event(app: &tauri::AppHandle, event_type: &str, payload: &serde_json::Value) {
+    let _ = app.emit_to(event_routing::MAIN_WINDOW_LABEL, "runtime-event", payload);
+    if event_routing::tts_window_wants(event_type) {
+        let _ = app.emit_to(TTS_WINDOW_LABEL, "runtime-event", payload);
+    }
+}
+
 async fn stop_runtime_session(bind_addr: SocketAddr, api_token: &str) {
     let stop_url = format!("http://{bind_addr}/api/runtime/stop");
     match reqwest::Client::new()
@@ -181,7 +193,6 @@ pub fn run() {
     let tts_service = Arc::new(TtsModuleService::with_broadcaster(
         project_root.join("user-data"),
         tts_broadcaster,
-        oauth_bridge,
         http_handle.clone(),
     ));
 
@@ -235,21 +246,15 @@ pub fn run() {
             tts::tts_bind_window_audio,
             tts::tts_update_speech_settings,
             tts::tts_update_voice_settings,
-            tts::tts_plan_subtitle_speech,
             tts::tts_reset_subtitle_planner,
-            tts::tts_channel_enqueue,
-            tts::tts_channel_begin_next,
-            tts::tts_channel_finish,
+            tts::tts_speak_sample,
             tts::tts_channel_clear,
-            tts::tts_channel_snapshot,
             tts::tts_channel_force_idle,
             tts::tts_get_resource_telemetry,
-            tts::tts_enqueue,
             tts::tts_twitch_get_status,
             tts::tts_twitch_connect,
             tts::tts_twitch_disconnect,
             tts::tts_update_twitch_settings,
-            tts::tts_sync_source_text_replacement,
             tts::tts_open_window,
             tts::tts_open_system_url,
             tts::tts_report_webview_activity,
@@ -307,10 +312,33 @@ pub fn run() {
                             {
                                 pipeline_for_bus.handle_twitch_chat_message(&chat);
                             }
-                            let _ = app_handle_for_events
-                                .emit("runtime-event", message.as_ref().clone());
+                            emit_runtime_event(
+                                &app_handle_for_events,
+                                event_type,
+                                message.as_ref(),
+                            );
                         }
-                        Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                        // Bus capacity exceeded: the dashboard missed N messages and may show
+                        // stale state. Re-synchronize from a fresh snapshot instead of silently
+                        // continuing (review §9).
+                        Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped)) => {
+                            warn!(skipped, "runtime event bus lagged; resyncing snapshot");
+                            let snapshot = runtime_for_bus.runtime_state_snapshot().await;
+                            if let Some(running) = snapshot
+                                .runtime
+                                .get("running")
+                                .and_then(|value| value.as_bool())
+                            {
+                                pipeline_for_bus.set_runtime_active(running);
+                            }
+                            for envelope in event_routing::snapshot_to_envelopes(&snapshot) {
+                                let event_type = envelope
+                                    .get("type")
+                                    .and_then(|value| value.as_str())
+                                    .unwrap_or("");
+                                emit_runtime_event(&app_handle_for_events, event_type, &envelope);
+                            }
+                        }
                         Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
                     }
                 }
@@ -353,6 +381,7 @@ pub fn run() {
                 let memory = window.state::<SharedWebviewMemoryManager>();
                 if let Ok(mut guard) = memory.lock() {
                     guard.set_user_dismissed_tts_window(true);
+                    guard.set_tts_enabled(false);
                     guard.set_tts_visible(false);
                     guard.set_tts_focused(false);
                 }
@@ -367,6 +396,7 @@ pub fn run() {
                     .map(|guard| guard.user_dismissed_tts_window())
                     .unwrap_or(false);
                 if let Ok(mut guard) = memory.lock() {
+                    guard.set_tts_enabled(false);
                     guard.set_tts_visible(false);
                     guard.set_tts_focused(false);
                 }

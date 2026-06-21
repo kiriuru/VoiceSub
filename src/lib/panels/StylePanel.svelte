@@ -37,10 +37,7 @@
   let slotPresetPick = "";
 
   $: loc = $locale;
-  function tr(key: string) {
-    loc;
-    return t(key);
-  }
+  $: tr = (key: string) => t(key, undefined, loc);
 
   $: style = (config.subtitle_style || {}) as Record<string, Record<string, unknown>>;
   $: presetCatalog = mergeStylePresetCatalog(subtitleStylePresets || {}, style);
@@ -162,12 +159,11 @@
   <div class="url-row">
     <input class="control" placeholder={tr("style.custom_name.placeholder")} bind:value={customPresetName} />
     <button type="button" class="btn" on:click={handleSaveCustomPreset}>{tr("common.save")}</button>
-    <button type="button" class="btn" on:click={handleDeleteCustomPreset}>{tr("tools.profiles.delete")}</button>
+    <button type="button" class="btn" on:click={handleDeleteCustomPreset}>{tr("style.custom_preset.delete")}</button>
   </div>
 
   <div class="style-surface stack">
     <div class="section-heading section-heading--stacked">
-      <p class="eyebrow">{tr("style.base.title")}</p>
       <h3>{tr("style.base.title")}</h3>
       <p class="muted">{tr("style.base.note")}</p>
     </div>
@@ -177,7 +173,6 @@
   <div class="style-surface stack">
     <div class="section-heading section-heading--stacked slot-surface-header">
       <div>
-        <p class="eyebrow">{tr("style.slots.title")}</p>
         <h3>{tr("style.slots.title")}</h3>
         <p class="muted">{tr("style.slots.note")}</p>
       </div>
@@ -226,8 +221,6 @@
       />
     {/if}
   </div>
-
-  <p class="muted">{tr("settings.fonts.hint")}</p>
 </section>
 
 <style>

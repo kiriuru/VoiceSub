@@ -9,6 +9,7 @@ fn service_plans_subtitle_lines_when_enabled() {
     let dir = std::env::temp_dir().join(format!("voicesub-tts-svc-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let service = TtsModuleService::new(&dir);
+    service.set_enabled(true).expect("enable");
 
     let payload = json!({
         "sequence": 1,
@@ -66,6 +67,7 @@ fn enqueue_drop_releases_subtitle_dedupe_key() {
     let dir = std::env::temp_dir().join(format!("voicesub-tts-drop-{}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);
     let service = TtsModuleService::new(&dir);
+    service.set_enabled(true).expect("enable");
     service
         .update_speech_settings(TtsSpeechSettings {
             max_queue_items: 4,
@@ -124,4 +126,41 @@ fn planner_reset_allows_repeat() {
     assert!(planner.plan(&payload, &settings).is_empty());
     planner.reset();
     assert_eq!(planner.plan(&payload, &settings).len(), 1);
+}
+
+#[test]
+fn service_respects_saved_min_chars() {
+    let dir = std::env::temp_dir().join(format!("voicesub-tts-minchars-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let service = TtsModuleService::new(&dir);
+    service.set_enabled(true).expect("enable");
+    service
+        .update_speech_settings(TtsSpeechSettings {
+            min_chars: 2,
+            speak_translations: true,
+            ..TtsSpeechSettings::default()
+        })
+        .expect("speech settings");
+
+    let payload = json!({
+        "sequence": 334,
+        "lifecycle_state": "completed_only",
+        "visible_items": [
+            {"kind": "translation", "text": ".", "slot_id": "translation_1"}
+        ]
+    });
+    assert!(
+        service.plan_subtitle_speech(&payload).is_empty(),
+        "single-char translation must be skipped when min_chars=2"
+    );
+
+    let payload_ok = json!({
+        "sequence": 335,
+        "lifecycle_state": "completed_only",
+        "visible_items": [
+            {"kind": "translation", "text": "hi", "slot_id": "translation_1"}
+        ]
+    });
+    assert_eq!(service.plan_subtitle_speech(&payload_ok).len(), 1);
+    let _ = std::fs::remove_dir_all(&dir);
 }

@@ -22,6 +22,7 @@ export function ensureClientSegmentId(state: BrowserAsrState): string {
   state.currentSegmentLastPartialText = "";
   state.currentSegmentLastFinalText = "";
   state.currentSegmentForcedFinalized = false;
+  state.currentSegmentPeakPartialChars = 0;
   return state.currentClientSegmentId;
 }
 
@@ -30,6 +31,7 @@ export function consumeCompletedSegment(state: BrowserAsrState): void {
   state.currentSegmentLastPartialText = "";
   state.currentSegmentLastFinalText = "";
   state.currentSegmentForcedFinalized = false;
+  state.currentSegmentPeakPartialChars = 0;
 }
 
 export function resetSegmentTrackingFields(state: BrowserAsrState): void {
@@ -38,6 +40,7 @@ export function resetSegmentTrackingFields(state: BrowserAsrState): void {
   state.currentSegmentLastFinalText = "";
   state.currentPartialStableSinceMs = 0;
   state.currentSegmentForcedFinalized = false;
+  state.currentSegmentPeakPartialChars = 0;
   state.lastForcedFinal = null;
 }
 

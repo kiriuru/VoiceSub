@@ -7,6 +7,41 @@ fn emoji_regex() -> &'static Regex {
     RE.get_or_init(|| Regex::new(r"\p{Emoji}").expect("emoji regex"))
 }
 
+fn invisible_chat_regex() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        Regex::new(
+            r"[\p{Cf}\p{Cc}\u{034F}\u{0337}\u{0338}\u{0489}\u{115F}\u{1160}\u{17B4}\u{17B5}\u{2800}\u{3164}\u{FFA0}]",
+        )
+        .expect("invisible chat regex")
+    })
+}
+
+/// Strip zero-width / blank filler characters often appended in Twitch chat.
+pub fn strip_invisible_chat_characters(text: &str) -> String {
+    invisible_chat_regex()
+        .replace_all(text, "")
+        .trim()
+        .to_string()
+}
+
+pub fn is_invisible_noise_char(ch: char) -> bool {
+    matches!(
+        ch,
+        '\u{034F}' // COMBINING GRAPHEME JOINER (Mn — common Twitch suffix)
+            | '\u{0337}'
+            | '\u{0338}'
+            | '\u{0489}'
+            | '\u{115F}'
+            | '\u{1160}'
+            | '\u{17B4}'
+            | '\u{17B5}'
+            | '\u{2800}'
+            | '\u{3164}'
+            | '\u{FFA0}'
+    ) || ch.is_control() && !matches!(ch, '\n' | '\r' | '\t')
+}
+
 /// Decimal digits used as numbers in chat — must not be stripped as `\p{Emoji}` (ASCII 0–9
 /// are Emoji components for keycap sequences) or as third-party emote codes.
 pub fn is_plain_decimal_char(ch: char) -> bool {
@@ -144,5 +179,18 @@ mod tests {
         assert!(is_plain_decimal_token("42!"));
         assert!(!is_plain_decimal_token("5ю"));
         assert!(!is_plain_decimal_token("Kappa"));
+    }
+
+    #[test]
+    fn strip_invisible_chat_characters_removes_blank_fillers() {
+        assert_eq!(
+            strip_invisible_chat_characters("500&100\u{034F}"),
+            "500&100"
+        );
+        assert_eq!(
+            strip_invisible_chat_characters("500&100 \u{3164}"),
+            "500&100"
+        );
+        assert_eq!(strip_invisible_chat_characters("hello \u{200B}world"), "hello world");
     }
 }

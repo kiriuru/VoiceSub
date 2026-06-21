@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { SpeechChannel } from "./audio-player";
 import { apiFetch } from "./loopback-api-client";
 import type { ResourceTelemetry } from "./resource-telemetry";
-import type { SourceTextReplacementSettings } from "./source-text-replacement";
 import type {
   AudioOutputDevice,
   PythonTtsStatus,
@@ -88,62 +88,27 @@ export async function updateSpeechSettings(speech: TtsSpeechSettings): Promise<T
   return invoke<TtsConfig>("tts_update_speech_settings", { speech });
 }
 
-export async function planSubtitleSpeech(
-  payload: Record<string, unknown>,
-): Promise<SpeechQueueItem[]> {
-  return invoke<SpeechQueueItem[]>("tts_plan_subtitle_speech", { payload });
-}
-
 export async function resetSubtitlePlanner(): Promise<void> {
   return invoke("tts_reset_subtitle_planner");
 }
-
-export type SpeechChannel = "speech" | "twitch";
 
 export type ChannelEnqueueResult = {
   queue_len: number;
   dropped_ids: string[];
 };
 
-export async function channelEnqueue(
-  channel: SpeechChannel,
-  id: string,
-  text: string,
-  lang: string,
-): Promise<ChannelEnqueueResult> {
-  const result = await invoke<ChannelEnqueueResult>("tts_channel_enqueue", {
-    channel,
-    id,
-    text,
-    lang,
-  });
+export async function speakSample(text: string, lang: string): Promise<ChannelEnqueueResult> {
+  const result = await invoke<ChannelEnqueueResult>("tts_speak_sample", { text, lang });
   return {
     queue_len: result.queue_len,
     dropped_ids: result.dropped_ids ?? [],
   };
 }
 
-export async function channelBeginNext(
-  channel: SpeechChannel,
-): Promise<SpeechQueueItem | null> {
-  return invoke<SpeechQueueItem | null>("tts_channel_begin_next", { channel });
-}
-
-export async function channelFinish(
-  channel: SpeechChannel,
-  itemId: string,
-): Promise<void> {
-  return invoke("tts_channel_finish", { channel, itemId });
-}
+export type { SpeechChannel };
 
 export async function channelClear(channel: SpeechChannel): Promise<void> {
   return invoke("tts_channel_clear", { channel });
-}
-
-export async function channelSnapshot(
-  channel: SpeechChannel,
-): Promise<SpeechQueueItem[]> {
-  return invoke<SpeechQueueItem[]>("tts_channel_snapshot", { channel });
 }
 
 export async function channelForceIdle(channel: SpeechChannel): Promise<void> {
@@ -157,10 +122,6 @@ export async function recoverStuckSpeechQueues(): Promise<void> {
 
 export async function fetchResourceTelemetry(): Promise<ResourceTelemetry> {
   return invoke<ResourceTelemetry>("tts_get_resource_telemetry");
-}
-
-export async function openTtsWindow(): Promise<void> {
-  return invoke("tts_open_window");
 }
 
 export async function fetchTwitchStatus(): Promise<TwitchConnectionStatus> {
@@ -179,12 +140,6 @@ export async function updateTwitchSettings(
   twitch: TwitchTtsSettings,
 ): Promise<TtsConfig> {
   return invoke<TtsConfig>("tts_update_twitch_settings", { twitch });
-}
-
-export async function syncSourceTextReplacement(
-  replacement: SourceTextReplacementSettings,
-): Promise<void> {
-  return invoke("tts_sync_source_text_replacement", { replacement });
 }
 
 export async function reportTtsWebviewActivity(

@@ -186,6 +186,12 @@ fn normalize_translation_section(root: &mut Map<String, Value>) {
     root.insert("translation".into(), normalized);
 }
 
+/// Syncs subtitle lifecycle TTL flags and **deprecated** timing keys.
+///
+/// Deprecated (normalized for old configs / trace parity only; no runtime effect):
+/// - `subtitle_lifecycle.pause_to_finalize_ms` ↔ `asr.realtime.finalization_hold_ms`
+///   — use `asr.browser.force_finalization_timeout_ms` (worker UI) for forced-final idle timing.
+/// - `subtitle_lifecycle.hard_max_phrase_ms` ↔ `asr.realtime.max_segment_ms`
 fn normalize_subtitle_lifecycle(root: &mut Map<String, Value>) {
     let rt_pause_default = int_or(
         root.get("asr")
@@ -230,6 +236,7 @@ fn normalize_subtitle_lifecycle(root: &mut Map<String, Value>) {
         json!(source_ttl.max(translation_ttl)),
     );
 
+    // Deprecated: kept in sync with asr.realtime.finalization_hold_ms (see fn doc).
     let pause = clamp_i64(
         int_or(lifecycle.get("pause_to_finalize_ms"), rt_pause_default),
         120,
@@ -256,6 +263,7 @@ fn normalize_subtitle_lifecycle(root: &mut Map<String, Value>) {
         )),
     );
 
+    // Deprecated: kept in sync with asr.realtime.max_segment_ms (see fn doc).
     let hard_max = clamp_i64(
         int_or(lifecycle.get("hard_max_phrase_ms"), rt_hard_max_default),
         1000,
@@ -268,6 +276,7 @@ fn normalize_subtitle_lifecycle(root: &mut Map<String, Value>) {
             .entry("realtime".to_string())
             .or_insert_with(|| json!({}));
         if let Some(rt) = realtime.as_object_mut() {
+            // Deprecated mirrors of subtitle_lifecycle keys (see fn doc).
             rt.insert("finalization_hold_ms".into(), json!(pause));
             rt.insert("max_segment_ms".into(), json!(hard_max));
         }

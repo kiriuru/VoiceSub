@@ -4,8 +4,6 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-voicesub-types = { workspace = true }
-voicesub-config = { workspace = true }
 voicesub-subtitle = { workspace = true }
 tracing = { workspace = true }
 serde = { workspace = true }

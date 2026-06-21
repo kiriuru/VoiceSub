@@ -33,16 +33,16 @@ pub fn default_config_payload() -> Value {
                 "force_finalization_enabled": true,
                 "force_finalization_timeout_ms": 1600,
                 "minimum_reconnect_interval_ms": 500,
-                "normal_restart_delay_ms": 350,
-                "no_speech_restart_delay_ms": 350,
-                "network_reconnect_initial_ms": 1000,
+                "normal_restart_delay_ms": 150,
+                "no_speech_restart_delay_ms": 150,
+                "network_reconnect_initial_ms": 500,
                 "network_reconnect_max_ms": 30000,
-                "stuck_stopping_timeout_ms": 2500,
+                "stuck_stopping_timeout_ms": 2000,
                 "max_browser_session_age_ms": 180000,
-                "prepare_cycle_before_ms": 15000,
+                "prepare_cycle_before_ms": 30000,
                 "force_final_on_interruption": true,
-                "force_final_min_chars": 3,
-                "force_final_min_stable_ms": 700,
+                "force_final_min_chars": 8,
+                "force_final_min_stable_ms": 750,
                 "chrome_launch": {
                     "launch_args": [
                         "--new-window",
@@ -126,10 +126,12 @@ pub fn default_config_payload() -> Value {
             "completed_block_ttl_ms": 4500,
             "completed_source_ttl_ms": 4500,
             "completed_translation_ttl_ms": 4500,
+            // Deprecated: normalized for legacy configs; no runtime effect (see normalize_subtitle_lifecycle).
             "pause_to_finalize_ms": 350,
             "allow_early_replace_on_next_final": true,
             "sync_source_and_translation_expiry": true,
             "keep_completed_translation_during_active_partial": true,
+            // Deprecated: normalized for legacy configs; no runtime effect.
             "hard_max_phrase_ms": 5500
         },
         "source_text_replacement": {

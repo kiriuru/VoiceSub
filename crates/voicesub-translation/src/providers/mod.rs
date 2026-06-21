@@ -87,8 +87,6 @@ pub const DEFAULT_REQUEST_TIMEOUT_SECONDS: f64 = 20.0;
 
 /// SST `translation_engine.py` — `_DEFAULT_HTTP_KEEPALIVE_LIMIT`.
 pub const DEFAULT_HTTP_KEEPALIVE_LIMIT: usize = 20;
-/// SST `translation_engine.py` — `_DEFAULT_HTTP_TOTAL_LIMIT` (httpx total cap; reqwest has no direct equivalent).
-pub const DEFAULT_HTTP_TOTAL_LIMIT: usize = 40;
 /// SST `translation_engine.py` — `_DEFAULT_HTTP_KEEPALIVE_EXPIRY_SECONDS`.
 pub const DEFAULT_HTTP_KEEPALIVE_EXPIRY_SECONDS: u64 = 30;
 /// SST httpx client — connect timeout.

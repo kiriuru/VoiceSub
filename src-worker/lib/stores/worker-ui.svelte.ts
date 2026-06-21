@@ -21,7 +21,7 @@ export function createWorkerUiStore() {
   let documentHidden = $state(false);
   let lastConfiguredLanguage = $state("");
   let lastSourceLang = $state("");
-  let appVersion = $state("0.5.3");
+  let appVersion = $state("0.5.4");
 
   function recognitionStatusLabel(value: string): string {
     const normalized = String(value || "").replace(/-/g, "_");

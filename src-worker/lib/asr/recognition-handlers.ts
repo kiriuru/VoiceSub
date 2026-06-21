@@ -14,10 +14,14 @@ import {
   overlapActiveSlotIndex,
   overlapResultAllowed,
   overlapSlotInactive,
-  prestartOverlapBuddyIfNeeded,
+  preStartNextOverlapInstance,
   recognitionOverlapActive,
   shouldIgnoreOverlapBuddyError,
 } from "./overlap-logic";
+import {
+  maybeFlushAfterCommittedLongSegment,
+  noteSegmentPartialPeak,
+} from "./long-segment-flush-logic";
 import { registerNetworkErrorForPreflight } from "./network-preflight-bridge";
 
 function shouldIgnoreAbortedOverlapActiveGuard(
@@ -103,9 +107,6 @@ function applyRecognitionError(
       manager.emitWorkerStatus("recognition-error");
       return;
     case "aborted":
-      if (shouldIgnoreAbortedOverlapActiveGuard(manager.state, overlapSlotIndex)) {
-        return;
-      }
       if (manager.state.desiredRunning) {
         manager.state.pendingRestartReason = "normal_onend";
       }
@@ -166,6 +167,7 @@ function handleRecognitionResult(
     if (!manager.shouldSuppressDuplicatePartialInternal(interimText)) {
       manager.state.currentSegmentLastPartialText = normalizedInterimText;
       manager.state.currentSegmentForcedFinalized = false;
+      noteSegmentPartialPeak(manager.state, interimText);
       manager.sendUpdateInternal({
         partial: interimText,
         final: "",
@@ -206,8 +208,12 @@ function handleRecognitionResult(
       forced_final: false,
     });
     manager.consumeCompletedSegmentInternal();
+    // Pre-start buddy only on segment final (hasNewFinal).
+    if (overlapSlotIndex === overlapActiveSlotIndex(manager.state)) {
+      preStartNextOverlapInstance(manager, "natural-final");
+    }
+    maybeFlushAfterCommittedLongSegment(manager, finalText, "natural-final");
     manager.setStatusInternal("final");
-    prestartOverlapBuddyIfNeeded(manager, overlapSlotIndex);
   }
 
   manager.emitWorkerStatus("result");

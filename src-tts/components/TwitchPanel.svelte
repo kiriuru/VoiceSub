@@ -22,8 +22,11 @@
   import ReplacementPairEditor from "./ReplacementPairEditor.svelte";
   import { locale, t, getLocale } from "../../src/lib/i18n";
   import type { LocaleCode } from "../../src/lib/types";
-  import { formatSpeechVolume } from "../lib/playback-format";
-  import { prependActivityLog } from "../lib/activity-log";
+  import { formatSpeechVolume, formatPlaybackRate } from "../lib/playback-format";
+  import {
+    prependTwitchChatLog,
+    type TwitchChatLogEntry,
+  } from "../lib/twitch-chat-log";
   import { ttsTrace, ttsTraceText } from "../lib/tts-trace";
   import { clampPopoverPosition, rectFromElement } from "../lib/popover-position";
   import { tick } from "svelte";
@@ -42,7 +45,6 @@
     moduleSpeechVolume?: number;
     playbackMode?: TtsPlaybackMode;
     audioOutputs?: AudioOutputDevice[];
-    onConnectionChange?: (status: TwitchConnectionStatus) => void;
     onTwitchConfigSaved?: (twitch: TwitchTtsSettings) => void;
   }
 
@@ -53,7 +55,6 @@
     moduleSpeechVolume = 1,
     playbackMode = "native",
     audioOutputs = [],
-    onConnectionChange,
     onTwitchConfigSaved,
   }: Props = $props();
 
@@ -74,7 +75,8 @@
   let busy = $state(false);
   let settingsSaved = $state(false);
   let settingsSaving = $state(false);
-  let chatLog = $state<TwitchChatMessage[]>([]);
+  let chatLog = $state<TwitchChatLogEntry[]>([]);
+  let chatLogSeq = 0;
   let ignoreUsersText = $state("");
   let stripSymbolsText = $state("");
   let enabledLanguagesText = $state("");
@@ -203,11 +205,14 @@
       channels: next.channels?.length ?? 0,
       message: next.message,
     });
-    onConnectionChange?.(next);
   }
 
   export function recordChatMessage(message: TwitchChatMessage) {
-    chatLog = prependActivityLog(chatLog, message);
+    chatLog = prependTwitchChatLog(
+      chatLog,
+      message as TwitchChatMessage & Record<string, unknown>,
+      `chat-${chatLogSeq++}`,
+    );
     ttsTraceText("twitch", "chat_message", message.text, {
       id: message.id,
       user: message.user,
@@ -223,7 +228,6 @@
         state: status.state,
         channel: status.channel,
       });
-      onConnectionChange?.(status);
     } catch (err) {
       ttsTrace("twitch", "status_refresh_error", {
         message: err instanceof Error ? err.message : String(err),
@@ -456,7 +460,6 @@
         state: status.state,
         channel: status.channel,
       });
-      onConnectionChange?.(status);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       ttsTrace("twitch", "connect_error", { message });
@@ -496,7 +499,6 @@
       await disconnectTwitchChat();
       status = { state: "disconnected", channel: "", channels: [], message: "" };
       ttsTrace("twitch", "disconnect_ok", {});
-      onConnectionChange?.(status);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       ttsTrace("twitch", "disconnect_error", { message });
@@ -813,7 +815,7 @@
       <summary>{tr("tts.twitch.advanced")}</summary>
       <div class="tts-twitch-advanced__body">
         {#if !nativePlayback}
-          <div class="stack-field">
+          <label class="stack-field stack-field--range">
             <label class="checkbox-row">
               <input
                 type="checkbox"
@@ -830,29 +832,38 @@
               <span>{tr("tts.twitch.override_rate")}</span>
             </label>
             {#if twitchRateOverride}
+              <span class="stack-field__label-row">
+                <span>{tr("tts.speech.rate")}</span>
+                <output class="stack-field__value" for="tts-twitch-rate">
+                  {formatPlaybackRate(twitch.speech_rate ?? moduleSpeechRate)}
+                </output>
+              </span>
               <input
+                id="tts-twitch-rate"
                 type="range"
                 min="0.5"
                 max="2"
                 step="0.05"
                 value={twitch.speech_rate ?? moduleSpeechRate}
-                onchange={(e) => {
+                oninput={(e) => {
                   twitch = {
                     ...twitch,
                     speech_rate: Number((e.currentTarget as HTMLInputElement).value) || 0.5,
                   };
-                  saveNow();
                 }}
+                onchange={() => saveNow()}
               />
             {:else}
               <span class="muted">
-                {tr("tts.twitch.inherit_rate", { rate: moduleSpeechRate })}
+                {tr("tts.twitch.inherit_rate", {
+                  rate: formatPlaybackRate(moduleSpeechRate),
+                })}
               </span>
             {/if}
-          </div>
+          </label>
         {/if}
 
-        <div class="stack-field">
+        <label class="stack-field stack-field--range">
           <label class="checkbox-row">
             <input
               type="checkbox"
@@ -870,7 +881,7 @@
           </label>
           {#if twitchVolumeOverride}
             <span class="stack-field__label-row">
-              <span class="muted">{tr("tts.speech.volume")}</span>
+              <span>{tr("tts.speech.volume")}</span>
               <output class="stack-field__value" for="tts-twitch-volume">
                 {formatSpeechVolume(twitch.speech_volume ?? moduleSpeechVolume)}
               </output>
@@ -879,17 +890,17 @@
               id="tts-twitch-volume"
               type="range"
               min="0"
-              max="1"
+              max="1.5"
               step="0.05"
-              value={twitch.speech_volume ?? moduleSpeechVolume}
-              oninput={(e) => {
-                twitch = {
-                  ...twitch,
-                  speech_volume: Number((e.currentTarget as HTMLInputElement).value),
-                };
-              }}
-              onchange={() => saveNow()}
-            />
+                value={twitch.speech_volume ?? moduleSpeechVolume}
+                oninput={(e) => {
+                  twitch = {
+                    ...twitch,
+                    speech_volume: Number((e.currentTarget as HTMLInputElement).value),
+                  };
+                }}
+                onchange={() => saveNow()}
+              />
           {:else}
             <span class="muted">
               {tr("tts.twitch.inherit_volume", {
@@ -897,7 +908,7 @@
               })}
             </span>
           {/if}
-        </div>
+        </label>
 
         <label class="stack-field">
           <span>{tr("tts.twitch.max_queue")}</span>
@@ -1145,7 +1156,7 @@
 
   {#if chatLog.length}
     <ul class="transcript-box tts-activity-log">
-      {#each chatLog as line (line.id)}
+      {#each chatLog as line (line.logKey)}
         <li>
           <strong>{line.display_name}</strong>
           {#if line.channel}

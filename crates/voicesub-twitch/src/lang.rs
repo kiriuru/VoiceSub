@@ -28,12 +28,17 @@ struct LatinDiacriticScores {
     nordic: u32,
 }
 
-pub fn resolve_message_language(text: &str, min_chars: usize, fallback: &str) -> String {
-    if !has_meaningful_linguistic_content(text) {
+pub fn resolve_message_language(
+    text: &str,
+    min_chars: usize,
+    fallback: &str,
+    strip_links: bool,
+) -> String {
+    if !has_meaningful_linguistic_content(text, strip_links) {
         let fb = fallback.trim().to_ascii_lowercase();
         return if fb.is_empty() { "en".to_string() } else { fb };
     }
-    detect_language_code(text, min_chars)
+    detect_language_code(text, min_chars, strip_links)
         .filter(|code| code != "und")
         .unwrap_or_else(|| {
             let fb = fallback.trim().to_ascii_lowercase();
@@ -42,15 +47,21 @@ pub fn resolve_message_language(text: &str, min_chars: usize, fallback: &str) ->
 }
 
 /// True when text still carries speakable natural language (not link-only / URL garbage).
-pub fn has_meaningful_linguistic_content(text: &str) -> bool {
+pub fn has_meaningful_linguistic_content(text: &str, strip_links: bool) -> bool {
     let trimmed = text.trim();
     if trimmed.is_empty() {
         return false;
     }
-    let without_links = crate::links::strip_links_from_text(trimmed);
-    let without_label = strip_leading_speaker_label(&without_links);
+    let working = if strip_links {
+        crate::links::strip_links_from_text(trimmed)
+    } else {
+        trimmed.to_string()
+    };
+    let without_label = strip_leading_speaker_label(&working);
     let without_mentions = strip_twitch_mentions(&without_label);
-    let normalized = crate::emoji::normalize_whitespace(&without_mentions);
+    let normalized = crate::emoji::normalize_whitespace(&crate::emoji::strip_invisible_chat_characters(
+        &without_mentions,
+    ));
     if normalized.is_empty() {
         return false;
     }
@@ -63,7 +74,7 @@ pub fn has_meaningful_linguistic_content(text: &str) -> bool {
         return false;
     }
 
-    if words.len() == 1 {
+    if strip_links && words.len() == 1 {
         let word = words[0];
         if crate::links::looks_like_url_token(word) || looks_like_url_garbage(word) {
             return false;
@@ -72,13 +83,38 @@ pub fn has_meaningful_linguistic_content(text: &str) -> bool {
 
     if words
         .iter()
-        .all(|word| crate::emoji::is_plain_decimal_token(word))
+        .all(|word| {
+            crate::emoji::is_plain_decimal_token(word) || is_digit_group_token(word)
+        })
     {
         return true;
     }
 
     let alpha_count = normalized.chars().filter(|ch| ch.is_alphabetic()).count();
     alpha_count >= 2
+}
+
+/// Digit groups separated by chat punctuation (`500&100`, `500$100`) — not URL fragments.
+fn is_digit_group_token(token: &str) -> bool {
+    let trimmed = crate::emoji::strip_invisible_chat_characters(token);
+    if trimmed.is_empty() {
+        return false;
+    }
+    let digit_count = trimmed
+        .chars()
+        .filter(|ch| crate::emoji::is_plain_decimal_char(*ch))
+        .count();
+    if digit_count < 2 {
+        return false;
+    }
+    if trimmed.chars().any(|ch| ch.is_alphabetic()) {
+        return false;
+    }
+    trimmed.chars().all(|ch| {
+        crate::emoji::is_plain_decimal_char(ch)
+            || matches!(ch, '&' | '$' | '#' | '%' | '+' | '-' | '|' | '/' | '=' | '.')
+            || crate::emoji::is_invisible_noise_char(ch)
+    })
 }
 
 fn looks_like_url_garbage(token: &str) -> bool {
@@ -90,13 +126,13 @@ fn looks_like_url_garbage(token: &str) -> bool {
         || (lower.contains('=') && lower.contains('/') && token.len() > 12)
 }
 
-pub fn detect_language_code(text: &str, min_chars: usize) -> Option<String> {
+pub fn detect_language_code(text: &str, min_chars: usize, strip_links: bool) -> Option<String> {
     let trimmed = text.trim();
     if trimmed.is_empty() {
         return None;
     }
 
-    let cleaned = clean_for_detection(trimmed);
+    let cleaned = clean_for_detection(trimmed, strip_links);
     let char_count = cleaned.chars().count();
     if char_count == 0 {
         return None;
@@ -131,11 +167,15 @@ pub fn detect_language_code(text: &str, min_chars: usize) -> Option<String> {
     detect_by_script(&cleaned)
 }
 
-fn clean_for_detection(text: &str) -> String {
-    let without_links = crate::links::strip_links_from_text(text);
-    let without_label = strip_leading_speaker_label(&without_links);
+fn clean_for_detection(text: &str, strip_links: bool) -> String {
+    let working = if strip_links {
+        crate::links::strip_links_from_text(text)
+    } else {
+        text.trim().to_string()
+    };
+    let without_label = strip_leading_speaker_label(&working);
     let without_mentions = strip_twitch_mentions(&without_label);
-    if !has_meaningful_linguistic_content(without_mentions.trim()) {
+    if !has_meaningful_linguistic_content(without_mentions.trim(), strip_links) {
         return String::new();
     }
     let mut out = String::with_capacity(without_mentions.len());
@@ -164,10 +204,19 @@ pub fn strip_leading_speaker_label(text: &str) -> String {
         || !label
             .chars()
             .all(|ch| ch.is_alphanumeric() || matches!(ch, '_' | '-'))
+        || looks_like_url_scheme_label(label)
+        || rest.trim_start().starts_with("//")
     {
         return trimmed.to_string();
     }
     rest.trim().to_string()
+}
+
+fn looks_like_url_scheme_label(label: &str) -> bool {
+    matches!(
+        label.to_ascii_lowercase().as_str(),
+        "http" | "https" | "ftp" | "ftps"
+    )
 }
 
 fn should_skip_statistical_detection(text: &str) -> bool {
@@ -178,7 +227,7 @@ fn should_skip_statistical_detection(text: &str) -> bool {
     trimmed.chars().all(|ch| ch.is_ascii_alphabetic())
 }
 
-/// Remove `@username` tokens so mentions do not skew language detection or TTS.
+/// Remove `@username` tokens so mentions do not skew language detection or clean-text display.
 pub fn strip_twitch_mentions(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     let mut chars = text.chars().peekable();
@@ -186,6 +235,22 @@ pub fn strip_twitch_mentions(text: &str) -> String {
         if ch == '@' {
             while matches!(chars.peek(), Some(next) if next.is_alphanumeric() || *next == '_') {
                 chars.next();
+            }
+            continue;
+        }
+        out.push(ch);
+    }
+    crate::emoji::normalize_whitespace(&out)
+}
+
+/// Keep mention usernames for TTS while dropping the leading `@`.
+pub fn normalize_twitch_mentions(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch == '@' {
+            while matches!(chars.peek(), Some(next) if next.is_alphanumeric() || *next == '_') {
+                out.push(chars.next().expect("peek matched"));
             }
             continue;
         }
@@ -767,7 +832,7 @@ mod tests {
     #[test]
     fn detects_russian() {
         assert_eq!(
-            detect_language_code("привет как дела", 4).as_deref(),
+            detect_language_code("привет как дела", 4, true).as_deref(),
             Some("ru")
         );
     }
@@ -775,25 +840,25 @@ mod tests {
     #[test]
     fn detects_ukrainian() {
         assert_eq!(
-            detect_language_code("привіт друже", 4).as_deref(),
+            detect_language_code("привіт друже", 4, true).as_deref(),
             Some("uk")
         );
     }
 
     #[test]
     fn detects_english_hello() {
-        assert_eq!(detect_language_code("hello", 4).as_deref(), Some("en"));
-        assert_eq!(resolve_message_language("hello", 4, "ru"), "en");
+        assert_eq!(detect_language_code("hello", 4, true).as_deref(), Some("en"));
+        assert_eq!(resolve_message_language("hello", 4, "ru", true), "en");
     }
 
     #[test]
     fn short_latin_uses_script_not_und() {
-        assert_eq!(resolve_message_language("hi", 4, "ru"), "en");
+        assert_eq!(resolve_message_language("hi", 4, "ru", true), "en");
     }
 
     #[test]
     fn und_falls_back_to_settings_language() {
-        assert_eq!(resolve_message_language("12345", 4, "ja"), "ja");
+        assert_eq!(resolve_message_language("12345", 4, "ja", true), "ja");
     }
 
     #[test]
@@ -809,71 +874,71 @@ mod tests {
 
     #[test]
     fn detects_polish_diacritics() {
-        assert_eq!(detect_language_code("cześć", 4).as_deref(), Some("pl"));
-        assert_eq!(detect_language_code("dziękuję", 4).as_deref(), Some("pl"));
+        assert_eq!(detect_language_code("cześć", 4, true).as_deref(), Some("pl"));
+        assert_eq!(detect_language_code("dziękuję", 4, true).as_deref(), Some("pl"));
     }
 
     #[test]
     fn detects_german_diacritics() {
-        assert_eq!(detect_language_code("schön", 4).as_deref(), Some("de"));
-        assert_eq!(detect_language_code("grüße", 4).as_deref(), Some("de"));
+        assert_eq!(detect_language_code("schön", 4, true).as_deref(), Some("de"));
+        assert_eq!(detect_language_code("grüße", 4, true).as_deref(), Some("de"));
     }
 
     #[test]
     fn detects_spanish_diacritics() {
-        assert_eq!(detect_language_code("español", 4).as_deref(), Some("es"));
+        assert_eq!(detect_language_code("español", 4, true).as_deref(), Some("es"));
     }
 
     #[test]
     fn detects_french_diacritics() {
         assert_eq!(
-            detect_language_code("bonjour à tous", 4).as_deref(),
+            detect_language_code("bonjour à tous", 4, true).as_deref(),
             Some("fr")
         );
     }
 
     #[test]
     fn detects_portuguese_diacritics() {
-        assert_eq!(detect_language_code("não", 4).as_deref(), Some("pt"));
+        assert_eq!(detect_language_code("não", 4, true).as_deref(), Some("pt"));
     }
 
     #[test]
     fn detects_italian_diacritics() {
-        assert_eq!(detect_language_code("città", 4).as_deref(), Some("it"));
-        assert_eq!(detect_language_code("così", 4).as_deref(), Some("it"));
+        assert_eq!(detect_language_code("città", 4, true).as_deref(), Some("it"));
+        assert_eq!(detect_language_code("così", 4, true).as_deref(), Some("it"));
     }
 
     #[test]
     fn detects_turkish_diacritics() {
-        assert_eq!(detect_language_code("ışık", 4).as_deref(), Some("tr"));
-        assert_eq!(detect_language_code("dağ", 4).as_deref(), Some("tr"));
+        assert_eq!(detect_language_code("ışık", 4, true).as_deref(), Some("tr"));
+        assert_eq!(detect_language_code("dağ", 4, true).as_deref(), Some("tr"));
     }
 
     #[test]
     fn detects_japanese_kana() {
-        assert_eq!(detect_language_code("こんにちは", 4).as_deref(), Some("ja"));
-        assert_eq!(detect_language_code("カタカナ", 4).as_deref(), Some("ja"));
+        assert_eq!(detect_language_code("こんにちは", 4, true).as_deref(), Some("ja"));
+        assert_eq!(detect_language_code("カタカナ", 4, true).as_deref(), Some("ja"));
     }
 
     #[test]
     fn detects_korean() {
-        assert_eq!(detect_language_code("안녕", 4).as_deref(), Some("ko"));
+        assert_eq!(detect_language_code("안녕", 4, true).as_deref(), Some("ko"));
     }
 
     #[test]
     fn detects_chinese_kanji() {
-        assert_eq!(detect_language_code("你好", 4).as_deref(), Some("zh"));
+        assert_eq!(detect_language_code("你好", 4, true).as_deref(), Some("zh"));
     }
 
     #[test]
     fn detects_short_cyrillic_without_min_chars() {
-        assert_eq!(detect_language_code("да", 4).as_deref(), Some("ru"));
+        assert_eq!(detect_language_code("да", 4, true).as_deref(), Some("ru"));
     }
 
     #[test]
     fn detects_vietnamese_diacritics() {
         assert_eq!(
-            detect_language_code("xin chào các bạn", 4).as_deref(),
+            detect_language_code("xin chào các bạn", 4, true).as_deref(),
             Some("vi")
         );
     }
@@ -881,7 +946,7 @@ mod tests {
     #[test]
     fn lingua_picks_dutch_on_phrase() {
         assert_eq!(
-            detect_language_code("dit is een typische nederlandse zin", 4).as_deref(),
+            detect_language_code("dit is een typische nederlandse zin", 4, true).as_deref(),
             Some("nl")
         );
     }
@@ -889,21 +954,21 @@ mod tests {
     #[test]
     fn detects_long_french_not_dutch() {
         let sample = "Bonjour à tous, je m'appelle Kiriuru. Je parle principalement russe, mais je connais un peu l'anglais. Mon discours est sous-titré en anglais et en japonais.";
-        assert_eq!(detect_language_code(sample, 4).as_deref(), Some("fr"));
-        assert_eq!(resolve_message_language(sample, 4, "en"), "fr");
+        assert_eq!(detect_language_code(sample, 4, true).as_deref(), Some("fr"));
+        assert_eq!(resolve_message_language(sample, 4, "en", true), "fr");
     }
 
     #[test]
     fn detects_long_german_not_dutch() {
         let sample = "In früheren Windows-Versionen (vor 10/11) wurde direkt die Meldung „Nicht genügend virtueller Speicher“ angezeigt, in modernen Windows-Versionen ist die Speicherverwaltung intelligenter, sodass eine solche Meldung nicht mehr angezeigt wird.";
-        assert_eq!(detect_language_code(sample, 4).as_deref(), Some("de"));
-        assert_eq!(resolve_message_language(sample, 4, "en"), "de");
+        assert_eq!(detect_language_code(sample, 4, true).as_deref(), Some("de"));
+        assert_eq!(resolve_message_language(sample, 4, "en", true), "de");
     }
 
     #[test]
     fn german_article_not_dutch() {
         assert_eq!(
-            detect_language_code("die Meldung ist wichtig", 4).as_deref(),
+            detect_language_code("die Meldung ist wichtig", 4, true).as_deref(),
             Some("de")
         );
     }
@@ -919,51 +984,51 @@ mod tests {
     #[test]
     fn detects_indonesian() {
         assert_eq!(
-            detect_language_code("selamat pagi semuanya", 4).as_deref(),
+            detect_language_code("selamat pagi semuanya", 4, true).as_deref(),
             Some("id")
         );
     }
 
     #[test]
     fn detects_hindi_devanagari() {
-        assert_eq!(detect_language_code("नमस्ते दोस्त", 4).as_deref(), Some("hi"));
+        assert_eq!(detect_language_code("नमस्ते दोस्त", 4, true).as_deref(), Some("hi"));
     }
 
     #[test]
     fn detects_arabic() {
         assert_eq!(
-            detect_language_code("مرحبا بكم في البث", 4).as_deref(),
+            detect_language_code("مرحبا بكم في البث", 4, true).as_deref(),
             Some("ar")
         );
     }
 
     #[test]
     fn detects_thai() {
-        assert_eq!(detect_language_code("สวัสดีทุกคน", 4).as_deref(), Some("th"));
+        assert_eq!(detect_language_code("สวัสดีทุกคน", 4, true).as_deref(), Some("th"));
     }
 
     #[test]
     fn detects_swedish() {
         assert_eq!(
-            detect_language_code("jag går hem nu, vi ses senare", 4).as_deref(),
+            detect_language_code("jag går hem nu, vi ses senare", 4, true).as_deref(),
             Some("sv")
         );
     }
 
     #[test]
     fn strips_punctuation_before_detection() {
-        assert_eq!(detect_language_code("привет!!!", 4).as_deref(), Some("ru"));
-        assert_eq!(detect_language_code("cześć!!!", 4).as_deref(), Some("pl"));
+        assert_eq!(detect_language_code("привет!!!", 4, true).as_deref(), Some("ru"));
+        assert_eq!(detect_language_code("cześć!!!", 4, true).as_deref(), Some("pl"));
     }
 
     #[test]
     fn mention_does_not_override_cyrillic_language() {
         assert_eq!(
-            detect_language_code("@KamakiriMeido Привет", 2).as_deref(),
+            detect_language_code("@KamakiriMeido Привет", 2, true).as_deref(),
             Some("ru")
         );
         assert_eq!(
-            resolve_message_language("@KamakiriMeido Привет", 2, "en"),
+            resolve_message_language("@KamakiriMeido Привет", 2, "en", true),
             "ru"
         );
     }
@@ -978,24 +1043,33 @@ mod tests {
             strip_leading_speaker_label("12:30 meeting"),
             "12:30 meeting"
         );
+        assert_eq!(
+            strip_leading_speaker_label("https://github.com/kiriuru/VoiceSub"),
+            "https://github.com/kiriuru/VoiceSub"
+        );
+        assert_eq!(
+            strip_leading_speaker_label("github.com/kiriuru/VoiceSub"),
+            "github.com/kiriuru/VoiceSub"
+        );
     }
 
     #[test]
     fn link_only_line_does_not_detect_indonesian_from_name() {
         let sample = "Wallenber: https://www.youtube.com/watch?v=zqBnOfSmKQo";
-        assert_eq!(detect_language_code(sample, 2), None);
-        assert_eq!(resolve_message_language(sample, 2, "ru"), "ru");
-        assert_eq!(detect_language_code("Wallenber", 2).as_deref(), Some("en"));
+        assert_eq!(detect_language_code(sample, 2, true), None);
+        assert_eq!(resolve_message_language(sample, 2, "ru", true), "ru");
+        assert_eq!(detect_language_code("Wallenber", 2, true).as_deref(), Some("en"));
     }
 
     #[test]
     fn youtube_playlist_link_does_not_detect_dutch() {
         let sample = "Wallenber: https://www.youtube.com/watch?v=3VTkBuxU4yk&list=RDMM&index=5";
-        assert_eq!(resolve_message_language(sample, 2, "ru"), "ru");
-        assert_eq!(detect_language_code(sample, 2), None);
-        assert!(!has_meaningful_linguistic_content(sample));
+        assert_eq!(resolve_message_language(sample, 2, "ru", true), "ru");
+        assert_eq!(detect_language_code(sample, 2, true), None);
+        assert!(!has_meaningful_linguistic_content(sample, true));
         assert!(!has_meaningful_linguistic_content(
-            "https://www.youtube.com/watch?v=3VTkBuxU4yklist=RDMMindex=5"
+            "https://www.youtube.com/watch?v=3VTkBuxU4yklist=RDMMindex=5",
+            true,
         ));
     }
 
@@ -1006,9 +1080,45 @@ mod tests {
     }
 
     #[test]
+    fn normalize_twitch_mentions_keeps_usernames() {
+        assert_eq!(
+            normalize_twitch_mentions("@Kiriuru hello"),
+            "Kiriuru hello"
+        );
+        assert_eq!(
+            normalize_twitch_mentions("@KamakiriMeido Привет"),
+            "KamakiriMeido Привет"
+        );
+        assert_eq!(normalize_twitch_mentions("hi @friend there"), "hi friend there");
+    }
+
+    #[test]
+    fn digit_heavy_separators_are_meaningful() {
+        assert!(has_meaningful_linguistic_content("500&100", true));
+        assert!(has_meaningful_linguistic_content("500$100", true));
+        assert!(has_meaningful_linguistic_content("500/100", true));
+    }
+
+    #[test]
+    fn link_only_url_is_meaningful_when_strip_links_disabled() {
+        assert!(has_meaningful_linguistic_content(
+            "github.com/kiriuru/VoiceSub",
+            false,
+        ));
+        assert!(has_meaningful_linguistic_content(
+            "https://github.com/kiriuru/VoiceSub",
+            false,
+        ));
+        assert!(!has_meaningful_linguistic_content(
+            "https://www.youtube.com/watch?v=3VTkBuxU4yk&list=RDMM&index=5",
+            true,
+        ));
+    }
+
+    #[test]
     fn digit_only_lines_are_meaningful() {
-        assert!(has_meaningful_linguistic_content("522"));
-        assert!(has_meaningful_linguistic_content("123"));
-        assert!(has_meaningful_linguistic_content("1 2 3"));
+        assert!(has_meaningful_linguistic_content("522", true));
+        assert!(has_meaningful_linguistic_content("123", true));
+        assert!(has_meaningful_linguistic_content("1 2 3", true));
     }
 }

@@ -102,11 +102,6 @@ export async function fetchSettingsPayload(): Promise<ConfigPayload> {
   return body.payload;
 }
 
-export async function fetchAppSpeechContext(): Promise<AppSpeechContext> {
-  const payload = await fetchSettingsPayload();
-  return buildSpeechContextFromConfig(payload);
-}
-
 export async function bootstrapTtsFromSettings(): Promise<AppSpeechContext> {
   const payload = await fetchSettingsPayload();
   applyUiThemeFromConfig(payload);

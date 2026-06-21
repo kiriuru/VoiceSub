@@ -34,9 +34,3 @@ const bundleTargets = [
 for (const outPath of bundleTargets) {
   buildBundle(sourceLocalesDir, outPath);
 }
-
-const dynamicSource = path.join(root, "scripts", "i18n-source", "dynamic-locales.js");
-const dynamicTarget = path.join(root, "bin", "overlay", "shared", "js", "i18n", "dynamic-locales.js");
-fs.mkdirSync(path.dirname(dynamicTarget), { recursive: true });
-fs.copyFileSync(dynamicSource, dynamicTarget);
-console.log(`copied ${dynamicSource} -> ${dynamicTarget}`);

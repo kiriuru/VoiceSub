@@ -145,9 +145,52 @@ export function performControlledStart(manager: AsrManagerHost, reason: string):
   invokeRecognitionStart(manager, recognition, reason, startLogThrottle, null);
 }
 
+export function requestRecognitionFlush(manager: AsrManagerHost, reason: string): void {
+  if (!manager.state.desiredRunning) {
+    return;
+  }
+  if (
+    manager.state.browserSupervisorState === "stopping" ||
+    manager.state.browserSupervisorState === "starting"
+  ) {
+    return;
+  }
+  const slots = collectRecognitionInstances(manager);
+  if (!slots.length) {
+    manager.scheduleRestartInternal(reason);
+    return;
+  }
+  manager.state.pendingStart = true;
+  manager.state.pendingRestartReason = reason;
+  manager.clearForceFinalizeTimerInternal();
+  if (manager.state.browserSupervisorState !== "stopping") {
+    manager.setSupervisorStateInternal("stopping");
+  }
+  manager.setRecognitionStateInternal("stopping");
+  manager.state.stoppingSinceMs = manager.now();
+  manager.setStatusInternal("stopping");
+  try {
+    slots.forEach((rec) => {
+      try {
+        rec.stop();
+      } catch {
+        // best effort
+      }
+    });
+    manager.appendLogInternal(`recognition.flush (${reason})`);
+  } catch {
+    cleanupRecognitionInstance(manager, manager.state.recognitionGenerationId);
+    manager.setRecognitionStateInternal("idle");
+    manager.setSupervisorStateInternal(manager.state.desiredRunning ? "restarting" : "idle");
+    if (manager.state.desiredRunning) {
+      manager.scheduleRestartInternal(manager.state.pendingRestartReason || reason);
+    }
+  }
+}
+
 export function transitionToStopping(manager: AsrManagerHost, reason: string): void {
   const slots = collectRecognitionInstances(manager);
-  if (reason !== "user-stop") {
+  if (reason !== "user-stop" && reason !== "long_segment_flush") {
     manager.forceFinalizeOnInterruptionInternal("browser_recognition_interrupted");
   }
   if (!slots.length) {

@@ -11,7 +11,7 @@
 </script>
 
 <div class="more-settings-hub">
-  <p class="muted" style="margin: 0;">{tr("nav.more.hint")}</p>
+  <p class="muted muted--flush">{tr("nav.more.hint")}</p>
 
   {#each MORE_SETTINGS_GROUPS as group}
     <section class="more-settings-group" aria-labelledby="group-{group.groupKey}">

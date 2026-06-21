@@ -8,6 +8,7 @@ use std::sync::{
 
 use tokio::sync::Mutex;
 use voicesub_browser::{BrowserAsrGateway, IngestedAsrUpdate};
+use voicesub_logging::is_config_full_logging_enabled;
 
 use crate::browser_event_builder::BrowserTranscriptEventBuilder;
 use crate::http::RuntimeMetricsCollector;
@@ -48,6 +49,27 @@ fn accept_browser_session_generation(
         state.active_generation_id = generation_id;
     }
     true
+}
+
+enum IngestWorkKind {
+    Partial {
+        text: String,
+        source_lang: String,
+        client_segment_id: Option<String>,
+    },
+    Final {
+        text: String,
+        source_lang: String,
+        client_segment_id: Option<String>,
+        forced_final: bool,
+    },
+}
+
+struct IngestWork {
+    event_builder: Arc<BrowserTranscriptEventBuilder>,
+    transcript: Arc<TranscriptController>,
+    gateway: Arc<std::sync::Mutex<BrowserAsrGateway>>,
+    kind: IngestWorkKind,
 }
 
 pub struct BrowserSpeechSource {
@@ -98,8 +120,10 @@ impl BrowserSpeechSource {
         format!("{}:{generation_id}", session_id.unwrap_or(""))
     }
 
-    fn browser_source_lang(config: &serde_json::Value) -> String {
-        config
+    fn browser_source_lang(snapshot: &std::sync::RwLock<serde_json::Value>) -> String {
+        snapshot
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
             .get("source_lang")
             .and_then(|v| v.as_str())
             .unwrap_or("auto")
@@ -107,15 +131,16 @@ impl BrowserSpeechSource {
             .to_ascii_lowercase()
     }
 
-    fn note_stale_ignored(&self) {
-        if let Ok(mut gateway) = self.gateway.lock() {
+    fn note_stale_ignored(gateway: &Arc<std::sync::Mutex<BrowserAsrGateway>>) {
+        if let Ok(mut gateway) = gateway.lock() {
             gateway.note_stale_worker_event_ignored();
         }
     }
 
-    pub async fn ingest_external_asr_update(&mut self, update: IngestedAsrUpdate) {
+    /// Sync validation and session bookkeeping only — no await while session lock is held upstream.
+    fn accept_update(&mut self, update: IngestedAsrUpdate) -> Option<IngestWork> {
         if !self.runtime_running.load(Ordering::Relaxed) {
-            return;
+            return None;
         }
         self.metrics.record_browser_transcript_received();
 
@@ -133,8 +158,8 @@ impl BrowserSpeechSource {
             normalized_session_id.as_deref(),
             normalized_generation_id,
         ) {
-            self.note_stale_ignored();
-            return;
+            Self::note_stale_ignored(&self.gateway);
+            return None;
         }
         if previous_session_id.as_deref() != self.session.active_session_id.as_deref() {
             self.sequence_watermark.clear();
@@ -145,24 +170,19 @@ impl BrowserSpeechSource {
             let seq = worker_message_sequence as i64;
             let prev = self.sequence_watermark.get(&key).copied().unwrap_or(-1);
             if seq <= prev {
-                self.note_stale_ignored();
-                return;
+                Self::note_stale_ignored(&self.gateway);
+                return None;
             }
             self.sequence_watermark.insert(key, seq);
         }
 
-        let config = self
-            .config_snapshot
-            .read()
-            .unwrap_or_else(|e| e.into_inner())
-            .clone();
         let normalized_source_lang = update
             .source_lang
             .as_deref()
             .map(str::trim)
             .filter(|lang| !lang.is_empty())
             .map(str::to_ascii_lowercase)
-            .unwrap_or_else(|| Self::browser_source_lang(&config));
+            .unwrap_or_else(|| Self::browser_source_lang(&self.config_snapshot));
 
         let mut partial_text = update.partial.trim().to_string();
         let mut final_text = update.final_text.trim().to_string();
@@ -175,49 +195,109 @@ impl BrowserSpeechSource {
             .client_segment_id
             .as_deref()
             .map(str::trim)
-            .filter(|id| !id.is_empty());
+            .filter(|id| !id.is_empty())
+            .map(str::to_string);
 
         if !partial_text.is_empty() && !update.is_final {
-            let Some(event) = self
+            return Some(IngestWork {
+                event_builder: self.event_builder.clone(),
+                transcript: self.transcript.clone(),
+                gateway: self.gateway.clone(),
+                kind: IngestWorkKind::Partial {
+                    text: partial_text,
+                    source_lang: normalized_source_lang,
+                    client_segment_id,
+                },
+            });
+        }
+
+        if update.is_final && !final_text.is_empty() {
+            return Some(IngestWork {
+                event_builder: self.event_builder.clone(),
+                transcript: self.transcript.clone(),
+                gateway: self.gateway.clone(),
+                kind: IngestWorkKind::Final {
+                    text: final_text,
+                    source_lang: normalized_source_lang,
+                    client_segment_id,
+                    forced_final: update.forced_final,
+                },
+            });
+        }
+
+        None
+    }
+
+    pub async fn ingest_external_asr_update(&mut self, update: IngestedAsrUpdate) {
+        if let Some(work) = self.accept_update(update) {
+            process_ingest_work(work).await;
+        }
+    }
+}
+
+async fn process_ingest_work(work: IngestWork) {
+    let empty_config = serde_json::Value::Null;
+    let ingest_started = is_config_full_logging_enabled().then(std::time::Instant::now);
+
+    match work.kind {
+        IngestWorkKind::Partial {
+            text,
+            source_lang,
+            client_segment_id,
+        } => {
+            let Some(event) = work
                 .event_builder
                 .build_partial_event(
-                    &partial_text,
-                    &normalized_source_lang,
-                    client_segment_id,
-                    &config,
+                    &text,
+                    &source_lang,
+                    client_segment_id.as_deref(),
+                    &empty_config,
                 )
                 .await
             else {
                 return;
             };
-            if let Ok(mut gateway) = self.gateway.lock() {
+            if let Ok(mut gateway) = work.gateway.lock() {
                 gateway.note_partial(
-                    partial_text.chars().count(),
-                    Some(&normalized_source_lang),
+                    text.chars().count(),
+                    Some(&source_lang),
                     Some(event.sequence),
                 );
             }
-            self.transcript.handle_event(event).await;
-            return;
+            work.transcript
+                .handle_event(
+                    event,
+                    ingest_started,
+                )
+                .await;
         }
-
-        if update.is_final && !final_text.is_empty() {
-            let Some(event) = self
+        IngestWorkKind::Final {
+            text,
+            source_lang,
+            client_segment_id,
+            forced_final,
+        } => {
+            let Some(event) = work
                 .event_builder
-                .build_final_event(&final_text, &normalized_source_lang, client_segment_id)
+                .build_final_event(&text, &source_lang, client_segment_id.as_deref())
                 .await
             else {
                 return;
             };
-            if let Ok(mut gateway) = self.gateway.lock() {
+            if let Ok(mut gateway) = work.gateway.lock() {
                 gateway.note_final(
-                    final_text.chars().count(),
-                    Some(&normalized_source_lang),
+                    text.chars().count(),
+                    Some(&source_lang),
                     Some(event.sequence),
-                    update.forced_final,
+                    forced_final,
                 );
             }
-            self.transcript.handle_event(event).await;
+            work.transcript
+                .handle_event(
+                    event,
+                    ingest_started,
+                )
+                .await;
         }
     }
 }
@@ -251,8 +331,17 @@ impl OrderedBrowserSpeechIngest {
             let speech = self.speech.clone();
             handle.spawn(async move {
                 while let Some(update) = rx.recv().await {
-                    speech.ingest(update).await;
+                    // Process each update in a child task and await it: preserves WS
+                    // ordering (one in flight) while isolating a panic so it cannot
+                    // kill the consumer loop and silently stall all ingestion.
+                    let speech = speech.clone();
+                    if let Err(err) =
+                        tokio::spawn(async move { speech.ingest(update).await }).await
+                    {
+                        tracing::error!(error = %err, "browser speech ingest task failed; continuing");
+                    }
                 }
+                tracing::warn!("browser speech ingest channel closed; consumer exiting");
             });
             *guard = Some(tx);
         }
@@ -272,11 +361,13 @@ impl SharedBrowserSpeechSource {
     }
 
     pub async fn ingest(&self, update: IngestedAsrUpdate) {
-        self.inner
-            .lock()
-            .await
-            .ingest_external_asr_update(update)
-            .await;
+        let work = {
+            let mut inner = self.inner.lock().await;
+            inner.accept_update(update)
+        };
+        if let Some(work) = work {
+            process_ingest_work(work).await;
+        }
     }
 
     pub async fn start(&self) {

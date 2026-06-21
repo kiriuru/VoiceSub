@@ -12,9 +12,10 @@ describe("formatPlaybackRate", () => {
 });
 
 describe("formatSpeechVolume", () => {
-  it("shows percent from zero to one", () => {
+  it("shows percent from zero to one hundred fifty", () => {
     expect(formatSpeechVolume(1)).toBe("100%");
     expect(formatSpeechVolume(0.85)).toBe("85%");
     expect(formatSpeechVolume(0)).toBe("0%");
+    expect(formatSpeechVolume(1.5)).toBe("150%");
   });
 });

@@ -1,6 +1,7 @@
 import type { ConfigPayload, TranslationLine } from "./types";
 import { normalizeTranslationProviderSettings } from "./translation-provider-settings";
 import { PROVIDERS } from "./constants";
+import { WEBSPEECH_BROWSER_ADVANCED_DEFAULTS as browserAdv } from "./webspeech-advanced-defaults";
 
 const CANONICAL_TRANSLATION_SLOTS = [
   "translation_1",
@@ -154,28 +155,63 @@ export function normalizeConfigPayload(raw: ConfigPayload): ConfigPayload {
     "minimum_reconnect_interval_ms",
     100,
     60_000,
-    500,
+    browserAdv.minimum_reconnect_interval_ms,
   );
-  browser.normal_restart_delay_ms = clampBrowserInt("normal_restart_delay_ms", 0, 60_000, 350);
-  browser.no_speech_restart_delay_ms = clampBrowserInt("no_speech_restart_delay_ms", 0, 60_000, 350);
+  browser.normal_restart_delay_ms = clampBrowserInt(
+    "normal_restart_delay_ms",
+    0,
+    60_000,
+    browserAdv.normal_restart_delay_ms,
+  );
+  browser.no_speech_restart_delay_ms = clampBrowserInt(
+    "no_speech_restart_delay_ms",
+    0,
+    60_000,
+    browserAdv.no_speech_restart_delay_ms,
+  );
   browser.network_reconnect_initial_ms = clampBrowserInt(
     "network_reconnect_initial_ms",
     100,
     120_000,
-    1000,
+    browserAdv.network_reconnect_initial_ms,
   );
-  browser.network_reconnect_max_ms = clampBrowserInt("network_reconnect_max_ms", 100, 300_000, 30_000);
-  browser.stuck_stopping_timeout_ms = clampBrowserInt("stuck_stopping_timeout_ms", 500, 30_000, 2500);
+  browser.network_reconnect_max_ms = clampBrowserInt(
+    "network_reconnect_max_ms",
+    100,
+    300_000,
+    browserAdv.network_reconnect_max_ms,
+  );
+  browser.stuck_stopping_timeout_ms = clampBrowserInt(
+    "stuck_stopping_timeout_ms",
+    500,
+    30_000,
+    browserAdv.stuck_stopping_timeout_ms,
+  );
   browser.max_browser_session_age_ms = clampBrowserInt(
     "max_browser_session_age_ms",
     10_000,
     3_600_000,
-    180_000,
+    browserAdv.max_browser_session_age_ms,
   );
-  browser.prepare_cycle_before_ms = clampBrowserInt("prepare_cycle_before_ms", 0, 600_000, 15_000);
+  browser.prepare_cycle_before_ms = clampBrowserInt(
+    "prepare_cycle_before_ms",
+    0,
+    600_000,
+    browserAdv.prepare_cycle_before_ms,
+  );
   if (browser.force_final_on_interruption === undefined) browser.force_final_on_interruption = true;
-  browser.force_final_min_chars = clampBrowserInt("force_final_min_chars", 1, 256, 3);
-  browser.force_final_min_stable_ms = clampBrowserInt("force_final_min_stable_ms", 0, 60_000, 700);
+  browser.force_final_min_chars = clampBrowserInt(
+    "force_final_min_chars",
+    1,
+    256,
+    browserAdv.force_final_min_chars,
+  );
+  browser.force_final_min_stable_ms = clampBrowserInt(
+    "force_final_min_stable_ms",
+    0,
+    60_000,
+    browserAdv.force_final_min_stable_ms,
+  );
   delete browser.worker_ui;
 
   if (!asr.realtime || typeof asr.realtime !== "object") asr.realtime = {};
@@ -185,17 +221,9 @@ export function normalizeConfigPayload(raw: ConfigPayload): ConfigPayload {
   realtime.partial_min_new_words = Math.max(1, Math.min(32, intOr(realtime.partial_min_new_words, 1)));
   realtime.partial_min_delta_chars = Math.max(0, Math.min(256, intOr(realtime.partial_min_delta_chars, 0)));
   realtime.partial_coalescing_ms = Math.max(0, Math.min(10_000, intOr(realtime.partial_coalescing_ms, 0)));
-  realtime.partial_emit_interval_ms = Math.max(60, intOr(realtime.partial_emit_interval_ms, 450));
-  realtime.min_speech_ms = Math.max(0, intOr(realtime.min_speech_ms, 180));
-  realtime.first_partial_min_speech_ms = Math.max(
-    Number(realtime.min_speech_ms),
-    intOr(realtime.first_partial_min_speech_ms, Number(realtime.min_speech_ms)),
-  );
-  realtime.silence_hold_ms = Math.max(60, intOr(realtime.silence_hold_ms, 180));
-  realtime.finalization_hold_ms = Math.max(
-    Number(realtime.silence_hold_ms),
-    intOr(realtime.finalization_hold_ms, 350),
-  );
+  // Deprecated legacy keys (kept in sync for old configs; no runtime effect):
+  // pause_to_finalize_ms ↔ finalization_hold_ms — use asr.browser.force_finalization_timeout_ms instead.
+  // hard_max_phrase_ms ↔ max_segment_ms — unused; normalized for backward compatibility only.
   realtime.max_segment_ms = Math.max(1000, intOr(realtime.max_segment_ms, 5500));
 
   if (!config.subtitle_lifecycle) config.subtitle_lifecycle = {};
@@ -213,6 +241,7 @@ export function normalizeConfigPayload(raw: ConfigPayload): ConfigPayload {
     Number(lifecycle.completed_source_ttl_ms),
     Number(lifecycle.completed_translation_ttl_ms),
   );
+  // @deprecated — see comment above on asr.realtime.max_segment_ms
   lifecycle.pause_to_finalize_ms = Math.max(
     120,
     intOr(lifecycle.pause_to_finalize_ms, intOr(realtime.finalization_hold_ms, 350)),
@@ -224,6 +253,7 @@ export function normalizeConfigPayload(raw: ConfigPayload): ConfigPayload {
     lifecycle.sync_source_and_translation_expiry !== false;
   lifecycle.keep_completed_translation_during_active_partial =
     lifecycle.keep_completed_translation_during_active_partial !== false;
+  // @deprecated — see comment above on asr.realtime.max_segment_ms
   lifecycle.hard_max_phrase_ms = Math.max(
     1000,
     intOr(lifecycle.hard_max_phrase_ms, intOr(realtime.max_segment_ms, 5500)),

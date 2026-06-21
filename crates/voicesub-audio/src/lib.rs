@@ -16,7 +16,8 @@ pub use error::AudioError;
 #[cfg(windows)]
 pub use platform::is_per_process_routing_enabled;
 pub use playback::{
-    CHANNEL_SPEECH, CHANNEL_TWITCH, PlaybackFinished, PlaybackHub, resolve_output_device,
+    apply_speech_volume_to_pcm, CHANNEL_SPEECH, CHANNEL_TWITCH, PlaybackFinished, PlaybackHub,
+    clamp_speech_volume, resolve_output_device, SPEECH_VOLUME_MAX,
 };
 pub use process_stats::{ProcessResourceSnapshot, ResourceTelemetry, collect_resource_telemetry};
 
@@ -155,5 +156,12 @@ mod tests {
     fn zero_pid_is_rejected() {
         let err = set_process_output_device(0, "").unwrap_err();
         assert!(matches!(err, AudioError::InvalidProcessId));
+    }
+
+    #[test]
+    fn clamp_speech_volume_allows_one_hundred_fifty_percent() {
+        assert_eq!(clamp_speech_volume(1.5), 1.5);
+        assert_eq!(clamp_speech_volume(2.0), 1.5);
+        assert_eq!(clamp_speech_volume(-0.1), 0.0);
     }
 }

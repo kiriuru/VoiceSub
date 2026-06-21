@@ -3,6 +3,7 @@
 const TRAILING_PUNCT: &[char] = &['.', ',', '!', '?', ';', ')', ']', '"', '\''];
 
 const URL_HOST_MARKERS: &[&str] = &[
+    "github.com/",
     "youtube.com/",
     "youtu.be/",
     "twitch.tv/",
@@ -134,6 +135,12 @@ mod tests {
     #[test]
     fn detects_watch_query_fragments() {
         assert!(looks_like_url_token("watch?v=VTkBuxUyklist=RDMMindex=5"));
+    }
+
+    #[test]
+    fn detects_github_paths() {
+        assert!(looks_like_url_token("github.com/kiriuru/VoiceSub"));
+        assert!(looks_like_url_token("https://github.com/kiriuru/VoiceSub"));
     }
 
     #[test]

@@ -2,23 +2,10 @@
 
 export const voicesubNewKeysEn = {
   "save.status.default": "Settings are written to disk when you press Save.",
-  "help.recognition.body":
-    "Web Speech opens a separate browser worker window and streams recognition results back to this app.",
   "help.quick_start.5":
     "Press Start. Use Stop/Start after changing the Web Speech recognition language.",
   "overview.recognition.hint.browser_google.warning":
     "Keep the worker window visible while listening. Minimized or fully hidden windows are throttled by the browser and Web Speech may stall or drop audio. Browser Speech opens `/google-asr` in Chrome or Edge with an isolated profile. Save settings, then reopen the worker if you changed recognition options.",
-  "tuning.preset.label": "Latency preset",
-  "tuning.apply.full_note":
-    "After changing tuning values: click Save, then Stop/Start so recognition picks up the new settings.",
-  "tools.advanced.latency_preset": "Latency preset",
-  "tools.advanced.latency_preset.help":
-    "Applies a ready-made bundle of timing settings (Ultra low latency, Balanced, Quality). Choose Balanced unless you have a specific reason to chase speed or accuracy.",
-  "tools.advanced.streaming_decode": "Incremental streaming decode",
-  "tools.advanced.streaming_decode.help":
-    "When enabled, recognition decodes only new audio since the last step. When disabled, each partial update re-runs on the entire phrase, which is heavier on long utterances.",
-  "tools.advanced.note.local":
-    "These settings stay local. Save config or profile after changes; use Stop/Start to compare behavior safely.",
   "tools.tts.eyebrow": "Speech output",
   "tools.tts.title": "TTS module",
   "tools.tts.description":
@@ -42,6 +29,11 @@ export const voicesubNewKeysEn = {
   "translation.latest.hidden":
     "Translated results are hidden. Turn the toggle on to monitor live output.",
   "worker.advanced.title": "Advanced",
+  "settings.fonts.eyebrow": "Resources",
+  "settings.fonts.title": "Font catalog",
+  "style.custom_preset.delete": "Delete preset",
+  "help.tools.body":
+    "Tools & Data contains runtime diagnostics, profile import/export, local config JSON, and diagnostics export. Word replacement is under More → Word Replace; advanced recognition timing is under Settings.",
   "translation.provider_settings.selector": "Provider to edit",
   "translation.provider_group.stable_recommended": "Stable / Recommended",
   "translation.provider_group.experimental_emergency": "Experimental / Emergency",
@@ -181,27 +173,8 @@ export const voicesubNewKeysEn = {
 const voicesubExtrasLocalized = {
   ru: {
     "save.status.default": "Настройки записываются на диск при нажатии «Сохранить».",
-    "help.recognition.body":
-      "Web Speech открывает отдельное окно browser worker и отправляет результаты распознавания обратно в приложение.",
-    "help.recognition.local":
-      "VoiceSub использует Web Speech в отдельном окне worker для браузерного распознавания.",
     "help.quick_start.5":
       "Нажмите Старт. После смены языка Web Speech используйте Стоп/Старт.",
-    "overview.recognition.mode.local": "Web Speech",
-    "overview.recognition.hint.browser_quick_start_locked":
-      "Эта сессия использует Web Speech. Меняйте настройки распознавания в обзорных карточках, при необходимости — Стоп/Старт.",
-    "runtime.local_realtime.line": "",
-    "tuning.preset.label": "Пресет задержки",
-    "tuning.apply.full_note":
-      "После изменения параметров тюнинга: нажми Сохранить, затем Стоп/Старт, чтобы распознавание подхватило новые значения.",
-    "tools.advanced.latency_preset": "Пресет задержки",
-    "tools.advanced.latency_preset.help":
-      "Применяет готовый набор таймингов (Минимальная задержка, Баланс, Качество). Обычно выбирай «Баланс», если нет особой причины гнаться за скоростью или качеством.",
-    "tools.advanced.streaming_decode": "Инкрементальный streaming decode",
-    "tools.advanced.streaming_decode.help":
-      "Когда включено, обрабатывается только новая часть аудио с момента прошлого шага. Когда выключено, при каждом partial модель заново распознаёт всю фразу — это тяжелее на длинных репликах.",
-    "tools.advanced.note.local":
-      "Эти настройки остаются локальными. После изменения сохрани config или профиль; для проверки сделай Стоп/Старт.",
     "document.title.dashboard": "VoiceSub",
     "header.title": "VoiceSub",
     "updates.banner.message": "Доступна VoiceSub {latest} — у вас {current}.",
@@ -210,7 +183,12 @@ const voicesubExtrasLocalized = {
     "save.status.saved": "Настройки сохранены.",
     "obs.overlay.instructions":
       "Добавьте этот URL как OBS Browser Source. Обновите URL при смене bind-адреса VoiceSub.",
-    "subtitles.display_order": "Порядок отображения (id слотов через запятую)",
+    "subtitles.display_order": "Порядок строк субтитров",
+    "settings.fonts.eyebrow": "Ресурсы",
+    "settings.fonts.title": "Каталог шрифтов",
+    "style.custom_preset.delete": "Удалить пресет",
+    "help.tools.body":
+      "Инструменты и данные: диагностика runtime, импорт/экспорт профилей, экспорт config JSON и diagnostics. Замена слов — в Ещё → Замена слов; расширенные тайминги распознавания — в Настройках.",
     "style.font_size.source": "Размер шрифта исходника (px)",
     "style.font_size.translation": "Размер шрифта перевода (px)",
     "tools.runtime.note":
@@ -235,9 +213,6 @@ const voicesubExtrasLocalized = {
     "translation.provider_group.classic_mt": "Классический MT",
     "translation.provider_group.flexible_llm": "Гибкая LLM",
     "translation.provider_group.local_llm": "Локальная LLM",
-    "tuning.source_lang": "Подсказка исходного языка (перевод)",
-    "tuning.source_lang.note":
-      "Подсказка для провайдеров перевода. Авто — определение из распознавания, или выберите фиксированный код языка.",
     "worker.force_finalization_timeout_ms": "Таймаут простоя перед принудительным final (мс)",
     "worker.force_finalization_timeout_ms.note":
       "Сколько ждать без обновлений partial перед отправкой текущего текста как final.",
@@ -394,25 +369,8 @@ const voicesubExtrasLocalized = {
   },
   ja: {
     "save.status.default": "「保存」を押すと設定がディスクに書き込まれます。",
-    "help.recognition.body":
-      "Web Speech は別の browser worker ウィンドウを開き、認識結果をこのアプリに送り返します。",
-    "help.recognition.local":
-      "VoiceSub は browser worker 内の Web Speech で認識します。",
     "help.quick_start.5":
       "開始を押します。Web Speech の認識言語を変更した後は停止してから再開してください。",
-    "overview.recognition.mode.local": "Web Speech",
-    "overview.recognition.hint.browser_quick_start_locked":
-      "このセッションは Web Speech を使用しています。概要カードで認識設定を変更し、必要なら停止/再開してください。",
-    "runtime.local_realtime.line": "",
-    "tuning.preset.label": "レイテンシープリセット",
-    "tuning.apply.full_note":
-      "チューニング値を変更した後: 保存を押し、認識が新しい設定を読み込むために停止してから再開してください。",
-    "tools.advanced.latency_preset": "レイテンシープリセット",
-    "tools.advanced.latency_preset.help":
-      "タイミング設定プリセット（超低遅延、バランス、品質）を一括適用します。特別な理由がなければ「バランス」を選んでください。",
-    "tools.advanced.streaming_decode": "インクリメンタル ストリーミング デコード",
-    "tools.advanced.streaming_decode.help":
-      "有効にすると前回以降の新しい音声だけを処理します。無効にすると partial ごとにフレーズ全体を再処理するため、長い発話では負荷が高くなります。",
     "document.title.dashboard": "VoiceSub",
     "header.title": "VoiceSub",
     "updates.banner.message": "VoiceSub {latest} が利用可能です（現在 {current}）。",
@@ -421,7 +379,12 @@ const voicesubExtrasLocalized = {
     "save.status.saved": "設定を保存しました。",
     "obs.overlay.instructions":
       "この URL を OBS Browser Source として追加してください。VoiceSub の bind アドレスが変わったら URL を更新してください。",
-    "subtitles.display_order": "表示順（カンマ区切りのスロット ID）",
+    "subtitles.display_order": "字幕行の表示順",
+    "settings.fonts.eyebrow": "リソース",
+    "settings.fonts.title": "フォントカタログ",
+    "style.custom_preset.delete": "プリセットを削除",
+    "help.tools.body":
+      "Tools & Data にはランタイム診断、プロファイルのインポート/エクスポート、ローカル config JSON、診断エクスポートが含まれます。単語置換は「その他 → 単語置換」、高度な認識タイミングは「設定」にあります。",
     "style.font_size.source": "原文フォントサイズ (px)",
     "style.font_size.translation": "翻訳フォントサイズ (px)",
     "tools.runtime.note":
@@ -446,9 +409,6 @@ const voicesubExtrasLocalized = {
     "translation.provider_group.classic_mt": "クラシック MT",
     "translation.provider_group.flexible_llm": "柔軟な LLM",
     "translation.provider_group.local_llm": "ローカル LLM",
-    "tuning.source_lang": "原文言語ヒント（翻訳）",
-    "tuning.source_lang.note":
-      "翻訳プロバイダー向けのヒント。auto で認識から検出するか、固定言語コードを選びます。",
     "worker.advanced.title": "詳細設定",
     "translation.latest.show": "翻訳結果を表示",
     "translation.latest.hidden":
@@ -606,27 +566,8 @@ const voicesubExtrasLocalized = {
   },
   ko: {
     "save.status.default": "저장을 누르면 설정이 디스크에 기록됩니다.",
-    "help.recognition.body":
-      "Web Speech는 별도 browser worker 창을 열고 인식 결과를 이 앱으로 다시 보냅니다.",
-    "help.recognition.local":
-      "VoiceSub는 browser worker의 Web Speech로 인식합니다.",
     "help.quick_start.5":
       "시작을 누르세요. Web Speech 인식 언어를 변경한 뒤에는 중지 후 다시 시작하세요.",
-    "overview.recognition.mode.local": "Web Speech",
-    "overview.recognition.hint.browser_quick_start_locked":
-      "이 세션은 Web Speech를 사용합니다. 개요 카드에서 인식 설정을 변경하고 필요하면 중지/시작하세요.",
-    "runtime.local_realtime.line": "",
-    "tuning.preset.label": "지연 시간 프리셋",
-    "tuning.apply.full_note":
-      "튜닝 값을 변경한 뒤: 저장을 누르고, 인식이 새 설정을 읽도록 중지 후 시작하세요.",
-    "tools.advanced.latency_preset": "지연 시간 프리셋",
-    "tools.advanced.latency_preset.help":
-      "타이밍 프리셋(매우 낮은 지연, 균형, 품질)을 한 번에 적용합니다. 특별한 이유가 없으면 '균형'을 선택하세요.",
-    "tools.advanced.streaming_decode": "증분 스트리밍 디코드",
-    "tools.advanced.streaming_decode.help":
-      "사용하면 마지막 단계 이후 새 오디오만 처리합니다. 끄면 partial마다 전체 구문을 다시 처리해 긴 발화에서 부하가 큽니다.",
-    "tools.advanced.note.local":
-      "이 설정은 로컬에 유지됩니다. 변경 후 config 또는 프로필을 저장하고, 비교하려면 중지/시작을 사용하세요.",
     "document.title.dashboard": "VoiceSub",
     "header.title": "VoiceSub",
     "updates.banner.message": "VoiceSub {latest}을(를) 사용할 수 있습니다(현재 {current}).",
@@ -635,7 +576,12 @@ const voicesubExtrasLocalized = {
     "save.status.saved": "설정을 저장했습니다.",
     "obs.overlay.instructions":
       "이 URL을 OBS Browser Source로 추가하세요. VoiceSub bind 주소가 바뀌면 URL을 업데이트하세요.",
-    "subtitles.display_order": "표시 순서(쉼표로 구분된 슬롯 ID)",
+    "subtitles.display_order": "자막 줄 표시 순서",
+    "settings.fonts.eyebrow": "리소스",
+    "settings.fonts.title": "글꼴 카탈로그",
+    "style.custom_preset.delete": "프리셋 삭제",
+    "help.tools.body":
+      "Tools & Data에는 런타임 진단, 프로필 가져오기/보내기, 로컬 config JSON, 진단보내기가 포함됩니다. 단어 치환은 더보기 → 단어 치환, 고급 인식 타이밍은 설정에 있습니다.",
     "style.font_size.source": "원문 글꼴 크기 (px)",
     "style.font_size.translation": "번역 글꼴 크기 (px)",
     "tools.runtime.note":
@@ -660,9 +606,6 @@ const voicesubExtrasLocalized = {
     "translation.provider_group.classic_mt": "클래식 MT",
     "translation.provider_group.flexible_llm": "유연한 LLM",
     "translation.provider_group.local_llm": "로컬 LLM",
-    "tuning.source_lang": "원문 언어 힌트(번역)",
-    "tuning.source_lang.note":
-      "번역 프로바이더용 힌트입니다. auto는 인식에서 감지하고, 고정 언어 코드를 선택할 수도 있습니다.",
     "worker.advanced.title": "고급",
     "translation.latest.show": "번역 결과 표시",
     "translation.latest.hidden":
@@ -819,27 +762,8 @@ const voicesubExtrasLocalized = {
   },
   zh: {
     "save.status.default": "按“保存”后，设置会写入磁盘。",
-    "help.recognition.body":
-      "Web Speech 会打开单独的 browser worker 窗口，并将识别结果流式传回此应用。",
-    "help.recognition.local":
-      "VoiceSub 在 browser worker 中使用 Web Speech 进行识别。",
     "help.quick_start.5":
       "按开始。更改 Web Speech 识别语言后请停止再启动。",
-    "overview.recognition.mode.local": "Web Speech",
-    "overview.recognition.hint.browser_quick_start_locked":
-      "当前会话使用 Web Speech。在概览卡片中更改识别设置，必要时停止/启动。",
-    "runtime.local_realtime.line": "",
-    "tuning.preset.label": "延迟预设",
-    "tuning.apply.full_note":
-      "更改调优值后：点击保存，然后停止/启动以便识别加载新设置。",
-    "tools.advanced.latency_preset": "延迟预设",
-    "tools.advanced.latency_preset.help":
-      "一次性应用时序预设（超低延迟、均衡、质量）。除非有特别理由，否则选“均衡”。",
-    "tools.advanced.streaming_decode": "增量流式解码",
-    "tools.advanced.streaming_decode.help":
-      "开启后只处理自上次步骤以来的新音频。关闭后每次 partial 都会重新处理整句，长句时负载更大。",
-    "tools.advanced.note.local":
-      "这些设置保留在本地。更改后保存 config 或配置文件；用停止/启动安全对比行为。",
     "document.title.dashboard": "VoiceSub",
     "header.title": "VoiceSub",
     "updates.banner.message": "VoiceSub {latest} 已可用（当前 {current}）。",
@@ -848,7 +772,12 @@ const voicesubExtrasLocalized = {
     "save.status.saved": "设置已保存。",
     "obs.overlay.instructions":
       "将此 URL 添加为 OBS Browser Source。VoiceSub bind 地址变更时请更新 URL。",
-    "subtitles.display_order": "显示顺序（逗号分隔的 slot id）",
+    "subtitles.display_order": "字幕行显示顺序",
+    "settings.fonts.eyebrow": "资源",
+    "settings.fonts.title": "字体目录",
+    "style.custom_preset.delete": "删除预设",
+    "help.tools.body":
+      "Tools & Data 包含运行时诊断、配置文件导入/导出、本地 config JSON 和诊断导出。词语替换在「更多 → 词语替换」；高级识别时序在「设置」。",
     "style.font_size.source": "原文 font size (px)",
     "style.font_size.translation": "翻译 font size (px)",
     "tools.runtime.note": "运行时日志和诊断写入用户数据文件夹。",
@@ -872,9 +801,6 @@ const voicesubExtrasLocalized = {
     "translation.provider_group.classic_mt": "经典 MT",
     "translation.provider_group.flexible_llm": "灵活 LLM",
     "translation.provider_group.local_llm": "本地 LLM",
-    "tuning.source_lang": "原文语言提示（翻译）",
-    "tuning.source_lang.note":
-      "供翻译 provider 使用的提示。auto 从识别检测，或选择固定语言代码。",
     "worker.advanced.title": "高级",
     "translation.latest.show": "显示翻译结果",
     "translation.latest.hidden": "翻译结果已隐藏。打开开关以查看实时输出。",

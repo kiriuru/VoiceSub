@@ -183,9 +183,7 @@ pub fn apply_voicesub_import_rules(payload: Value) -> Value {
             asr.insert("mode".into(), json!("browser_google"));
             asr.insert(
                 "import_hint".into(),
-                json!(format!(
-                    "SST mode '{mode}' mapped to browser_google; Parakeet is a future module"
-                )),
+                json!(format!("SST mode '{mode}' mapped to browser_google")),
             );
         }
         "" => {
@@ -246,7 +244,7 @@ mod tests {
             imported["asr"]["import_hint"]
                 .as_str()
                 .unwrap()
-                .contains("Parakeet")
+                .contains("browser_google")
         );
     }
 

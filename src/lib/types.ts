@@ -116,10 +116,12 @@ export interface ConfigPayload {
     completed_block_ttl_ms?: number;
     completed_source_ttl_ms?: number;
     completed_translation_ttl_ms?: number;
+    /** @deprecated Legacy config sync only; no runtime effect. Use `asr.browser.force_finalization_timeout_ms` (worker UI). */
     pause_to_finalize_ms?: number;
     allow_early_replace_on_next_final?: boolean;
     sync_source_and_translation_expiry?: boolean;
     keep_completed_translation_during_active_partial?: boolean;
+    /** @deprecated Legacy config sync only; no runtime effect. */
     hard_max_phrase_ms?: number;
   };
   subtitle_style?: Record<string, unknown>;
@@ -205,6 +207,7 @@ export interface RuntimeStateSnapshot {
   overlay?: Record<string, unknown> | null;
   translation?: Record<string, unknown> | null;
   diagnostics?: Record<string, unknown> | null;
+  twitch_connection?: Record<string, unknown> | null;
 }
 
 export type TabId =

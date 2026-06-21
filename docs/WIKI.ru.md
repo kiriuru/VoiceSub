@@ -1,6 +1,6 @@
 # VoiceSub — WIKI
 
-Операционный гайд по интерфейсу VoiceSub `0.5.3`. Формат описания элементов: **что это**, **зачем**, **как работает**, **на что влияет**, **типовые ошибки**.
+Операционный гайд по интерфейсу VoiceSub `0.5.4`. Формат описания элементов: **что это**, **зачем**, **как работает**, **на что влияет**, **типовые ошибки**.
 
 Техническая архитектура: `docs/TECHNICAL_ARCHITECTURE.md`. Предшественник SST `0.4.4` — только reference; поведение core описано здесь для VoiceSub.
 
@@ -9,8 +9,8 @@
 ## 0. О продукте и версии
 
 ### Элемент: VoiceSub vs SST
-- **VoiceSub** — активная линия `0.5.3` (Rust + Tauri + Svelte); baseline первого релиза — `0.5.0`.
-- **SST** `0.4.4` — frozen reference; настройки импортируются, но режимы Parakeet/Experimental в core не поднимаются.
+- **VoiceSub** — активная линия `0.5.4` (Rust + Tauri + Svelte); baseline первого релиза — `0.5.0`.
+- **SST** `0.4.4` — frozen reference; настройки импортируются, но legacy local ASR и experimental browser в core не поднимаются.
 - **Overlay URL новый:** `http://127.0.0.1:8765/overlay` — обновите Browser Source в OBS вручную.
 
 ### Элемент: системные требования
@@ -20,7 +20,7 @@
 - Микрофон в Chrome worker; интернет — для внешних провайдеров перевода (опционально).
 
 ### Элемент: установка и обновление (NSIS)
-- **Что делает:** `VoiceSub_0.5.3_x64-setup.exe` ставит `VoiceSub.exe` и статические ресурсы (`bin/dashboard`, overlay, worker, tts).
+- **Что делает:** `VoiceSub_0.5.4_x64-setup.exe` ставит `VoiceSub.exe` и статические ресурсы (`bin/dashboard`, overlay, worker, tts).
 - **Для чего:** один установщик без Python/Node в runtime; при отсутствии WebView2 — загрузка через bootstrapper (`downloadBootstrapper` в Tauri).
 - **Обновление:** закройте приложение → запустите новый `setup.exe` поверх → `user-data/` и `logs/` сохраняются рядом с install path / project root.
 - **Разработчикам:** `build-release-msi.bat` → `build-release.ps1` → `F:\AI\VoiceSub - release\v{version}\`.
@@ -128,8 +128,11 @@
 - Если dashboard пуст, но worker показывает текст — проблема на стороне ingest/WS, не Chrome.
 
 ### Элемент: расширенные настройки Web Speech
-- **Settings** → блок «Расширенные настройки Web Speech» (`asr.browser.*`).
+- **Settings** → блок «Расширенные настройки Web Speech» (`asr.browser.*`, partial-фильтры `asr.realtime`).
 - Группы: forced final, restart, network reconnect, session rotation, partial filtering.
+- У каждого поля — кнопка **`!`** с кратким описанием влияния настройки.
+- **Defaults (0.5.4+):** быстрее рестарты (150 ms), строже порог forced final (8 символов), ранняя подготовка ротации (30 s до лимита 3 min). Таблица — `docs/TECHNICAL_ARCHITECTURE.md` §12.
+- **Deprecated (можно не трогать в config):** `pause_to_finalize_ms` / `finalization_hold_ms`, `hard_max_phrase_ms` / `max_segment_ms` — только legacy-sync; для idle forced final — **`force_finalization_timeout_ms`** в окне worker.
 - После изменений: Save config → при необходимости **Stop/Start** и переоткрытие worker.
 
 ### Элемент: устойчивость worker (наследие SST, портировано)
@@ -137,8 +140,9 @@
 - Session rotation `max_browser_session_age_ms` (default 180000 ms).
 - Network preflight → terminal `recognition_network_unreachable` после серии network errors.
 - Force-finalization при залипшем partial.
+- **Long-segment flush (0.5.4+):** после committed final ≥200 символов worker сбрасывает буфер Web Speech `results`, чтобы следующая речь не рвалась на короткие final. Подробнее — `docs/TECHNICAL_ARCHITECTURE.md` §12.
 
-**Не доступно в core:** local Parakeet, experimental `/google-asr-experimental`.
+**Не доступно в core:** legacy local ASR (`asr.mode: local`), experimental `/google-asr-experimental`.
 
 ---
 
@@ -250,8 +254,9 @@
 
 ### Элемент: Speech
 - Провайдер TTS, голос, rate/pitch/volume.
+- **Громкость:** 0–**150%** (native `amplify` через IPC); слайдер и числовая подпись (`85%`, `150%`).
 - **Воспроизведение:** режим **Native** (cpal @ 1.0×) или **Sonic** (libsonic tempo stretch); отдельные WASAPI-устройства для speech и Twitch.
-- Планировщик речи от subtitle payload (`tts_plan_subtitle_speech`); playback через IPC `tts_play_audio` (без HTMLAudio в браузере).
+- Планировщик речи от subtitle payload в Rust (`speech_pipeline.rs`); ручной sample test — `tts_speak_sample`; playback через IPC `tts_play_audio` (без HTMLAudio в браузере).
 
 ### Элемент: Twitch
 - OAuth через system browser; implicit grant + poll token.
@@ -259,7 +264,8 @@
 - IRC chat → очередь озвучки (`twitch` channel); фильтры emotes, links, symbols, lang — **без переподключения** при смене настроек.
 - **Auto-reconnect** при обрыве IRC/TLS — exponential backoff 1→30 s; ошибки OAuth/auth без retry; ручной Disconnect останавливает цикл.
 - Поле **«Не озвучивать символы»** — comma-separated токены, удаляемые из текста (пусто = все символы в речи).
-- Цифры в сообщениях (`5`, `100`, `5ю`) сохраняются при emoji/emote strip.
+- **Advanced:** override скорости/громкости с числовыми подписями (`1.25×`, `85%`) как на вкладке Speech; `@mentions` озвучиваются с ником без `@`; **`strip_links=false`** — URL остаются в речи.
+- Цифры в сообщениях (`5`, `100`, `500&100`) сохраняются; невидимые символы (U+034F и др.) удаляются до фильтров.
 - Справка **?** у «Ник бота» — IRC-логин аккаунта, с которого идёт `JOIN` (не ник зрителя); popover сдвигается в viewport (`popover-position.ts`).
 - Crate `voicesub-twitch`; UI `TwitchPanel.svelte`, config `user-data/modules/tts/config.toml`.
 
@@ -340,7 +346,7 @@
 
 | Было в SST | Статус в VoiceSub |
 | --- | --- |
-| Local Parakeet | `legacy/modules-source/parakeet/` → модуль Phase 4 |
+| Legacy local ASR | Удалено из core; SST import `local` → `browser_google` |
 | Experimental browser | `legacy/experimental-browser/` — удалён из routes |
 | PyInstaller bootstrap | Заменён Tauri NSIS installer |
 | Splash startup profiles | Нет — единый `VoiceSub.exe` |

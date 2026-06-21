@@ -271,8 +271,7 @@ fn stores_overlap_fields_in_diagnostics() {
         "overlap_prestarted": true,
         "overlap_active_listening": true,
         "overlap_buddy_listening": false,
-        "overlap_speech_prestart_done": true,
-        "overlap_prestart_timer_armed": false,
+        "overlap_prestart_timer_armed": true,
     }));
 
     let diagnostics = gateway.diagnostics();
@@ -283,8 +282,7 @@ fn stores_overlap_fields_in_diagnostics() {
     assert!(diagnostics.overlap_prestarted);
     assert!(diagnostics.overlap_active_listening);
     assert!(!diagnostics.overlap_buddy_listening);
-    assert!(diagnostics.overlap_speech_prestart_done);
-    assert!(!diagnostics.overlap_prestart_timer_armed);
+    assert!(diagnostics.overlap_prestart_timer_armed);
 }
 
 #[test]

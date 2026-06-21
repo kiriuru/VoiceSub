@@ -8,7 +8,7 @@ fn overlay_forwards_lifecycle_state_into_render_payload() {
     assert_contains(&source, "lifecycleState", "overlay state");
     assert_contains(
         &source,
-        "overlayState.lifecycleState = String(payload.lifecycle_state",
+        "overlayState.lifecycleState = payload.lifecycle_state",
         "applyOverlayPayload",
     );
     assert_contains(
@@ -143,6 +143,84 @@ fn overlay_uses_public_live_probe_not_protected_health() {
         !source.contains("/api/health"),
         "overlay must not call protected /api/health"
     );
+}
+
+#[test]
+fn overlay_normalizes_lifecycle_state() {
+    let source = read_workspace_file("bin/overlay/overlay.js");
+    assert_contains(&source, "LIFECYCLE_STATES", "lifecycle allowlist");
+    for state in [
+        "idle",
+        "partial_only",
+        "completed_only",
+        "completed_with_partial",
+    ] {
+        assert_contains(&source, &format!("\"{state}\""), "lifecycle allowlist");
+    }
+    assert_contains(&source, "normalizeOverlayPayload", "overlay payload normalizer");
+    assert_contains(
+        &source,
+        "LIFECYCLE_STATES.has(rawLifecycle) ? rawLifecycle : \"idle\"",
+        "lifecycle coercion",
+    );
+}
+
+#[test]
+fn overlay_uses_overlay_update_only() {
+    let source = read_workspace_file("bin/overlay/overlay.js");
+    assert_contains(&source, "overlay_update", "overlay_update handler");
+    assert!(
+        !source.contains("transcript_update"),
+        "OBS overlay must not subscribe to legacy transcript_update"
+    );
+}
+
+#[test]
+fn overlay_signature_uses_renderable_completed_fields() {
+    let source = read_workspace_file("bin/overlay/overlay.js");
+    assert_contains(&source, "signatureCompletedItems", "renderable signature helper");
+    assert_contains(&source, "buildEmptyRenderSignature", "empty signature helper");
+}
+
+#[test]
+fn overlay_throttles_long_text_repaints() {
+    let source = read_workspace_file("bin/overlay/overlay.js");
+    assert_contains(
+        &source,
+        "OVERLAY_LONG_TEXT_MIN_RENDER_MS",
+        "long text render interval",
+    );
+    assert_contains(
+        &source,
+        "overlayRenderMinIntervalMs",
+        "adaptive overlay throttle",
+    );
+    assert_contains(
+        &source,
+        "OVERLAY_DENSE_PARTIAL_CHARS",
+        "shared dense text threshold",
+    );
+}
+
+#[test]
+fn overlay_renderer_uses_append_only_partial_merge() {
+    let source = read_workspace_file("bin/overlay/shared/js/subtitle-style.js");
+    assert_contains(
+        &source,
+        "OVERLAY_DENSE_PARTIAL_CHARS",
+        "dense partial threshold",
+    );
+    assert_contains(
+        &source,
+        "mergeFreshIntoStatic",
+        "append-only partial merge",
+    );
+    assert_contains(
+        &source,
+        "resolveFreshFragmentEffect",
+        "animation budget policy",
+    );
+    assert_contains(&source, "is-dense-partial", "dense partial css hook");
 }
 
 #[test]

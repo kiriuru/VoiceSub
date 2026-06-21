@@ -33,13 +33,14 @@ impl TranslationRuntimeController {
         cache_dir: Option<PathBuf>,
     ) -> Self {
         let client = build_translation_http_client();
+        let engine = TranslationEngine::new(client.clone(), cache_dir.clone());
         Self {
             config_getter,
             publish,
             is_relevant,
-            client: client.clone(),
-            cache_dir: cache_dir.clone(),
-            engine: Some(TranslationEngine::new(client, cache_dir)),
+            client,
+            cache_dir,
+            engine: Some(engine),
             dispatcher: None,
         }
     }

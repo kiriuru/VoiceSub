@@ -263,4 +263,51 @@ describe("SubtitleStyleRenderer runtime", () => {
     expect(container.__subtitleStyleRenderState).toBeUndefined();
     expect(container.childNodes.length).toBe(0);
   });
+
+  it("uses append-only static merge for long overlay partials", () => {
+    const R = renderer();
+    const threshold = Number(R.OVERLAY_DENSE_PARTIAL_CHARS || 200);
+    const base = "x".repeat(threshold);
+    const extended = `${base}y`;
+
+    R.render(container, partialOnlyPayload(base), { overlay: true });
+    const staticBefore = container.querySelector(".subtitle-fragment-static");
+    const wrapper = container.firstElementChild;
+    expect(staticBefore).toBeTruthy();
+    expect(container.querySelector(".is-dense-partial")).toBeTruthy();
+
+    const traces = collectTrace(container, partialOnlyPayload(extended));
+    expect(container.firstElementChild).toBe(wrapper);
+
+    const staticAfter = container.querySelector(".subtitle-fragment-static");
+    expect(staticAfter).toBe(staticBefore);
+    expect(staticAfter?.textContent).toBe(base);
+    expect(container.querySelector(".subtitle-fragment-fresh")?.textContent).toBe("y");
+
+    const partial = traces.find((event) => event.type === "partial_frame");
+    expect(partial?.reused_surface).toBe(true);
+    const summary = traces.find((event) => event.type === "render_summary");
+    expect(summary?.fast_path).toBe(true);
+  });
+
+  it("animates small overlay deltas but skips large ASR bursts", () => {
+    const R = renderer();
+    const style = {
+      ...minimalStyle(),
+      base: { ...(minimalStyle().base as Record<string, unknown>), effect: "fade" },
+    };
+    const threshold = Number(R.OVERLAY_DENSE_PARTIAL_CHARS || 200);
+    const long = "x".repeat(threshold);
+
+    R.render(container, partialOnlyPayload(long, { style }), { overlay: true });
+    R.render(container, partialOnlyPayload(`${long}abc`, { style }), { overlay: true });
+    expect(container.querySelector(".subtitle-fragment-fresh")?.className).toContain("effect-fade");
+
+    R.render(
+      container,
+      partialOnlyPayload(`${long}abc${"z".repeat(20)}`, { style }),
+      { overlay: true },
+    );
+    expect(container.querySelector(".subtitle-fragment-fresh")?.className).toContain("effect-none");
+  });
 });

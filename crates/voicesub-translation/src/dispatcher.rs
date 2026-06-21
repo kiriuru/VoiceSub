@@ -58,7 +58,6 @@ struct ActiveTask {
 struct DispatcherInner {
     queue: VecDeque<QueuedJob>,
     active_jobs: usize,
-    active_sequences: HashSet<u64>,
     active_tasks: Vec<ActiveTask>,
     stopped: bool,
     next_job_id: u64,
@@ -133,7 +132,6 @@ impl TranslationDispatcher {
             inner: Mutex::new(DispatcherInner {
                 queue: VecDeque::new(),
                 active_jobs: 0,
-                active_sequences: HashSet::new(),
                 active_tasks: Vec::new(),
                 stopped: false,
                 next_job_id: 0,
@@ -275,7 +273,6 @@ impl TranslationDispatcher {
         inner.jobs_cancelled += queued_removed as u64;
 
         let mut aborted = 0u64;
-        let mut aborted_sequences = Vec::new();
         let (keep, remove): (Vec<_>, Vec<_>) = inner
             .active_tasks
             .drain(..)
@@ -286,11 +283,7 @@ impl TranslationDispatcher {
             if let Some(handle) = task.handle.lock().await.take() {
                 handle.abort();
             }
-            aborted_sequences.push(task.sequence);
             aborted += 1;
-        }
-        for sequence in aborted_sequences {
-            inner.active_sequences.remove(&sequence);
         }
         inner.jobs_cancelled += aborted;
         inner.active_jobs = inner.active_jobs.saturating_sub(aborted as usize);
@@ -349,7 +342,7 @@ impl TranslationDispatcher {
     async fn enqueue_job(self: &Arc<Self>, job: QueuedJob, translation: &Value) {
         let queue_max = Self::queue_max(translation);
         loop {
-            let drop_event = {
+            let dropped_job = {
                 let mut inner = self.inner.lock().await;
                 if inner.queue.len() < queue_max {
                     inner.queue.push_back(job);
@@ -371,10 +364,7 @@ impl TranslationDispatcher {
                     .expect("queue overflow drop requires a queued job");
                 inner.jobs_cancelled += 1;
                 inner.last_runtime_reason = Some("cancelled:queue_overflow".into());
-                Some(dropped_job)
-            };
-            let Some(dropped_job) = drop_event else {
-                continue;
+                dropped_job
             };
             let is_relevant = (self.is_relevant)(dropped_job.sequence).await;
             self.log_event(
@@ -418,12 +408,7 @@ impl TranslationDispatcher {
                     None
                 } else {
                     inner.active_jobs += 1;
-                    let job = inner.queue.pop_front();
-                    if let Some(ref queued) = job {
-                        let queue_latency_ms = queued.submitted_at.elapsed().as_secs_f64() * 1000.0;
-                        inner.queue_latency_ms = Some(queue_latency_ms);
-                    }
-                    job
+                    inner.queue.pop_front()
                 }
             };
 
@@ -433,6 +418,10 @@ impl TranslationDispatcher {
             };
 
             let queue_latency_ms = job.submitted_at.elapsed().as_secs_f64() * 1000.0;
+            {
+                let mut inner = self.inner.lock().await;
+                inner.queue_latency_ms = Some(queue_latency_ms);
+            }
             let this = Arc::clone(&self);
             let job_id = job.job_id;
             let sequence = job.sequence;
@@ -440,7 +429,6 @@ impl TranslationDispatcher {
             let job_cancelled = Arc::new(AtomicBool::new(false));
             {
                 let mut inner = self.inner.lock().await;
-                inner.active_sequences.insert(sequence);
                 inner.active_tasks.push(ActiveTask {
                     job_id,
                     sequence,
@@ -461,7 +449,6 @@ impl TranslationDispatcher {
                         .active_tasks
                         .retain(|task| task.job_id != job_id && task.sequence != sequence);
                 }
-                inner.active_sequences.remove(&sequence);
                 this.emit_metrics_locked(&mut inner).await;
                 this.notify.notify_one();
             });
@@ -478,8 +465,8 @@ impl TranslationDispatcher {
                 inner.last_runtime_reason = None;
                 let timeout_ms = Self::timeout_ms(&self.translation_config());
                 inner.last_timeout_ms = Some(timeout_ms);
-                let is_relevant = true;
                 drop(inner);
+                let is_relevant = (self.is_relevant)(job.sequence).await;
                 self.log_event(
                     "translation_job_started",
                     json!({
@@ -908,23 +895,9 @@ impl TranslationDispatcher {
         timeout_secs: f64,
         timeout_ms: u64,
     ) -> LineResult {
-        let skip_item = || TranslationItem {
-            target_lang: line.target_lang.clone(),
-            text: String::new(),
-            provider: line.provider_name.clone(),
-            slot_id: Some(line.slot_id.clone()),
-            label: Some(line.label.clone()),
-            provider_group: Some(line.provider_group.clone()),
-            experimental: line.experimental,
-            local_provider: line.local_provider,
-            success: false,
-            error: None,
-            cached: false,
-        };
-
         if !(self.is_relevant)(job.sequence).await {
             return LineResult {
-                item: skip_item(),
+                item: line_item_from_prepared(line, None),
                 outcome: LineOutcome::ProviderSkipped,
                 provider_latency_ms: 0.0,
                 reason: Some("sequence_not_relevant_before_provider".into()),
@@ -933,7 +906,7 @@ impl TranslationDispatcher {
         }
         if self.is_preview_superseded(job).await {
             return LineResult {
-                item: skip_item(),
+                item: line_item_from_prepared(line, None),
                 outcome: LineOutcome::ProviderSkipped,
                 provider_latency_ms: 0.0,
                 reason: Some("preview_superseded_before_provider".into()),
@@ -1019,19 +992,10 @@ impl TranslationDispatcher {
                     "translation line timeout"
                 );
                 LineResult {
-                    item: TranslationItem {
-                        target_lang: line.target_lang.clone(),
-                        text: String::new(),
-                        provider: line.provider_name.clone(),
-                        slot_id: Some(line.slot_id.clone()),
-                        label: Some(line.label.clone()),
-                        provider_group: Some(line.provider_group.clone()),
-                        experimental: line.experimental,
-                        local_provider: line.local_provider,
-                        success: false,
-                        error: Some(format!("Translation timed out after {timeout_ms} ms.")),
-                        cached: false,
-                    },
+                    item: line_item_from_prepared(
+                        line,
+                        Some(format!("Translation timed out after {timeout_ms} ms.")),
+                    ),
                     outcome: LineOutcome::Timeout,
                     provider_latency_ms: started_at.elapsed().as_secs_f64() * 1000.0,
                     reason: Some(format!("timeout_after_{timeout_ms}_ms")),
@@ -1231,6 +1195,22 @@ impl TranslationDispatcher {
             .try_lock()
             .map(|inner| self.metrics_from_inner(&inner))
             .unwrap_or_else(|_| json!({}))
+    }
+}
+
+fn line_item_from_prepared(line: &PreparedLine, error: Option<String>) -> TranslationItem {
+    TranslationItem {
+        target_lang: line.target_lang.clone(),
+        text: String::new(),
+        provider: line.provider_name.clone(),
+        slot_id: Some(line.slot_id.clone()),
+        label: Some(line.label.clone()),
+        provider_group: Some(line.provider_group.clone()),
+        experimental: line.experimental,
+        local_provider: line.local_provider,
+        success: false,
+        error,
+        cached: false,
     }
 }
 

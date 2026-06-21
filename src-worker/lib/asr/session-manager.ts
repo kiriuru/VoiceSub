@@ -7,6 +7,7 @@ import type {
   WorkerSpeechRecognition,
 } from "./types";
 import { applyInstanceDefaults, initializeBrowserAsrState } from "./session-state";
+import { browserLifecycleDefaults } from "../worker/worker-defaults";
 import {
   recordThrottledAppendLog,
   recognitionStartBurstThrottle,
@@ -46,12 +47,11 @@ import {
 } from "./recognition-lifecycle";
 import { wireRecognitionHandlers } from "./recognition-handlers";
 import {
-  clearOverlapTimeBasedPrestart,
-  overlapActiveSlotIndex,
-  prestartOverlapBuddyIfNeeded,
+  preStartNextOverlapInstance,
   recognitionOverlapActive,
   recoverGhostOverlapBuddy,
 } from "./overlap-logic";
+import { maybeFlushAfterCommittedLongSegment } from "./long-segment-flush-logic";
 import { webSpeechRecognitionPolicy } from "./web-speech-policy";
 import { INSTANCE_DEFAULTS } from "./session-defaults";
 
@@ -385,8 +385,9 @@ export class BrowserAsrSessionManager implements AsrManagerHost {
       this.options.setPartialText?.("");
       this.setStatusInternal("forced-finalized");
       if (recognitionOverlapActive(this.state)) {
-        prestartOverlapBuddyIfNeeded(this, overlapActiveSlotIndex(this.state));
+        preStartNextOverlapInstance(this, "force-finalize");
       }
+      maybeFlushAfterCommittedLongSegment(this, finalText, "force-finalize");
       this.updateCountersInternal();
     }, Number(this.state.forceFinalizationTimeoutMs || 1600));
   }
@@ -416,7 +417,6 @@ export class BrowserAsrSessionManager implements AsrManagerHost {
     this.clearForceFinalizeTimerInternal();
     this.clearRestartTimerInternal();
     this.clearReconnectTimerInternal();
-    clearOverlapTimeBasedPrestart(this.state);
   }
 
   recognitionStartBurstThrottleInternal(reason: string) {
@@ -468,6 +468,10 @@ export class BrowserAsrSessionManager implements AsrManagerHost {
       forced_final_reason: String(reason || "browser_recognition_interrupted"),
     });
     this.setStatusInternal("forced-finalized");
+    if (recognitionOverlapActive(this.state)) {
+      preStartNextOverlapInstance(this, "forced-finalize-interruption");
+    }
+    maybeFlushAfterCommittedLongSegment(this, finalText, "forced-finalize-interruption");
     this.updateCountersInternal();
     return true;
   }
@@ -556,39 +560,82 @@ export class BrowserAsrSessionManager implements AsrManagerHost {
     this.state.effectiveContinuousMode = this.state.actualContinuous ? "native_continuous" : "segmented_restart";
     this.state.minimumReconnectIntervalMs = Math.max(
       100,
-      Number(settings.minimumReconnectIntervalMs || this.state.minimumReconnectIntervalMs || 500)
+      Number(
+        settings.minimumReconnectIntervalMs ||
+          this.state.minimumReconnectIntervalMs ||
+          browserLifecycleDefaults.minimumReconnectIntervalMs
+      )
     );
-    this.state.normalRestartDelayMs = Math.max(0, Number(settings.normalRestartDelayMs || this.state.normalRestartDelayMs || 350));
+    this.state.normalRestartDelayMs = Math.max(
+      0,
+      Number(
+        settings.normalRestartDelayMs ||
+          this.state.normalRestartDelayMs ||
+          browserLifecycleDefaults.normalRestartDelayMs
+      )
+    );
     this.state.noSpeechRestartDelayMs = Math.max(
       0,
-      Number(settings.noSpeechRestartDelayMs || this.state.noSpeechRestartDelayMs || 350)
+      Number(
+        settings.noSpeechRestartDelayMs ||
+          this.state.noSpeechRestartDelayMs ||
+          browserLifecycleDefaults.noSpeechRestartDelayMs
+      )
     );
     this.state.networkReconnectInitialMs = Math.max(
       100,
-      Number(settings.networkReconnectInitialMs || this.state.networkReconnectInitialMs || 1000)
+      Number(
+        settings.networkReconnectInitialMs ||
+          this.state.networkReconnectInitialMs ||
+          browserLifecycleDefaults.networkReconnectInitialMs
+      )
     );
     this.state.networkReconnectMaxMs = Math.max(
       this.state.networkReconnectInitialMs,
-      Number(settings.networkReconnectMaxMs || this.state.networkReconnectMaxMs || 30000)
+      Number(
+        settings.networkReconnectMaxMs ||
+          this.state.networkReconnectMaxMs ||
+          browserLifecycleDefaults.networkReconnectMaxMs
+      )
     );
     this.state.maxBrowserSessionAgeMs = Math.max(
       10000,
-      Number(settings.maxBrowserSessionAgeMs || this.state.maxBrowserSessionAgeMs || 180000)
+      Number(
+        settings.maxBrowserSessionAgeMs ||
+          this.state.maxBrowserSessionAgeMs ||
+          browserLifecycleDefaults.maxBrowserSessionAgeMs
+      )
     );
     this.state.prepareCycleBeforeMs = Math.max(
       0,
-      Number(settings.prepareCycleBeforeMs || this.state.prepareCycleBeforeMs || 15000)
+      Number(
+        settings.prepareCycleBeforeMs ||
+          this.state.prepareCycleBeforeMs ||
+          browserLifecycleDefaults.prepareCycleBeforeMs
+      )
     );
     this.state.forceFinalOnInterruption = settings.forceFinalOnInterruption !== false;
-    this.state.forceFinalMinChars = Math.max(1, Number(settings.forceFinalMinChars || this.state.forceFinalMinChars || 3));
+    this.state.forceFinalMinChars = Math.max(
+      1,
+      Number(
+        settings.forceFinalMinChars ||
+          this.state.forceFinalMinChars ||
+          browserLifecycleDefaults.forceFinalMinChars
+      )
+    );
     this.state.forceFinalMinStableMs = Math.max(
       0,
-      Number(settings.forceFinalMinStableMs || this.state.forceFinalMinStableMs || 700)
+      Number(
+        settings.forceFinalMinStableMs ||
+          this.state.forceFinalMinStableMs ||
+          browserLifecycleDefaults.forceFinalMinStableMs
+      )
     );
     this.restartDelayByReasonMs.normal_onend = this.state.normalRestartDelayMs;
     this.restartDelayByReasonMs.settings_change = this.state.normalRestartDelayMs;
     this.restartDelayByReasonMs.websocket_reconnect = this.state.normalRestartDelayMs;
     this.restartDelayByReasonMs.session_cycle = this.state.normalRestartDelayMs;
+    this.restartDelayByReasonMs.long_segment_flush = this.state.normalRestartDelayMs;
     this.initialNoSpeechDelayMs = this.state.noSpeechRestartDelayMs;
     this.initialNetworkBackoffMs = this.state.networkReconnectInitialMs;
     this.maxNetworkBackoffMs = this.state.networkReconnectMaxMs;

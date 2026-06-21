@@ -8,8 +8,15 @@ use urlencoding::encode;
 
 use crate::config::TTS_PROVIDER_PYTHON_STDLIB;
 use crate::python_runtime::{normalize_tts_lang, run_google_tts_fetch};
+use crate::upstream_retry::{
+    MAX_UPSTREAM_ATTEMPTS, is_retryable_upstream_error, upstream_retry_delay,
+};
 
 pub const GOOGLE_TTS_MAX_CHARS: usize = 200;
+
+/// Max concurrent upstream chunk fetches for a single multi-chunk line. Keeps prefetch
+/// fast without bursting many parallel requests that invite 429/503 throttling.
+const GOOGLE_TTS_PREFETCH_MAX_CONCURRENCY: usize = 3;
 
 fn google_tts_http_client() -> &'static reqwest::Client {
     static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
@@ -20,6 +27,8 @@ fn google_tts_http_client() -> &'static reqwest::Client {
             )
             .pool_max_idle_per_host(8)
             .tcp_keepalive(Duration::from_secs(30))
+            .connect_timeout(Duration::from_secs(10))
+            .timeout(Duration::from_secs(20))
             .build()
             .expect("google tts reqwest client")
     })
@@ -88,18 +97,8 @@ fn looks_like_mpeg_audio(bytes: &[u8]) -> bool {
     bytes[0] == 0xff && (bytes[1] & 0xe0) == 0xe0
 }
 
-pub async fn fetch_google_tts_browser(lang: &str, text: &str) -> Result<Vec<u8>, String> {
-    let trimmed = text.trim();
-    if trimmed.is_empty() {
-        return Err("empty text".into());
-    }
-    if trimmed.chars().count() > GOOGLE_TTS_MAX_CHARS {
-        return Err(format!(
-            "text exceeds {GOOGLE_TTS_MAX_CHARS} chars; chunk before fetch"
-        ));
-    }
-
-    let upstream = google_upstream_url(trimmed, lang);
+async fn fetch_google_tts_browser_once(lang: &str, text: &str) -> Result<Vec<u8>, String> {
+    let upstream = google_upstream_url(text, lang);
     let response = google_tts_http_client()
         .get(&upstream)
         .header(header::REFERER, "https://translate.google.com/")
@@ -108,7 +107,7 @@ pub async fn fetch_google_tts_browser(lang: &str, text: &str) -> Result<Vec<u8>,
         .map_err(|err| format!("upstream request failed: {err}"))?;
 
     if !response.status().is_success() {
-        return Err(format!("upstream HTTP {}", response.status()));
+        return Err(format!("upstream HTTP {}", response.status().as_u16()));
     }
 
     let bytes = response
@@ -132,6 +131,39 @@ pub async fn fetch_google_tts_browser(lang: &str, text: &str) -> Result<Vec<u8>,
         ));
     }
     Ok(bytes)
+}
+
+pub async fn fetch_google_tts_browser(lang: &str, text: &str) -> Result<Vec<u8>, String> {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return Err("empty text".into());
+    }
+    if trimmed.chars().count() > GOOGLE_TTS_MAX_CHARS {
+        return Err(format!(
+            "text exceeds {GOOGLE_TTS_MAX_CHARS} chars; chunk before fetch"
+        ));
+    }
+
+    let mut last_error = String::from("upstream request failed");
+    for attempt in 1..=MAX_UPSTREAM_ATTEMPTS {
+        match fetch_google_tts_browser_once(lang, trimmed).await {
+            Ok(bytes) => return Ok(bytes),
+            Err(err) => {
+                last_error = err;
+                if attempt >= MAX_UPSTREAM_ATTEMPTS || !is_retryable_upstream_error(&last_error) {
+                    break;
+                }
+                warn!(
+                    target: "voicesub.tts.fetch",
+                    attempt,
+                    error = %last_error,
+                    "google tts fetch retrying"
+                );
+                upstream_retry_delay(attempt).await;
+            }
+        }
+    }
+    Err(last_error)
 }
 
 pub async fn fetch_tts_chunk(
@@ -159,22 +191,64 @@ pub async fn prefetch_tts_line(
         return Ok(Vec::new());
     }
 
+    let total = chunks.len();
     let tl = normalize_tts_lang(lang);
-    let mut out = Vec::with_capacity(chunks.len());
-    out.push(fetch_tts_chunk(module_dir, provider, &tl, &chunks[0]).await?);
-    if chunks.len() == 1 {
-        return Ok(out);
+    if total == 1 {
+        return Ok(vec![
+            fetch_tts_chunk(module_dir, provider, &tl, &chunks[0]).await?,
+        ]);
     }
 
+    // Fetch the first chunk synchronously (fail fast / warm the connection),
+    // then fetch the rest concurrently. `JoinSet` yields in completion order,
+    // so each task carries its index to let us restore the original text order.
+    let mut parts: Vec<(usize, Vec<u8>)> = vec![(
+        0,
+        fetch_tts_chunk(module_dir, provider, &tl, &chunks[0]).await?,
+    )];
+
+    // Cap concurrent upstream fetches so a long line does not burst many parallel requests
+    // at Google Translate TTS and trigger 429/503 throttling (review MED#11).
+    let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(
+        GOOGLE_TTS_PREFETCH_MAX_CONCURRENCY,
+    ));
     let mut rest = tokio::task::JoinSet::new();
-    for chunk in chunks.into_iter().skip(1) {
+    for (index, chunk) in chunks.into_iter().enumerate().skip(1) {
         let module_dir = module_dir.to_path_buf();
         let provider = provider.to_string();
         let tl = tl.clone();
-        rest.spawn(async move { fetch_tts_chunk(&module_dir, &provider, &tl, &chunk).await });
+        let semaphore = semaphore.clone();
+        rest.spawn(async move {
+            let _permit = semaphore.acquire_owned().await.ok();
+            (
+                index,
+                fetch_tts_chunk(&module_dir, &provider, &tl, &chunk).await,
+            )
+        });
     }
-    while let Some(result) = rest.join_next().await {
-        out.push(result.map_err(|err| format!("prefetch task failed: {err}"))??);
+    while let Some(joined) = rest.join_next().await {
+        let (index, result) = joined.map_err(|err| format!("prefetch task failed: {err}"))?;
+        parts.push((index, result?));
+    }
+
+    assemble_ordered_chunks(parts, total)
+}
+
+/// Reassemble concurrently fetched `(index, audio)` pairs back into text order.
+fn assemble_ordered_chunks(
+    parts: Vec<(usize, Vec<u8>)>,
+    total: usize,
+) -> Result<Vec<Vec<u8>>, String> {
+    let mut ordered: Vec<Option<Vec<u8>>> = (0..total).map(|_| None).collect();
+    for (index, bytes) in parts {
+        let slot = ordered
+            .get_mut(index)
+            .ok_or_else(|| format!("prefetch chunk index {index} out of range {total}"))?;
+        *slot = Some(bytes);
+    }
+    let mut out = Vec::with_capacity(total);
+    for (index, slot) in ordered.into_iter().enumerate() {
+        out.push(slot.ok_or_else(|| format!("prefetch chunk {index} missing"))?);
     }
     Ok(out)
 }
@@ -182,7 +256,7 @@ pub async fn prefetch_tts_line(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::TTS_PROVIDER_BROWSER_GOOGLE;
+    use crate::config::TTS_PROVIDER_BROWSER_GOOGLE;
 
     #[test]
     fn chunk_text_splits_long_lines_on_word_boundary() {
@@ -204,5 +278,33 @@ mod tests {
     fn provider_constants_are_stable() {
         assert_eq!(TTS_PROVIDER_BROWSER_GOOGLE, "browser_google");
         assert_eq!(TTS_PROVIDER_PYTHON_STDLIB, "python_stdlib");
+    }
+
+    #[test]
+    fn retryable_upstream_errors_cover_reqwest_transport() {
+        assert!(crate::upstream_retry::is_retryable_upstream_error(
+            "upstream request failed: error sending request for url (https://example)"
+        ));
+    }
+
+    #[test]
+    fn assemble_ordered_chunks_restores_text_order_from_completion_order() {
+        // Simulate JoinSet completion order (2, 0, 1) for a 3-chunk line.
+        let parts = vec![
+            (2usize, b"third".to_vec()),
+            (0usize, b"first".to_vec()),
+            (1usize, b"second".to_vec()),
+        ];
+        let ordered = assemble_ordered_chunks(parts, 3).expect("assemble");
+        assert_eq!(
+            ordered,
+            vec![b"first".to_vec(), b"second".to_vec(), b"third".to_vec()]
+        );
+    }
+
+    #[test]
+    fn assemble_ordered_chunks_reports_missing_and_out_of_range() {
+        assert!(assemble_ordered_chunks(vec![(0, vec![1])], 2).is_err());
+        assert!(assemble_ordered_chunks(vec![(5, vec![1])], 2).is_err());
     }
 }

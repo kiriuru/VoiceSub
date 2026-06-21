@@ -1,8 +1,11 @@
+use std::collections::VecDeque;
 use std::net::SocketAddr;
 
 use std::path::PathBuf;
 
-use std::sync::{Arc, Mutex, RwLock as StdRwLock, atomic::AtomicBool};
+use std::sync::{
+    Arc, Condvar, Mutex, RwLock as StdRwLock, atomic::{AtomicBool, AtomicU64, Ordering},
+};
 
 use tokio::sync::RwLock as TokioRwLock;
 
@@ -61,6 +64,154 @@ use voicesub_tts::TwitchOAuthBridge;
 use voicesub_types::PROJECT_VERSION;
 
 pub type SubtitlePayloadListener = Arc<dyn Fn(serde_json::Value) + Send + Sync>;
+
+/// Max queued subtitle payloads while the TTS planner listener is slow; oldest frames drop.
+const SUBTITLE_PAYLOAD_QUEUE_MAX: usize = 64;
+
+/// Ordered, non-blocking bridge between the subtitle router actor and the subtitle payload
+/// listener (TTS planner). The router actor calls [`SubtitlePayloadForwarder::dispatch`],
+/// which only enqueues onto a bounded queue; the dedicated worker thread invokes
+/// the listener in arrival order. This keeps a slow listener off the actor's publish loop
+/// (review §6) while preserving per-frame ordering.
+struct SubtitlePayloadForwarder {
+    listener: Arc<Mutex<Option<SubtitlePayloadListener>>>,
+    queue: Arc<Mutex<VecDeque<serde_json::Value>>>,
+    notify: Arc<Condvar>,
+    dropped_oldest: Arc<AtomicU64>,
+}
+
+impl SubtitlePayloadForwarder {
+    fn new(listener: Arc<Mutex<Option<SubtitlePayloadListener>>>) -> Arc<Self> {
+        let queue = Arc::new(Mutex::new(VecDeque::new()));
+        let notify = Arc::new(Condvar::new());
+        let dropped_oldest = Arc::new(AtomicU64::new(0));
+        let queue_for_thread = queue.clone();
+        let notify_for_thread = notify.clone();
+        let listener_for_thread = listener.clone();
+        std::thread::Builder::new()
+            .name("voicesub-subtitle-payload-forward".into())
+            .spawn(move || {
+                loop {
+                    let body = {
+                        let mut guard = queue_for_thread
+                            .lock()
+                            .unwrap_or_else(|e| e.into_inner());
+                        while guard.is_empty() {
+                            guard = notify_for_thread
+                                .wait(guard)
+                                .unwrap_or_else(|e| e.into_inner());
+                        }
+                        guard.pop_front()
+                    };
+                    let Some(body) = body else {
+                        continue;
+                    };
+                    let callback = listener_for_thread
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .clone();
+                    if let Some(callback) = callback {
+                        // Isolate listener panics: a panic in the TTS planner must not kill
+                        // the forwarder thread and stop all subsequent subtitle speech
+                        // (review §6 / MED#6).
+                        if let Err(panic) =
+                            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| callback(body)))
+                        {
+                            let detail = panic
+                                .downcast_ref::<&str>()
+                                .map(|s| s.to_string())
+                                .or_else(|| panic.downcast_ref::<String>().cloned())
+                                .unwrap_or_else(|| "unknown panic".to_string());
+                            tracing::error!(
+                                target: "voicesub.runtime",
+                                error = %detail,
+                                "subtitle payload listener panicked; forwarder thread continues"
+                            );
+                        }
+                    }
+                }
+            })
+            .expect("spawn subtitle payload forwarder thread");
+        Arc::new(Self {
+            listener,
+            queue,
+            notify,
+            dropped_oldest,
+        })
+    }
+
+    fn dispatch(&self, body: serde_json::Value) {
+        let has_listener = self
+            .listener
+            .lock()
+            .map(|guard| guard.is_some())
+            .unwrap_or(false);
+        if !has_listener {
+            return;
+        }
+        let mut guard = self.queue.lock().unwrap_or_else(|e| e.into_inner());
+        if guard.len() >= SUBTITLE_PAYLOAD_QUEUE_MAX {
+            if drop_incoming_when_queue_full(&body) {
+                // Never evict queued speakable frames to enqueue a partial/active update the
+                // TTS planner would skip anyway.
+                let dropped = self.dropped_oldest.fetch_add(1, Ordering::Relaxed) + 1;
+                if dropped == 1 || dropped.is_power_of_two() {
+                    tracing::warn!(
+                        target: "voicesub.runtime",
+                        dropped,
+                        queue_max = SUBTITLE_PAYLOAD_QUEUE_MAX,
+                        "subtitle payload forwarder dropped incoming non-speakable frame (queue full)"
+                    );
+                }
+                return;
+            }
+            if let Some(non_speakable_dropped) = evict_one_for_capacity(&mut guard) {
+                let dropped = self.dropped_oldest.fetch_add(1, Ordering::Relaxed) + 1;
+                if dropped == 1 || dropped.is_power_of_two() {
+                    tracing::warn!(
+                        target: "voicesub.runtime",
+                        dropped,
+                        queue_max = SUBTITLE_PAYLOAD_QUEUE_MAX,
+                        non_speakable_dropped,
+                        "subtitle payload forwarder dropped a queued frame"
+                    );
+                }
+            }
+        }
+        guard.push_back(body);
+        self.notify.notify_one();
+    }
+}
+
+/// A subtitle payload is "speakable" when its lifecycle state is one the TTS planner will
+/// actually voice (`completed_only` / `completed_with_partial`). Mirrors
+/// `voicesub_tts::subtitle_speech::lifecycle_allows_planning` so the forwarder's backpressure
+/// drop policy never discards a frame that would have produced speech (review HIGH#4).
+fn payload_is_speakable(body: &serde_json::Value) -> bool {
+    matches!(
+        body.get("lifecycle_state").and_then(|v| v.as_str()),
+        Some("completed_only") | Some("completed_with_partial")
+    )
+}
+
+/// When the queue is at capacity, drop incoming partial/active frames instead of evicting
+/// queued speakable frames the TTS planner still needs.
+fn drop_incoming_when_queue_full(incoming: &serde_json::Value) -> bool {
+    !payload_is_speakable(incoming)
+}
+
+/// Evict exactly one frame to make room when the queue is full. Prefers the oldest
+/// NON-speakable frame (partial-only / active states the planner never voices) so speakable
+/// completed frames survive a slow listener; only falls back to dropping the oldest frame
+/// when every queued frame is speakable. Returns `Some(true)` if a non-speakable frame was
+/// dropped, `Some(false)` if the oldest speakable frame was dropped, `None` if empty
+/// (review HIGH#4).
+fn evict_one_for_capacity(queue: &mut VecDeque<serde_json::Value>) -> Option<bool> {
+    match queue.iter().position(|frame| !payload_is_speakable(frame)) {
+        Some(index) => queue.remove(index).map(|_| true),
+        None => queue.pop_front().map(|_| false),
+    }
+}
 
 #[derive(Debug, thiserror::Error)]
 
@@ -172,6 +323,8 @@ pub struct RuntimeService {
 
     structured_runtime_logger: Arc<StructuredRuntimeLogger>,
 
+    session_log: Arc<SessionLogManager>,
+
     runtime_event_bus: RuntimeEventBus,
 
     loopback_auth: Arc<LoopbackAuth>,
@@ -223,6 +376,7 @@ impl RuntimeService {
         let config_snapshot = Arc::new(StdRwLock::new(default_config_payload()));
 
         let structured_runtime_logger = Arc::new(StructuredRuntimeLogger::new(&paths.logs_dir));
+        let session_log = Arc::new(SessionLogManager::new(&paths.logs_dir));
         let runtime_metrics = Arc::new(RuntimeMetricsCollector::new());
         let pipeline_log = RuntimePipelineLog::new(Some(runtime_pipeline_structured_log(
             structured_runtime_logger.clone(),
@@ -272,27 +426,25 @@ impl RuntimeService {
         ));
         let overlay_broadcaster_for_publish = overlay_broadcaster.clone();
 
-        let publisher_for_publish = ws_publisher.clone();
-        let subtitle_listener_for_publish = subtitle_payload_listener.clone();
+        // Offload the subtitle payload listener (TTS planner) onto its own ordered worker
+        // thread so a slow listener never blocks the subtitle router actor's publish loop
+        // (review §6). Order is preserved by the single-consumer channel.
+        let subtitle_payload_forwarder =
+            SubtitlePayloadForwarder::new(subtitle_payload_listener.clone());
+        let forwarder_for_publish = subtitle_payload_forwarder.clone();
         let publish: PublishCallback = Arc::new(move |payload| {
             let overlay = overlay_broadcaster_for_publish.clone();
-            let publisher = publisher_for_publish.clone();
-            let subtitle_listener = subtitle_listener_for_publish.clone();
             let subtitle_body = serde_json::to_value(&payload).unwrap_or_default();
             *last_subtitle_payload_for_publish
                 .lock()
                 .unwrap_or_else(|e| e.into_inner()) = Some(subtitle_body.clone());
-            overlay.publish(&payload);
-            if let Ok(guard) = subtitle_listener.lock()
-                && let Some(listener) = guard.as_ref()
-            {
-                listener(subtitle_body.clone());
-            }
-            publisher.broadcast_overlay_body_now(
-                "subtitle_payload_update",
-                "overlay_update",
-                subtitle_body,
-            );
+            // Overlay applies its own time/signature dedupe; the subtitle listener
+            // (TTS planner) must see every payload independently because it has its
+            // own per-sequence dedupe and lifecycle gating. Gating it on the overlay
+            // broadcast result would silently drop speakable frames if overlay dedupe
+            // ever widened.
+            let _overlay_broadcast = overlay.publish(&payload);
+            forwarder_for_publish.dispatch(subtitle_body);
         });
 
         let config_getter: ConfigGetter = {
@@ -482,6 +634,7 @@ impl RuntimeService {
             browser_speech,
             twitch_oauth,
             structured_runtime_logger,
+            session_log,
             runtime_event_bus,
             loopback_auth,
             background_tasks,
@@ -506,6 +659,11 @@ impl RuntimeService {
     }
 
     pub async fn runtime_state_snapshot(&self) -> RuntimeStateSnapshot {
+        let subtitle = self
+            .last_subtitle_payload
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
         RuntimeStateSnapshot {
             rev: self.runtime_event_bus.revision(),
             runtime: self
@@ -514,11 +672,7 @@ impl RuntimeService {
                 .await
                 .map(|message| message.get("payload").cloned().unwrap_or_default())
                 .unwrap_or(serde_json::Value::Null),
-            subtitle: self
-                .events
-                .last_message("subtitle_payload_update")
-                .await
-                .map(|message| message.get("payload").cloned().unwrap_or_default()),
+            subtitle,
             overlay: self
                 .events
                 .last_message("overlay_update")
@@ -532,6 +686,11 @@ impl RuntimeService {
             diagnostics: self
                 .events
                 .last_message("diagnostics_update")
+                .await
+                .map(|message| message.get("payload").cloned().unwrap_or_default()),
+            twitch_connection: self
+                .events
+                .last_message("twitch_connection_update")
                 .await
                 .map(|message| message.get("payload").cloned().unwrap_or_default()),
         }
@@ -570,7 +729,7 @@ impl RuntimeService {
     }
 
     pub fn http_state(&self) -> Arc<HttpState> {
-        let session_log = Arc::new(SessionLogManager::new(&self.paths.logs_dir));
+        let session_log = self.session_log.clone();
         let structured_runtime_logger = self.structured_runtime_logger.clone();
         let export_service = Arc::new(ExportService::from_paths(&self.paths, PROJECT_VERSION));
 
@@ -616,6 +775,10 @@ impl RuntimeService {
         voicesub_config::ensure_runtime_data_dirs(&self.paths)
             .map_err(|err| RuntimeError::Server(err.to_string()))?;
         let _ = ensure_logs_dir(&self.paths.project_root)?;
+
+        // Reap a high-priority browser worker left over from a previous crashed session
+        // before we accept new sessions (review §8).
+        voicesub_browser::reap_orphan_worker(&self.paths.user_data_dir);
 
         {
             let mut store = self.config_store.write().await;
@@ -700,7 +863,12 @@ impl RuntimeService {
 
         let launcher = BrowserWorkerLauncher::new(&self.paths.user_data_dir);
 
-        launcher.launch_worker(&url, &chrome_launch)
+        let result = launcher.launch_worker(&url, &chrome_launch)?;
+        // Persist the PID so a crash before graceful stop can reap this worker on the next
+        // startup, matching the HTTP `/api/runtime/start` path (review HIGH#3). Without this
+        // an IPC-launched worker is invisible to `reap_orphan_worker`.
+        voicesub_browser::record_worker_pid(&self.paths.user_data_dir, result.pid);
+        Ok(result)
     }
 }
 
@@ -715,5 +883,66 @@ mod tests {
         let service = RuntimeService::new(".");
 
         let _router = RuntimeService::router(service.http_state());
+    }
+
+    #[test]
+    fn payload_is_speakable_matches_planner_lifecycle_states() {
+        assert!(payload_is_speakable(
+            &serde_json::json!({ "lifecycle_state": "completed_only" })
+        ));
+        assert!(payload_is_speakable(
+            &serde_json::json!({ "lifecycle_state": "completed_with_partial" })
+        ));
+        assert!(!payload_is_speakable(
+            &serde_json::json!({ "lifecycle_state": "partial_only" })
+        ));
+        assert!(!payload_is_speakable(&serde_json::json!({})));
+    }
+
+    #[test]
+    fn evict_prefers_non_speakable_frame_over_speakable() {
+        let mut queue = VecDeque::new();
+        // Oldest is speakable; a later partial-only frame is the better drop candidate.
+        queue.push_back(serde_json::json!({ "lifecycle_state": "completed_only", "id": 1 }));
+        queue.push_back(serde_json::json!({ "lifecycle_state": "partial_only", "id": 2 }));
+        queue.push_back(serde_json::json!({ "lifecycle_state": "completed_only", "id": 3 }));
+
+        assert_eq!(evict_one_for_capacity(&mut queue), Some(true));
+        let ids: Vec<u64> = queue
+            .iter()
+            .filter_map(|f| f.get("id").and_then(|v| v.as_u64()))
+            .collect();
+        // The speakable completed frames are preserved; the partial-only frame was dropped.
+        assert_eq!(ids, vec![1, 3]);
+    }
+
+    #[test]
+    fn evict_falls_back_to_oldest_when_all_speakable() {
+        let mut queue = VecDeque::new();
+        queue.push_back(serde_json::json!({ "lifecycle_state": "completed_only", "id": 1 }));
+        queue.push_back(serde_json::json!({ "lifecycle_state": "completed_with_partial", "id": 2 }));
+
+        assert_eq!(evict_one_for_capacity(&mut queue), Some(false));
+        let ids: Vec<u64> = queue
+            .iter()
+            .filter_map(|f| f.get("id").and_then(|v| v.as_u64()))
+            .collect();
+        assert_eq!(ids, vec![2]);
+    }
+
+    #[test]
+    fn drop_incoming_when_queue_full_rejects_partial_only() {
+        assert!(drop_incoming_when_queue_full(
+            &serde_json::json!({ "lifecycle_state": "partial_only" })
+        ));
+        assert!(!drop_incoming_when_queue_full(
+            &serde_json::json!({ "lifecycle_state": "completed_only" })
+        ));
+    }
+
+    #[test]
+    fn evict_returns_none_when_empty() {
+        let mut queue: VecDeque<serde_json::Value> = VecDeque::new();
+        assert_eq!(evict_one_for_capacity(&mut queue), None);
     }
 }

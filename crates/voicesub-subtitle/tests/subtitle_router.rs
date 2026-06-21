@@ -73,6 +73,10 @@ impl RecordingPublisher {
             .cloned()
             .expect("expected published payload")
     }
+
+    fn publish_count(&self) -> usize {
+        self.messages.lock().unwrap().len()
+    }
 }
 
 use voicesub_subtitle::PublishCallback;
@@ -770,6 +774,55 @@ async fn completed_source_expires_before_translation_then_returns_to_idle() {
         voicesub_subtitle::LifecycleState::Idle
     );
     assert!(!after_all_ttl.completed_block_visible);
+}
+
+#[tokio::test]
+async fn late_translation_during_active_partial_republishes_completed_sequence() {
+    let (recorder, router) = router_with_config(base_config());
+
+    apply_transcript(&router, final_transcript(1, "Первая")).await;
+    apply_transcript(&router, partial_transcript(2, "Вторая")).await;
+
+    let publishes_before = recorder.publish_count();
+
+    apply_translation(
+        &router,
+        TranslationEvent {
+            sequence: 1,
+            source_text: "Первая".into(),
+            source_lang: "ru".into(),
+            provider: "google_translate_v2".into(),
+            is_complete: true,
+            translations: vec![TranslationItem {
+                slot_id: Some("translation_1".into()),
+                label: Some("EN".into()),
+                target_lang: "en".into(),
+                text: "First EN".into(),
+                provider: "google_translate_v2".into(),
+                success: true,
+                error: None,
+                cached: false,
+                ..Default::default()
+            }],
+            ..Default::default()
+        },
+    )
+    .await;
+
+    let after_translation =
+        wait_for_visible_texts(&recorder, &["Вторая", "First EN"], Duration::from_millis(200))
+            .await;
+    assert_eq!(after_translation.completed_sequence, Some(1));
+    assert!(recorder.publish_count() > publishes_before);
+    assert!(
+        matches!(
+            after_translation.lifecycle_state,
+            voicesub_subtitle::LifecycleState::CompletedWithPartial
+                | voicesub_subtitle::LifecycleState::CompletedOnly
+        ),
+        "unexpected lifecycle {:?}",
+        after_translation.lifecycle_state
+    );
 }
 
 #[tokio::test]

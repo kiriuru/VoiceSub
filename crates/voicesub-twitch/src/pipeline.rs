@@ -48,24 +48,19 @@ pub fn process_chat_message(
     }
 
     clean_text = crate::lang::strip_leading_speaker_label(&clean_text);
+    clean_text = crate::emoji::strip_invisible_chat_characters(&clean_text);
     clean_text = crate::emoji::normalize_whitespace(&clean_text);
 
-    clean_text = crate::lang::strip_twitch_mentions(&clean_text);
+    let tts_text = apply_post_mention_filters(
+        &crate::lang::normalize_twitch_mentions(&clean_text),
+        settings,
+    );
+    clean_text = apply_post_mention_filters(
+        &crate::lang::strip_twitch_mentions(&clean_text),
+        settings,
+    );
 
-    clean_text = crate::symbols::strip_configured_symbols(&clean_text, &settings.strip_symbols);
-
-    if settings.replace_underscore_with_space {
-        clean_text = crate::symbols::replace_underscores_with_spaces(&clean_text);
-    }
-
-    if settings.strip_links {
-        clean_text = crate::links::strip_links_from_text(&clean_text);
-        clean_text = crate::emoji::normalize_whitespace(&clean_text);
-    }
-
-    clean_text = apply_builtin_profanity(&clean_text, &profanity_settings_for_twitch(settings));
-
-    if !crate::lang::has_meaningful_linguistic_content(&clean_text) {
+    if !crate::lang::has_meaningful_linguistic_content(&clean_text, settings.strip_links) {
         return empty_result(
             settings,
             login,
@@ -110,6 +105,7 @@ pub fn process_chat_message(
             &clean_text,
             settings.lang_min_chars as usize,
             &fallback_lang,
+            settings.strip_links,
         )
     } else {
         fallback_lang.clone()
@@ -126,7 +122,7 @@ pub fn process_chat_message(
         };
     }
 
-    let speak_text = build_speak_text(settings, &spoken_nick, &clean_text);
+    let speak_text = build_speak_text(settings, &spoken_nick, &tts_text);
     ProcessedChatMessage {
         clean_text,
         spoken_nick,
@@ -135,6 +131,18 @@ pub fn process_chat_message(
         speakable: true,
         skip_reason: None,
     }
+}
+
+fn apply_post_mention_filters(text: &str, settings: &TwitchTtsSettings) -> String {
+    let mut out = crate::symbols::strip_configured_symbols(text, &settings.strip_symbols);
+    if settings.replace_underscore_with_space {
+        out = crate::symbols::replace_underscores_with_spaces(&out);
+    }
+    if settings.strip_links {
+        out = crate::links::strip_links_from_text(&out);
+        out = crate::emoji::normalize_whitespace(&out);
+    }
+    apply_builtin_profanity(&out, &profanity_settings_for_twitch(settings))
 }
 
 fn strip_symbols_for_speech(text: &str, settings: &TwitchTtsSettings) -> String {
@@ -428,6 +436,66 @@ mod tests {
     }
 
     #[test]
+    fn https_url_survives_emote_and_symbol_filters() {
+        let settings = TwitchTtsSettings {
+            strip_links: false,
+            ..Default::default()
+        };
+        let registry = EmoteRegistry::new();
+        let raw = "https://github.com/kiriuru/VoiceSub";
+        let after_emotes = registry.clean_message_text(
+            raw,
+            None,
+            &settings.emote_sources,
+            settings.strip_emoji,
+        );
+        assert_eq!(after_emotes, raw, "emote pass mangled URL");
+        let after_symbols = crate::symbols::strip_configured_symbols(
+            &after_emotes,
+            &settings.strip_symbols,
+        );
+        assert_eq!(after_symbols, raw, "symbol pass mangled URL: {after_symbols}");
+    }
+
+    #[test]
+    fn link_only_github_speakable_when_strip_links_disabled() {
+        let settings = TwitchTtsSettings {
+            strip_links: false,
+            pause_style: crate::settings::TwitchPauseStyle::Comma,
+            ..Default::default()
+        };
+        let registry = EmoteRegistry::new();
+        for (sample, expected) in [
+            ("github.com/kiriuru/VoiceSub", "github.com/kiriuru/VoiceSub"),
+            (
+                "https://github.com/kiriuru/VoiceSub",
+                "https://github.com/kiriuru/VoiceSub",
+            ),
+            (
+                "https://github.com/kiriuru/VoiceSub\u{034F}",
+                "https://github.com/kiriuru/VoiceSub",
+            ),
+        ] {
+            let out = process_chat_message(
+                &settings,
+                &no_replacement(),
+                &registry,
+                "kiriuru",
+                "Kiriuru",
+                sample,
+                None,
+            );
+            assert!(
+                out.speakable,
+                "expected speakable for {sample:?}, got {:?}",
+                out.skip_reason
+            );
+            assert_eq!(out.clean_text, expected);
+            assert!(out.speak_text.contains(expected));
+        }
+    }
+
+    #[test]
     fn mention_reply_detects_russian_not_portuguese() {
         let settings = TwitchTtsSettings::default();
         let registry = EmoteRegistry::new();
@@ -444,7 +512,29 @@ mod tests {
         assert_eq!(out.language, "ru");
         assert_eq!(out.clean_text, "Привет");
         assert_eq!(out.spoken_nick, "sasha 12041998");
-        assert_eq!(out.speak_text, "sasha 12041998. Привет");
+        assert_eq!(out.speak_text, "sasha 12041998. KamakiriMeido Привет");
+    }
+
+    #[test]
+    fn mention_username_is_spoken_but_not_in_clean_text() {
+        let settings = TwitchTtsSettings {
+            pause_style: crate::settings::TwitchPauseStyle::Comma,
+            ..Default::default()
+        };
+        let registry = EmoteRegistry::new();
+        let out = process_chat_message(
+            &settings,
+            &no_replacement(),
+            &registry,
+            "kiriuru",
+            "Kiriuru",
+            "@Kiriuru hello",
+            None,
+        );
+        assert!(out.speakable);
+        assert_eq!(out.language, "en");
+        assert_eq!(out.clean_text, "hello");
+        assert_eq!(out.speak_text, "Kiriuru, Kiriuru hello");
     }
 
     #[test]
@@ -483,9 +573,10 @@ mod tests {
     }
 
     #[test]
-    fn bare_youtube_url_is_not_speakable_even_when_strip_links_disabled() {
+    fn bare_youtube_url_is_speakable_when_strip_links_disabled() {
         let settings = TwitchTtsSettings {
             strip_links: false,
+            strip_symbols: vec!["@".into()],
             ..Default::default()
         };
         let registry = EmoteRegistry::new();
@@ -499,8 +590,9 @@ mod tests {
             sample,
             None,
         );
-        assert!(!out.speakable);
-        assert_eq!(out.skip_reason, Some("min_chars"));
+        assert!(out.speakable, "expected speakable, got {:?}", out.skip_reason);
+        assert_eq!(out.clean_text, sample);
+        assert!(out.speak_text.contains("youtube.com"));
     }
 
     #[test]
@@ -520,7 +612,7 @@ mod tests {
             sample,
             None,
         );
-        assert!(!out.speakable);
+        assert!(out.speakable);
         assert_ne!(out.language, "nl");
     }
 
@@ -542,6 +634,25 @@ mod tests {
         );
         assert!(out.speakable);
         assert_eq!(out.clean_text, "pay go");
+        assert_eq!(out.speak_text, "User. pay go all");
+    }
+
+    #[test]
+    fn digit_separators_keep_number_groups() {
+        let settings = TwitchTtsSettings::default();
+        let registry = EmoteRegistry::new();
+        let out = process_chat_message(
+            &settings,
+            &no_replacement(),
+            &registry,
+            "kiriuru",
+            "Kiriuru",
+            "500&100",
+            None,
+        );
+        assert!(out.speakable);
+        assert_eq!(out.clean_text, "500 100");
+        assert_eq!(out.speak_text, "Kiriuru. 500 100");
     }
 
     #[test]
@@ -629,6 +740,115 @@ mod tests {
             "digits must remain in clean_text, got: {}",
             out.clean_text
         );
+    }
+
+    #[test]
+    fn digit_only_with_separators_is_speakable() {
+        let settings = TwitchTtsSettings::default();
+        let registry = EmoteRegistry::new();
+        for sample in ["500&100", "500$100"] {
+            let out = process_chat_message(
+                &settings,
+                &no_replacement(),
+                &registry,
+                "kiriuru",
+                "Kiriuru",
+                sample,
+                None,
+            );
+            assert!(
+                out.speakable,
+                "expected speakable for {sample:?}, got {:?}",
+                out.skip_reason
+            );
+            assert_eq!(out.clean_text, "500 100");
+            assert!(out.speak_text.contains("500 100"));
+        }
+    }
+
+    #[test]
+    fn digit_separators_speakable_with_at_only_symbol_strip() {
+        let settings = TwitchTtsSettings {
+            strip_symbols: vec!["@".into()],
+            ..Default::default()
+        };
+        let registry = EmoteRegistry::new();
+        for sample in ["500&100", "500$100", "500/100"] {
+            let out = process_chat_message(
+                &settings,
+                &no_replacement(),
+                &registry,
+                "kiriuru",
+                "Kiriuru",
+                sample,
+                None,
+            );
+            assert!(
+                out.speakable,
+                "expected speakable for {sample:?}, got {:?}",
+                out.skip_reason
+            );
+            assert_eq!(out.clean_text, sample);
+            assert!(out.speak_text.contains(sample));
+        }
+    }
+
+    #[test]
+    fn digit_separators_speakable_with_trailing_invisible_chars() {
+        let settings = TwitchTtsSettings {
+            strip_symbols: vec!["@".into()],
+            ..Default::default()
+        };
+        let registry = EmoteRegistry::new();
+        for (sample, expected) in [
+            ("500&100\u{034F}", "500&100"),
+            ("500&100 \u{3164}", "500&100"),
+            ("500$100\u{200B}", "500$100"),
+        ] {
+            let out = process_chat_message(
+                &settings,
+                &no_replacement(),
+                &registry,
+                "kiriuru",
+                "Kiriuru",
+                sample,
+                None,
+            );
+            assert!(
+                out.speakable,
+                "expected speakable for {sample:?}, got {:?}",
+                out.skip_reason
+            );
+            assert_eq!(out.clean_text, expected);
+            assert!(out.speak_text.contains(expected));
+        }
+    }
+
+    #[test]
+    fn digit_separators_speakable_even_without_symbol_strip() {
+        let settings = TwitchTtsSettings {
+            strip_symbols: vec![],
+            ..Default::default()
+        };
+        let registry = EmoteRegistry::new();
+        for sample in ["500&100", "500$100"] {
+            let out = process_chat_message(
+                &settings,
+                &no_replacement(),
+                &registry,
+                "kiriuru",
+                "Kiriuru",
+                sample,
+                None,
+            );
+            assert!(
+                out.speakable,
+                "expected speakable for {sample:?}, got {:?}",
+                out.skip_reason
+            );
+            assert_eq!(out.clean_text, sample);
+            assert!(out.speak_text.contains(sample));
+        }
     }
 
     #[test]

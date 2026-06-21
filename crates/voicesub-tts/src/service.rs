@@ -5,7 +5,7 @@ use serde_json::{Value, json};
 
 use tracing::{debug, info, warn};
 
-use voicesub_audio::{AudioOutputDevice, list_output_devices, set_process_output_device};
+use voicesub_audio::{clamp_speech_volume, list_output_devices, set_process_output_device};
 use voicesub_twitch::{
     EventBroadcaster, SourceTextReplacementSettings, TwitchChatService, TwitchConnectionStatus,
     TwitchTtsSettings, normalize_twitch_settings,
@@ -16,9 +16,9 @@ use crate::config::{
     PLAYBACK_MODE_NATIVE, TtsConfig, TtsConfigStore, normalize_playback_mode,
     normalize_tts_provider,
 };
-use crate::oauth_bridge::TwitchOAuthBridge;
 
-use crate::channel_queue::{CHANNEL_SPEECH, CHANNEL_TWITCH, DualChannelSpeechQueue};
+use voicesub_audio::{CHANNEL_SPEECH, CHANNEL_TWITCH};
+use crate::channel_queue::DualChannelSpeechQueue;
 use crate::queue::{ChannelEnqueueResult, MarkFinishedOutcome, SpeechQueueItem};
 
 use crate::subtitle_speech::{SubtitleSpeechPlanner, TtsSpeechSettings};
@@ -51,8 +51,6 @@ pub struct TtsModuleService {
     subtitle_planner: Mutex<SubtitleSpeechPlanner>,
 
     twitch: TwitchChatService,
-
-    oauth_bridge: Arc<TwitchOAuthBridge>,
 }
 
 impl TtsModuleService {
@@ -60,7 +58,6 @@ impl TtsModuleService {
         Self::with_broadcaster(
             user_data_dir,
             Arc::new(|_| {}),
-            Arc::new(TwitchOAuthBridge::default()),
             shared_handle(),
         )
     }
@@ -68,7 +65,6 @@ impl TtsModuleService {
     pub fn with_broadcaster(
         user_data_dir: impl Into<PathBuf>,
         broadcaster: EventBroadcaster,
-        oauth_bridge: Arc<TwitchOAuthBridge>,
         runtime: tokio::runtime::Handle,
     ) -> Self {
         let module_dir = user_data_dir.into().join("modules").join("tts");
@@ -85,20 +81,7 @@ impl TtsModuleService {
             bound_pid: Mutex::new(None),
             subtitle_planner: Mutex::new(SubtitleSpeechPlanner::new()),
             twitch: TwitchChatService::new(broadcaster, runtime),
-            oauth_bridge,
         }
-    }
-
-    pub fn oauth_bridge(&self) -> Arc<TwitchOAuthBridge> {
-        self.oauth_bridge.clone()
-    }
-
-    pub fn store_pending_oauth_token(&self, token: &str) {
-        self.oauth_bridge.store(token.to_string());
-    }
-
-    pub fn take_pending_oauth_token(&self) -> Option<String> {
-        self.oauth_bridge.take()
     }
 
     pub fn config_path(&self) -> &std::path::Path {
@@ -129,16 +112,6 @@ impl TtsModuleService {
         );
 
         Ok(config)
-    }
-
-    pub fn save_config(&self, config: &TtsConfig) -> Result<(), TtsServiceError> {
-        Ok(self.config_store.save(config)?)
-    }
-
-    pub fn list_output_devices(&self) -> Result<Vec<AudioOutputDevice>, TtsServiceError> {
-        debug!(target: "voicesub.tts", "list_output_devices requested");
-
-        Ok(list_output_devices()?)
     }
 
     pub fn set_tts_provider(&self, provider: &str) -> Result<TtsConfig, TtsServiceError> {
@@ -211,7 +184,7 @@ impl TtsModuleService {
         volume: f32,
     ) -> Result<TtsConfig, TtsServiceError> {
         let rate = rate.clamp(0.5, 2.0);
-        let volume = volume.clamp(0.0, 1.0);
+        let volume = clamp_speech_volume(volume);
         info!(
             target: "voicesub.tts",
             speech_rate = rate,
@@ -454,10 +427,6 @@ impl TtsModuleService {
         })?)
     }
 
-    pub fn playback_mode_is_native(config: &TtsConfig) -> bool {
-        config.playback_mode == PLAYBACK_MODE_NATIVE
-    }
-
     pub fn device_label_for_channel(config: &TtsConfig, channel: &str) -> String {
         let (device_id, label) = match channel {
             CHANNEL_TWITCH => (
@@ -481,10 +450,6 @@ impl TtsModuleService {
             return device.label.clone();
         }
         String::new()
-    }
-
-    pub fn bound_process_id(&self) -> Option<u32> {
-        *self.bound_pid.lock().expect("tts pid lock")
     }
 
     pub fn register_window_process(&self, pid: u32) -> Result<(), TtsServiceError> {
@@ -544,7 +509,7 @@ impl TtsModuleService {
 
     fn max_queue_items_for_channel(&self, channel: &str) -> u32 {
         let Ok(cfg) = self.config_store.load() else {
-            return 8;
+            return TtsSpeechSettings::default().max_queue_items.max(1);
         };
         match channel {
             CHANNEL_TWITCH => cfg.twitch.effective_max_queue_items(),
@@ -692,19 +657,6 @@ impl TtsModuleService {
             .map_err(|e| TtsServiceError::InvalidProvider(e.to_string()))
     }
 
-    pub fn queue_clear_all(&self) {
-        let speech_waiting = self.queues.snapshot(CHANNEL_SPEECH).unwrap_or_default();
-        let twitch_waiting = self.queues.snapshot(CHANNEL_TWITCH).unwrap_or_default();
-        self.release_speech_dedupe_keys(&speech_waiting);
-        if speech_waiting.is_empty() && twitch_waiting.is_empty() {
-            debug!(target: "voicesub.tts", "all channel queues already empty");
-        } else {
-            info!(target: "voicesub.tts", "all channel queues cleared");
-        }
-        trace::trace("queue", "clear_all", json!({}));
-        self.queues.clear_all();
-    }
-
     pub fn queue_snapshot(&self, channel: &str) -> Result<Vec<SpeechQueueItem>, TtsServiceError> {
         self.queues
             .snapshot(channel)
@@ -723,11 +675,6 @@ impl TtsModuleService {
         debug!(target: "voicesub.tts", "queue force idle all channels");
         trace::trace("queue", "force_idle_all", json!({}));
         self.queues.force_idle_all();
-    }
-
-    /// Deprecated: clears speech channel only.
-    pub fn queue_clear(&self) {
-        let _ = self.queue_clear_channel(CHANNEL_SPEECH);
     }
 
     pub fn validate_device_id(&self, device_id: &str) -> bool {

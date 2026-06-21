@@ -158,6 +158,9 @@ pub struct SubtitleLineItem {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubtitlePayloadEvent {
     pub sequence: u64,
+    /// Completed phrase sequence when `lifecycle_state` is `completed_with_partial`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub completed_sequence: Option<u64>,
     pub source_lang: String,
     pub source_text: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -191,6 +194,7 @@ impl Default for SubtitlePayloadEvent {
     fn default() -> Self {
         Self {
             sequence: 0,
+            completed_sequence: None,
             source_lang: "auto".into(),
             source_text: String::new(),
             provider: None,

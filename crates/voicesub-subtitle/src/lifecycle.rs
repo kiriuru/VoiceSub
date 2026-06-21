@@ -80,6 +80,9 @@ impl SubtitleLifecycleCore {
             .and_then(|v| v.as_u64())
             .unwrap_or(completed_ttl_ms)
             .max(500);
+        // Deprecated keys (trace/diagnostics only; not used by lifecycle FSM):
+        // pause_to_finalize_ms / finalization_hold_ms — use asr.browser.force_finalization_timeout_ms.
+        // hard_max_phrase_ms / max_segment_ms — legacy; no active replacement.
         let pause_to_finalize_ms = lifecycle
             .get("pause_to_finalize_ms")
             .and_then(|v| v.as_u64())
@@ -122,6 +125,10 @@ impl SubtitleLifecycleCore {
 
     pub fn completed_expires_at_utc(&self) -> Option<String> {
         self.completed_expires_at_utc.clone()
+    }
+
+    pub(crate) fn completed_sequence(&self) -> Option<u64> {
+        self.completed_sequence
     }
 
     pub fn record_for_sequence(&self, sequence: u64) -> Option<Value> {
@@ -994,11 +1001,7 @@ impl SubtitleLifecycleCore {
 }
 
 fn utc_now_iso() -> String {
-    let secs = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-    format!("{secs}")
+    voicesub_types::utc_now_rfc3339()
 }
 
 fn format_expires_utc(delta_ms: i64) -> String {
@@ -1007,7 +1010,7 @@ fn format_expires_utc(delta_ms: i64) -> String {
         .map(|d| d.as_secs())
         .unwrap_or(0)
         .saturating_add((delta_ms / 1000).max(0) as u64);
-    format!("{secs}")
+    voicesub_types::epoch_secs_to_rfc3339(secs)
 }
 
 #[cfg(test)]

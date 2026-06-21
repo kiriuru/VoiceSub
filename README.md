@@ -10,7 +10,7 @@
   <a href="./docs/CHANGELOG.md">Changelog</a>
 </p>
 
-VoiceSub **`0.5.3`** (current line) is a Windows desktop app for streamers who need real-time subtitles with optional translation. It combines browser-based speech recognition, subtitle styling, routing, and OBS output in one local workflow. Default bind is `127.0.0.1:8765` — no cloud backend, no accounts.
+VoiceSub **`0.5.4`** (current line) is a Windows desktop app for streamers who need real-time subtitles with optional translation. It combines browser-based speech recognition, subtitle styling, routing, and OBS output in one local workflow. Default bind is `127.0.0.1:8765` — no cloud backend, no accounts.
 
 Successor to SST Desktop `0.4.4`; first VoiceSub release baseline: **`0.5.0`**. Core stack: **Rust + Tauri**, **Svelte dashboard**, **vanilla OBS overlay**.
 
@@ -20,7 +20,7 @@ Successor to SST Desktop `0.4.4`; first VoiceSub release baseline: **`0.5.0`**. 
 - Multi-language translation — **13 providers**, up to 5 translation lines
 - OBS **Browser Source overlay** + optional **OBS Closed Captions** (WebSocket)
 - Animated subtitle presets, per-slot styling, theme palette
-- **TTS module** — native/Sonic dual-sink playback; subtitle speech + Twitch chat TTS (up to **5 IRC channels** per OAuth, live filter apply)
+- **TTS module** — native/Sonic dual-sink playback; subtitle speech + Twitch chat TTS (up to **5 IRC channels** per OAuth, live filter apply); volume up to **150%**
 - Diagnostics ZIP export (redacted config + logs)
 - UI locales: **en, ru, ja, ko, zh**
 - Compact phone-style layout for secondary monitors
@@ -38,7 +38,7 @@ Successor to SST Desktop `0.4.4`; first VoiceSub release baseline: **`0.5.0`**. 
 
 ## Quick start
 
-1. Install **VoiceSub** from the release installer (`VoiceSub_0.5.3_x64-setup.exe` or latest in your release folder; developers: `build-release-msi.bat` → `build-release.ps1`).
+1. Install **VoiceSub** from the release installer (`VoiceSub_0.5.4_x64-setup.exe` or latest in your release folder; developers: `build-release-msi.bat` → `build-release.ps1`).
 2. Launch **VoiceSub.exe** — the main window opens the dashboard at `http://127.0.0.1:8765/`.
 3. In OBS, add a **Browser Source** pointing to `http://127.0.0.1:8765/overlay`.
 4. Configure translation and subtitle style if needed, then click **Start**.
@@ -100,7 +100,7 @@ npm run test:frontend
 
 ## Development
 
-Current patch line **`0.5.3`** — see [CHANGELOG](./docs/CHANGELOG.md).
+Current patch line **`0.5.4`** — see [CHANGELOG](./docs/CHANGELOG.md).
 
 ## License
 
@@ -143,7 +143,7 @@ Tauri `beforeBuildCommand`: `npm run build`. Resources bundled: `bin/dashboard`,
 
 `src-tauri/` is thin IPC only — no business logic.
 
-Version: `voicesub-types::PROJECT_VERSION` = **`0.5.3`**.
+Version: `voicesub-types::PROJECT_VERSION` = **`0.5.4`**.
 
 Full reference: [Technical Architecture](./docs/TECHNICAL_ARCHITECTURE.en.md).
 

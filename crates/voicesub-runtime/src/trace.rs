@@ -140,20 +140,30 @@ impl RuntimePipelineLog {
         );
     }
 
-    pub fn asr_ingest_published(&self, is_final: bool, sequence: u64, text_len: usize) {
+    pub fn asr_ingest_published(
+        &self,
+        is_final: bool,
+        sequence: u64,
+        text_len: usize,
+        ingest_latency_ms: Option<f64>,
+    ) {
         let event = if is_final {
             "asr_ingest_final_published"
         } else {
             "asr_ingest_partial_published"
         };
+        let mut fields = serde_json::Map::from_iter([
+            ("sequence".into(), json!(sequence)),
+            ("text_len".into(), json!(text_len)),
+        ]);
+        if let Some(ms) = ingest_latency_ms {
+            fields.insert("ingest_latency_ms".into(), json!(ms));
+        }
         self.emit(
             "runtime_ingest",
             RUNTIME_INGEST_SOURCE,
             event,
-            json!({
-                "sequence": sequence,
-                "text_len": text_len,
-            }),
+            Value::Object(fields),
         );
     }
 }
@@ -178,5 +188,29 @@ mod tests {
         assert_eq!(guard.len(), 1);
         assert_eq!(guard[0].0, RUNTIME_STATE_SOURCE);
         assert_eq!(guard[0].1, "runtime_status_duplicate_suppressed");
+    }
+
+    #[test]
+    fn asr_ingest_published_includes_latency_when_provided() {
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let seen_cb = seen.clone();
+        let log = RuntimePipelineLog::new(Some(Arc::new(move |source, event, fields| {
+            seen_cb
+                .lock()
+                .unwrap()
+                .push((source.to_string(), event.to_string(), fields));
+        })));
+        log.asr_ingest_published(false, 42, 7, Some(12.5));
+        {
+            let guard = seen.lock().unwrap();
+            assert_eq!(guard.len(), 1);
+            assert_eq!(guard[0].1, "asr_ingest_partial_published");
+            assert_eq!(guard[0].2["sequence"], 42);
+            assert_eq!(guard[0].2["ingest_latency_ms"], 12.5);
+        }
+
+        log.asr_ingest_published(true, 43, 3, None);
+        let guard = seen.lock().unwrap();
+        assert_eq!(guard[1].2.get("ingest_latency_ms"), None);
     }
 }

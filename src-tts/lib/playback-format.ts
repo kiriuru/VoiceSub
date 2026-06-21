@@ -1,4 +1,4 @@
-import { clampPlaybackRate } from "./speech-playback-policy";
+import { clampPlaybackRate, clampSpeechVolume } from "./speech-playback-policy";
 
 /** Human-readable playback speed for TTS UI (matches engine clamp 0.5–2.0). */
 export function formatPlaybackRate(rate: number | null | undefined): string {
@@ -6,9 +6,10 @@ export function formatPlaybackRate(rate: number | null | undefined): string {
   return `${clampPlaybackRate(numeric).toFixed(2)}×`;
 }
 
-/** Human-readable volume for TTS UI (0–100%). */
+/** Human-readable volume for TTS UI (0–150%). */
 export function formatSpeechVolume(volume: number | null | undefined): string {
-  const numeric = typeof volume === "number" && Number.isFinite(volume) ? volume : 1;
-  const clamped = Math.min(1, Math.max(0, numeric));
+  const clamped = clampSpeechVolume(
+    typeof volume === "number" && Number.isFinite(volume) ? volume : 1,
+  );
   return `${Math.round(clamped * 100)}%`;
 }

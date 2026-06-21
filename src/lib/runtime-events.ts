@@ -6,6 +6,15 @@ import type { RuntimeStateSnapshot, WsMessage } from "./types";
 
 export type RuntimeEventHandler = (message: WsMessage) => void;
 
+let activeRuntimeEventUnlisten: UnlistenFn | null = null;
+
+const RUNTIME_EVENT_LISTEN_MAX_ATTEMPTS = 3;
+const RUNTIME_EVENT_LISTEN_RETRY_MS = 150;
+
+function sleepMs(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export function normalizeRuntimeEventMessage(raw: unknown): WsMessage | null {
   if (!raw || typeof raw !== "object") {
     return null;
@@ -54,6 +63,14 @@ export function snapshotToRuntimeMessages(snapshot: RuntimeStateSnapshot): WsMes
       payload: snapshot.diagnostics as Record<string, unknown>,
     });
   }
+  // Replay Twitch connection status so the TTS window restores its connection UI after a
+  // bus lag resync (review MED#7). Chat messages are ephemeral and not replayed.
+  if (snapshot.twitch_connection && typeof snapshot.twitch_connection === "object") {
+    messages.push({
+      type: "twitch_connection_update",
+      payload: snapshot.twitch_connection as Record<string, unknown>,
+    });
+  }
   return messages;
 }
 
@@ -72,19 +89,29 @@ export async function startRuntimeEventChannelWithHandler(
   handler: RuntimeEventHandler,
   onConnected?: () => void,
 ): Promise<UnlistenFn | null> {
-  try {
-    await applyRuntimeSnapshot(handler);
-    const unlisten = await listen<unknown>("runtime-event", (event) => {
-      const message = normalizeRuntimeEventMessage(event.payload);
-      if (message) {
-        handler(message);
+  for (let attempt = 1; attempt <= RUNTIME_EVENT_LISTEN_MAX_ATTEMPTS; attempt++) {
+    try {
+      await applyRuntimeSnapshot(handler);
+      // Attach the new listener BEFORE detaching the previous one: a transient `listen`
+      // failure must never leave the window with no runtime IPC channel (review MED#14).
+      const unlisten = await listen<unknown>("runtime-event", (event) => {
+        const message = normalizeRuntimeEventMessage(event.payload);
+        if (message) {
+          handler(message);
+        }
+      });
+      const previous = activeRuntimeEventUnlisten;
+      activeRuntimeEventUnlisten = unlisten;
+      previous?.();
+      onConnected?.();
+      return unlisten;
+    } catch {
+      if (attempt < RUNTIME_EVENT_LISTEN_MAX_ATTEMPTS) {
+        await sleepMs(RUNTIME_EVENT_LISTEN_RETRY_MS * attempt);
       }
-    });
-    onConnected?.();
-    return unlisten;
-  } catch {
-    return null;
+    }
   }
+  return null;
 }
 
 export async function startRuntimeEventChannel(

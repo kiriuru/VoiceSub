@@ -11,7 +11,11 @@ const RECOMMENDED_OPENAI_TEXT_MODELS: &[&str] = &[
     "gpt-4.1",
 ];
 
+/// Accepted request body for OpenAI model endpoints.
+/// Fields are part of the API contract (clients may send them); the current
+/// implementation returns a static recommended list and does not call OpenAI.
 #[derive(Debug, Deserialize, Default)]
+#[allow(dead_code)]
 pub struct OpenAiModelsRequest {
     #[serde(default)]
     pub api_key: String,
@@ -29,18 +33,15 @@ pub async fn recommended_models() -> Response {
     .into_response()
 }
 
-pub async fn list_models(Json(body): Json<OpenAiModelsRequest>) -> Response {
-    let models: Vec<&str> = RECOMMENDED_OPENAI_TEXT_MODELS.to_vec();
-    let _ = body.api_key;
-    let _ = body.base_url;
-    let _ = body.show_all;
+pub async fn list_models(Json(_body): Json<OpenAiModelsRequest>) -> Response {
     Json(json!({
-        "models": models,
+        "models": RECOMMENDED_OPENAI_TEXT_MODELS,
         "source": "static_recommended"
     }))
     .into_response()
 }
 
-pub async fn usable_models(Json(body): Json<OpenAiModelsRequest>) -> Response {
-    list_models(Json(body)).await
+/// Alias for `list_models`; retained for API surface compatibility.
+pub async fn usable_models(body: Json<OpenAiModelsRequest>) -> Response {
+    list_models(body).await
 }

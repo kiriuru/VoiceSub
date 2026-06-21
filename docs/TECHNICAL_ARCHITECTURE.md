@@ -1,6 +1,6 @@
-# VoiceSub 0.5.3 — Технический документ
+# VoiceSub 0.5.4 — Технический документ
 
-Актуально для линии кода, где `voicesub-types::PROJECT_VERSION = "0.5.3"`.
+Актуально для линии кода, где `voicesub-types::PROJECT_VERSION = "0.5.4"`.
 
 Этот документ описывает layout проекта VoiceSub, контракт HTTP/WebSocket/Tauri IPC, схему конфигурации, поток данных через Rust runtime и поверхности frontend. Документ — **канонический technical reference** для активной разработки. README — обзор продукта; CHANGELOG — история релизов; политика агентов — `AGENTS.md`.
 
@@ -87,6 +87,7 @@ Tauri dev: embedded HTTP на `http://127.0.0.1:8765`; main webview открыв
 | `GET /api/runtime/status` | Runtime snapshot + diagnostics |
 | `GET /api/settings/load` | Загрузка config + presets + fonts |
 | `POST /api/settings/save` | Нормализация + сохранение `config.toml` |
+| `POST /api/ui/sync` | UI theme/locale sync → `ui_config_sync` |
 | `GET /api/exports/diagnostics` | Redacted diagnostics ZIP |
 | `GET /api/obs/url` | `{ overlay_url }` для OBS |
 
@@ -134,7 +135,7 @@ Tauri dev: embedded HTTP на `http://127.0.0.1:8765`; main webview открыв
 
 | Слой | Технологии |
 | --- | --- |
-| Core runtime | Rust 1.85+, Tokio, Axum 0.8 |
+| Core runtime | Rust 1.85+ (edition 2024), Tokio, Axum 0.8 |
 | Desktop shell | Tauri 2 → `VoiceSub.exe` (NSIS `setup.exe`) |
 | Dashboard UI | Svelte 5 + Vite → `bin/dashboard/` |
 | Browser worker | Svelte 5 + Vite → `bin/worker/` |
@@ -184,7 +185,7 @@ flowchart LR
   RT --> TTS
 ```
 
-**Hot path:** `external_asr_update` (WS) → transcript controller → subtitle lifecycle → translation dispatcher → `subtitle_payload_update` / `overlay_update` (WS) → dashboard + overlay.
+**Hot path:** `external_asr_update` (WS) → transcript controller → subtitle lifecycle → translation dispatcher → `overlay_update` (WS live + Tauri IPC) → dashboard + OBS overlay. `subtitle_payload_update` — только Tauri IPC snapshot/replay (не дублируется на live `/ws/events`). Partial `transcript_update` коалесится (default 90 ms); subtitle lifecycle и `overlay_update` видят каждый partial.
 
 ## 4. Layout репозитория
 
@@ -234,7 +235,7 @@ F:\AI\VoiceSub\
 
 ## 5. Rust workspace (crates)
 
-Workspace members (`Cargo.toml`): 14 crates + `src-tauri` + `xtask`.
+Workspace members (`Cargo.toml`): 14 domain crates + `src-tauri` (отдельного `xtask` нет).
 
 ### Граф зависимостей (упрощённо)
 
@@ -294,6 +295,12 @@ src-tauri (Layer 4: IPC, window, bundle only)
 
 Embedded HTTP server: dedicated Tokio runtime в Tauri process; bind из `AppConfig` + `VOICESUB_ALLOW_LAN`.
 
+**Hot path 0.5.4:**
+
+- `browser_speech_source.rs` — sync `accept_update` + async `process_ingest_work` (ingest mutex не удерживается на subtitle/WS work).
+- `SubtitlePayloadForwarder` — TTS listener на отдельном упорядоченном потоке (`voicesub-subtitle-payload-forward`).
+- Live subtitle WS fanout — только **`overlay_update`**; `subtitle_payload_update` — Tauri IPC snapshot, не дублируется на `/ws/events`.
+
 ## 7. Конфигурация и миграции
 
 ### Хранение
@@ -316,7 +323,7 @@ Embedded HTTP server: dedicated Tokio runtime в Tauri process; bind из `AppCo
 | `obs_closed_captions` | OBS WebSocket CC settings |
 | `translation` | Provider, lines (до 5), cache, limits, `provider_settings` |
 | `subtitle_output` | Source/translation display order |
-| `subtitle_lifecycle` | TTL, finalize timing, sync flags |
+| `subtitle_lifecycle` | TTL, sync flags; deprecated timing keys только normalize |
 | `source_text_replacement` | Find/replace pairs для ASR текста |
 | `logging` | `full_enabled` — master switch deep diagnostics |
 
@@ -333,7 +340,7 @@ Embedded HTTP server: dedicated Tokio runtime в Tauri process; bind из `AppCo
 `ConfigStore::import_sst_json_file` / load с `config_version < 8`:
 
 1. `migrate_sst_payload` — version steps, build `translation.lines` from old `targets`
-2. `apply_voicesub_import_rules` — strip removed keys (RNNoise, model fields, …)
+2. `apply_voicesub_import_rules` — strip removed legacy ASR keys (model paths, GPU/VAD tuning, …)
 3. `repair_legacy_keep_completed_false` + `normalize_config_payload`
 
 Удалённые providers (например `mymemory`) → fallback `google_translate_v2`.
@@ -378,6 +385,7 @@ Global middleware: CSP header, `Cache-Control: no-store`.
 | GET | `/api/settings/load` | Config + subtitle presets + font catalog |
 | POST | `/api/settings/save` | Merge/save + live apply |
 | GET/POST/DELETE | `/api/profiles`, `/api/profiles/{name}` | Profile CRUD |
+| POST | `/api/ui/sync` | Debounced UI-only sync → `ui_config_sync` на EventBus (theme/locale между dashboard и TTS) |
 
 ### Runtime / OBS
 
@@ -448,7 +456,7 @@ Global middleware: CSP header, `Cache-Control: no-store`.
 
 - Клиент receive-only (inbound text ignored)
 - On connect: `hello` (`type: "hello"`, `message: "connected"`)
-- Replay last: `runtime_update`, `subtitle_payload_update`, `overlay_update`
+- Replay last: `runtime_update`, `overlay_update`
 - Bounded per-socket queue (default 128), dedupe by `type`
 
 **Envelope:** `{ "type": "<channel>", "payload": {…} }`  
@@ -461,13 +469,13 @@ Payload enrichment: `event_sequence`, `created_at_ms`, `event_type` (`WsEventPub
 | `preflight_update` | `{ running: bool }` during start/stop |
 | `diagnostics_update` | ASR diagnostics snapshot |
 | `model_status_update` | Model/ASR readiness |
-| `transcript_update` | ASR partial/final events |
-| `transcript_segment_event` | Segment-level duplicate channel |
-| `subtitle_payload_update` | Subtitle presentation (replay on connect) |
-| `overlay_update` | Overlay render body (replay on connect) |
+| `transcript_update` | ASR partial/final events (единственный live ASR channel с 0.5.4) |
+| `subtitle_payload_update` | Subtitle presentation (**только Tauri IPC snapshot** — не публикуется на `/ws/events`; live + WS replay — через `overlay_update`) |
+| `overlay_update` | Overlay render body (live + **replay on connect**) |
 | `translation_update` | Per-sequence translation results |
 | `twitch_chat_message` | Twitch chat for TTS |
 | `twitch_connection_update` | Twitch connection state |
+| `ui_config_sync` | `{ ui: … }` sync theme/locale (Tauri IPC; через `/api/ui/sync`) |
 
 **Stale guard:** overlay (`overlay.js` + `ws-stale-guard-logic.js`) отбрасывает устаревшие события после stop/start (timestamp-first при reset sequence).
 
@@ -510,8 +518,11 @@ Payload enrichment: `event_sequence`, `created_at_ms`, `event_type` (`WsEventPub
 | Command | Назначение |
 | --- | --- |
 | `voicesub_version` | Returns `PROJECT_VERSION` |
+| `get_loopback_api_token` | Per-session token для protected `/api/*` (fallback без HTML injection) |
 | `set_dashboard_layout` | Compact (390×844) vs standard (1280×900) window |
 | `launch_browser_worker` | Launch Chrome to worker URL without full runtime start |
+| `open_external_https_url` | Открыть validated HTTPS URL в system browser (update banner **Download**) |
+| `open_local_http_url` | Открыть validated loopback HTTP URL в system browser |
 
 ### TTS commands (`src-tauri/src/tts.rs`)
 
@@ -525,17 +536,33 @@ Payload enrichment: `event_sequence`, `created_at_ms`, `event_type` (`WsEventPub
 | `tts_list_output_devices` | WASAPI enumeration (label-first for native) |
 | `tts_get_audio_routing` / `tts_bind_window_audio` | Legacy WinAPI per-process routing (single device) |
 | `tts_update_speech_settings` / `tts_update_voice_settings` | Speech params |
-| `tts_plan_subtitle_speech` / `tts_reset_subtitle_planner` | Subtitle-driven queue |
-| `tts_channel_enqueue` | Enqueue text on `speech` or `twitch` channel (preferred) |
-| `tts_enqueue` | **Deprecated** — backward-compat speech enqueue; prefer `tts_channel_enqueue` |
+| `tts_speak_sample` | Ручной Speak test → Rust `ChannelOrchestrator` (`speech`, `source: test`) |
+| `tts_reset_subtitle_planner` | Сброс dedupe planner субтитров |
+| `tts_channel_clear` / `tts_channel_force_idle` | Очистка / сброс состояния канала |
+| `tts_get_resource_telemetry` | Playback / queue resource metrics |
+| `tts_report_webview_activity` | TTS webview heartbeat → `WebviewMemoryManager` suspend policy |
 | `tts_twitch_*` | Twitch connect/disconnect/status/settings |
-| `tts_sync_source_text_replacement` | Sync replacement rules |
 | `tts_open_window` | Open/focus `/tts` webview |
 | `tts_open_system_url` | Open validated Twitch OAuth URL externally |
-| `open_external_https_url` | Open GitHub release page (update banner **Download**) in system browser |
 | `get_runtime_state_snapshot` | Replay runtime/subtitle/overlay/translation/diagnostics for Tauri shell on connect |
 
+### `src-tauri/` modules (shell only)
+
+| File | Роль |
+| --- | --- |
+| `lib.rs` | Tauri setup, HTTP runtime bootstrap, IPC registration, EventBus pump |
+| `event_routing.rs` | Per-window `runtime-event` routing + lagged snapshot resync |
+| `webview_memory.rs` | WebView2 suspend/memory policy (`WebviewMemoryManager`) |
+| `dashboard_nav.rs` | Main webview URL helpers |
+| `webview2_gate.rs` | WebView2 runtime presence check before window create |
+| `tts.rs` | TTS IPC adapter → `voicesub-tts` |
+| `shell.rs` | External URL open helpers |
+
 **Tauri events (shell clients):** `runtime-event` (WS-shaped envelopes), `tts-speech-activity` (planned speech queue items for TTS UI log).
+
+**`runtime-event` routing (per window):** bus→IPC pump (`src-tauri/src/event_routing.rs`) эмитит через `emit_to(label, …)`, не global `emit`. **Main** dashboard получает все envelope; **tts** window — только `twitch_chat_message`, `twitch_connection_update`, `runtime_update`, `runtime_status`, `ui_config_sync`. Высокочастотный `transcript_update` / `overlay_update` не флудит IPC TTS webview. Payload по ссылке (без deep-clone). При `broadcast::RecvError::Lagged` pump re-fetch `runtime_state_snapshot` и re-emit (`snapshot_to_envelopes`).
+
+**Partial coalescing:** partial `transcript_update` — leading-edge throttle в `TranscriptController` (default 90 ms, env `VOICESUB_TRANSCRIPT_PARTIAL_MIN_INTERVAL_MS`; новая фраза/`sequence` и все final — без задержки). Subtitle lifecycle и `overlay_update` видят каждый partial.
 
 **Lifecycle:** main webview → `http://{bind_addr}/` on setup; on close → TTS shutdown → runtime stop.
 
@@ -566,6 +593,19 @@ Master switch: `logging.full_enabled` in config **или** `VOICESUB_DEEP_DIAGNO
 | `pipeline-trace.jsonl` | `VOICESUB_TRACE_PIPELINE` |
 | `session-lifecycle.json` | всегда (маркер сессии); шаги shutdown/panic дублируются в `pipeline-trace.jsonl` при deep diagnostics |
 
+### Форматы timestamp-полей (0.5.4+)
+
+Ряд полей в логах и subtitle lifecycle, ранее хранивших **Unix epoch seconds строкой**, теперь используют **RFC 3339 UTC** (например `2026-06-21T07:01:00Z`). **Ключи payload не менялись** — изменился только формат значения.
+
+| Поле | Где | Примечание |
+| --- | --- | --- |
+| `timestamp_utc` | `session-latest.jsonl`, deep JSONL traces | Внешние скрипты должны принимать оба формата |
+| `finalized_at_utc`, `completed_expires_at_utc` | Subtitle lifecycle payload | Overlay/dashboard не парсят их как числа |
+
+Helpers: `voicesub_types::utc_now_rfc3339()`, `epoch_secs_to_rfc3339()`. Пример: `tools/_analyze_tts_session.py` (`ts()` принимает epoch и RFC 3339).
+
+При deep diagnostics записи ASR ingest в `pipeline-trace.jsonl` могут включать `ingest_latency_ms` (`trace.rs` + `transcript_controller.rs`).
+
 Disable: same vars `=0` / `false`.  
 Verbose runtime-events: `VOICESUB_TRACE_RUNTIME_EVENTS_VERBOSE`.
 
@@ -576,6 +616,10 @@ Verbose runtime-events: `VOICESUB_TRACE_RUNTIME_EVENTS_VERBOSE`.
 | Variable | Назначение |
 | --- | --- |
 | `VOICESUB_ALLOW_LAN` | Bind `0.0.0.0` |
+| `VOICESUB_TRANSCRIPT_PARTIAL_MIN_INTERVAL_MS` | Мин. интервал partial `transcript_update` (default **90**; `0` = без коалесинга; не влияет на `overlay_update`) |
+| `VOICESUB_BROWSER_AFFINITY` | CPU affinity browser worker (`1` / `true`) |
+| `VOICESUB_BROWSER_AFFINITY_MASK` | Hex override маски affinity |
+| `VOICESUB_BROWSER_AFFINITY_EXCLUDE_LOW` | Исключить low-power ядра из маски (default `1`) |
 | `RUST_LOG` | `tracing` filter override |
 | `VOICESUB_TTS_PER_PROCESS_ROUTING` | WinAPI TTS audio routing |
 | `VOICESUB_TTS_ALLOW_SYSTEM_PYTHON` | Allow system Python for TTS fetcher |
@@ -603,8 +647,9 @@ Verbose runtime-events: `VOICESUB_TRACE_RUNTIME_EVENTS_VERBOSE`.
 - Edge: `--disable-sync`, `--allow-browser-signin=false`; **never** `--disable-extensions` / `--bwsi`
 - **No** `--app`, hidden windows, in-tab worker
 - Anti-throttling Chrome flags + Windows EcoQoS opt-out (`launch_config.rs`, `ecoqos.rs`)
-- Detached high-priority process; stop via `taskkill /T /F` (только при реальном `pid > 0`)
-- **Launch stability (0.5.2+):** `launch_stability.rs` (flag profile), `profile_bloat_guard.rs` (profile dir hygiene), `process_affinity.rs` (Windows CPU affinity); contract tests in `crates/voicesub-browser/tests/chrome_launch_contract.rs`
+- Detached process at **`ABOVE_NORMAL_PRIORITY_CLASS`** when `use_high_priority` (default true): ASR отзывчив без `HIGH_PRIORITY_CLASS`, вытесняющего foreground apps. Fallback на normal при `ERROR_ACCESS_DENIED`. Stop via `taskkill /T /F` (только при реальном `pid > 0`)
+- **Orphan reaping (`orphan_guard.rs`):** live worker PID сохраняется в `user-data/browser-worker.pid` при launch и очищается при graceful stop. `RuntimeService::start` убивает осиротевший воркер прошлой *аварийной* сессии — только если PID всё ещё принадлежит Chromium (`chrome.exe` / `msedge.exe`), защита от PID reuse
+- **Launch stability (0.5.2+):** `launch_stability.rs`, `profile_bloat_guard.rs`, `process_affinity.rs`; contract tests in `crates/voicesub-browser/tests/chrome_launch_contract.rs`
 
 ### Test harness (без spawn Chrome)
 
@@ -619,9 +664,54 @@ Verbose runtime-events: `VOICESUB_TRACE_RUNTIME_EVENTS_VERBOSE`.
 | `worker-controller.ts` | Autostart, recognition lifecycle |
 | `socket-bridge.ts` | `/ws/asr_worker` connect, `browser_asr_control` |
 | `session-manager.ts` | Session age, reconnect, watchdog |
+| `long-segment-flush-logic.ts` | Сброс буфера Web Speech после длинного сегмента (≥200 символов) |
 | `web-speech-policy.ts` | Strip on-device hints, overlap policy |
 
-**Defaults:** lang `ru-RU`, interim/continuous on, force-finalization 1600ms, max session age 180s.
+**Worker UI defaults:** lang `ru-RU`, interim/continuous on, force-finalization idle **1600 ms** (панель worker), max session age **180 s**.
+
+### Long-segment flush (буфер Web Speech)
+
+После **committed** сегмента (natural или forced final), если пик partial или длина final ≥ **200 символов**, worker сбрасывает раздутый in-session буфер `SpeechRecognition.results`. Иначе следующая речь стабильно финализируется короткими фрагментами (в `pipeline-trace.jsonl` — серия `asr_ingest_final_published` с малым `text_len`).
+
+| Режим | Действие |
+| --- | --- |
+| `native_continuous` (`continuous=true`, по умолчанию) | `requestRecognitionFlush` → `recognition.stop()` → restart с reason `long_segment_flush` (~150 ms, как `session_cycle`) |
+| Overlap (`continuous=false`) | сначала `preStartNextOverlapInstance`, затем `stop()` только **активного** слота → handoff на pre-warmed buddy |
+
+**Не настраивается** (порог `DEFAULT_LONG_SEGMENT_FLUSH_MIN_CHARS = 200` в `long-segment-flush-logic.ts`). State: `currentSegmentPeakPartialChars`, счётчик `longSegmentFlushCount`. **Не заменяет** ротацию по возрасту сессии (`max_browser_session_age_ms`) и idle forced-final (`force_finalization_timeout_ms`).
+
+### Расширенные настройки Web Speech (dashboard)
+
+**UI:** Settings → More → Recognition → «Расширенные настройки Web Speech» (`WebSpeechAdvancedSettings.svelte`). У каждого числового поля — кнопка **`!`** (`FieldHelpButton.svelte`) с локализованным описанием (en, ru, ja, ko, zh); клик — popover, hover — `title`.
+
+**Маппинг config:**
+
+| Секция UI | Путь config | Runtime |
+| --- | --- | --- |
+| Пороги forced final | `asr.browser.force_final_min_*` | Browser worker (`transcript-logic.ts`) |
+| Перезапуск и восстановление | `asr.browser.*_restart_delay_ms`, `minimum_reconnect_interval_ms`, `stuck_stopping_timeout_ms` | Worker session manager |
+| Сеть | `asr.browser.network_reconnect_*` | Worker backoff |
+| Ротация сессии | `asr.browser.max_browser_session_age_ms`, `prepare_cycle_before_ms` | Worker session cycle |
+| Фильтрация partial | `asr.realtime.partial_min_delta_chars`, `partial_coalescing_ms` | Rust `partial_emit.rs` |
+
+**Канонические defaults** (источник `src/lib/webspeech-advanced-defaults.ts`, зеркало в `defaults.rs`, `config-normalize.ts`, `worker-defaults.ts`):
+
+| Ключ | Default |
+| --- | ---: |
+| `force_final_min_chars` | 8 |
+| `force_final_min_stable_ms` | 750 |
+| `minimum_reconnect_interval_ms` | 500 |
+| `normal_restart_delay_ms` | 150 |
+| `no_speech_restart_delay_ms` | 150 |
+| `stuck_stopping_timeout_ms` | 2000 |
+| `network_reconnect_initial_ms` | 500 |
+| `network_reconnect_max_ms` | 30000 |
+| `max_browser_session_age_ms` | 180000 |
+| `prepare_cycle_before_ms` | 30000 |
+| `partial_min_delta_chars` | 0 |
+| `partial_coalescing_ms` | 0 |
+
+**Не в этой панели:** `asr.browser.force_finalization_timeout_ms` — idle-таймаут forced final; настраивается в **окне Web Speech worker**. После изменения lifecycle-ключей переоткройте worker.
 
 ## 13. Перевод: lifecycle и инварианты
 
@@ -672,9 +762,14 @@ Verbose runtime-events: `VOICESUB_TRACE_RUNTIME_EVENTS_VERBOSE`.
 
 - `completed_block_ttl_ms` (default 4500, min 500)
 - `completed_source_ttl_ms`, `completed_translation_ttl_ms`
-- `pause_to_finalize_ms`, sync flags
+- sync flags (`allow_early_replace_on_next_final`, `sync_source_and_translation_expiry`, `keep_completed_translation_during_active_partial`)
 
-**Router actor** (`router_actor.rs`) — async publish path с `subtitle_payload_update` + `overlay_update` fanout.
+**Deprecated (только normalize при load; на runtime не влияют):**
+
+- `subtitle_lifecycle.pause_to_finalize_ms` ↔ `asr.realtime.finalization_hold_ms` — для idle forced final используйте `asr.browser.force_finalization_timeout_ms` (UI worker)
+- `subtitle_lifecycle.hard_max_phrase_ms` ↔ `asr.realtime.max_segment_ms` — legacy, без замены
+
+**Router actor** (`router_actor.rs`) — async publish path; live fanout — только `overlay_update` (`OverlayBroadcaster` dedupe). TTS и snapshot получают тот же presentation payload из router callback. Overlay payloads могут включать `completed_sequence` при `lifecycle_state: completed_with_partial` (active partial — `sequence`; completed block — `completed_sequence` для TTS dedupe).
 
 ## 15. Стили субтитров и overlay
 
@@ -755,9 +850,20 @@ Shipped as **module** under `bin/modules/tts/` + Svelte UI at `/tts`.
 | `speech` | `subtitle_payload` → `TtsSpeechPipeline` | `ChannelOrchestrator` (speech) | root `audio_output_device_*` |
 | `twitch` | IRC → `TwitchChatService` | `ChannelOrchestrator` (twitch) | `[twitch].audio_output_device_*` |
 
-Live path: plan → **`google_fetch.rs`** (HTTP) → enqueue → prefetch → `PlaybackHub` (`tts_play_audio`). TTS WebView — settings UI + manual sample test only (`SpeechEngine` preview).
+Live path: plan → **`google_fetch.rs`** (HTTP + **`upstream_retry.rs`** 3× retry на transport/5xx/429/408) → enqueue → prefetch → `PlaybackHub` (`tts_play_audio`). Длинный текст: `assemble_ordered_chunks` сохраняет порядок чанков после parallel fetch. TTS WebView — настройки + ручной sample test через `tts_speak_sample` (Rust orchestrator; без JS pump).
 
-**0.5.1 (legacy note):** очередь/prefetch жили в `src-tts/lib/speech-engine.ts` + `google-tts.ts`; в **0.5.2** hot path перенесён в Rust (`speech_pipeline.rs`, `channel_orchestrator.rs`).
+**0.5.4 pipeline hardening:**
+
+| Область | Module | Поведение |
+| --- | --- | --- |
+| Network | `upstream_retry.rs`, `google_fetch.rs`, `python_runtime.rs` | Shared retry helper; connect/read timeouts |
+| Prefetch | `channel_orchestrator.rs` | Один in-flight prefetch на канал; `Notify` wait; symmetric cancel на `clear` / `set_enabled(false)` |
+| Config I/O | `config.rs` | In-memory cache; atomic save; corrupt backup |
+| Planner | `subtitle_speech.rs` | `completed_with_partial` speech planning; `completed_sequence` для dedupe |
+| Chat log UI | `src-tts/lib/twitch-chat-log.ts` | Dedupe по Twitch `id` / `event_sequence` перед prepend |
+| Voice gain | `voicesub-audio/playback.rs`, `config.rs` | clamp `speech_volume` **0–150%**; Twitch override наследует или переопределяет root |
+
+**Удалено в 0.5.4 (чистка TTS):** `speech-engine.ts`, browser playback в `google-tts.ts`, deprecated IPC (`tts_enqueue`, `tts_plan_subtitle_speech`, `tts_channel_*` enqueue handshake, `tts_sync_source_text_replacement`).
 
 ### Playback modes (`playback_mode` in `user-data/modules/tts/config.toml`)
 
@@ -771,6 +877,18 @@ Live path: plan → **`google_fetch.rs`** (HTTP) → enqueue → prefetch → `P
 
 Устройства: **label-first** (WASAPI friendly name → `cpal::Device`). Список — `tts_list_output_devices`.
 
+### Громкость и скорость (`speech_volume`, `speech_rate`)
+
+| Поле | Диапазон | Применение |
+| --- | --- | --- |
+| `speech_volume` (корень) | **0.0–1.5** (0–150%) | `clamp_speech_volume` в `voicesub-audio`; native `PlaybackHub` через `rodio` `amplify()` |
+| `[twitch].speech_volume` | **≥ 0** override, **−1** inherit | Тот же clamp при активном override (`effective_speech_volume`) |
+| `speech_rate` / `[twitch].speech_rate` | **0.5–2.0×** | Только sonic/browser path; native mode фиксирует 1.0× |
+
+Нормализация при каждом save/load (`normalize_tts_config`, IPC `update_voice_settings`). UI: `src-tts/lib/playback-format.ts` — `formatSpeechVolume` (`85%`, `150%`), `formatPlaybackRate` (`1.25×`); вкладки Speech и Twitch advanced — live-числа у слайдеров.
+
+**Реализация:** decode MP3 → `f32` PCM → `apply_speech_volume_to_pcm`: линейно ≤100%; **>100%** — compression + makeup gain + brick-wall limit на 0 dBFS. Browser sample — тот же алгоритм на `AudioBuffer`.
+
 ### Twitch IRC и фильтры (`voicesub-twitch`)
 
 | Аспект | Поведение |
@@ -780,10 +898,12 @@ Live path: plan → **`google_fetch.rs`** (HTTP) → enqueue → prefetch → `P
 | Reconnect | `run_session_with_reconnect()` — auto-retry при обрыве stream/TCP/TLS; backoff 1→30 s; auth/settings останавливают цикл |
 | Emotes | Twitch IRC tag + BTTV/7TV/Twitch lexical; **чисто числовые токены** не матчатся как emote codes |
 | Emoji strip | `strip_unicode_emoji` сохраняет decimal digits (ASCII / Arabic-Indic / Fullwidth); `\p{Emoji}` не съедает `0–9` в тексте |
-| Links | `links.rs` + двойной `strip_links` в pipeline; link-only → `speakable: false` |
-| Symbols | `strip_symbols` — comma-separated токены (default `@, &, $, _`); optional `replace_underscore_with_space` для nick/text |
-| Lang | Lingua 1.8 subset + Unicode heuristics + whatlang; `strip_leading_speaker_label` |
-| UI | `TwitchPanel.svelte`: connection card, save queue (`saveNow` / debounce), бейдж «Настройки применены», `?` nick help (`popover-position.ts`) |
+| Invisible chars | `strip_invisible_chat_characters` (U+034F, U+3164, `\p{Cf}`, …) до symbol/link/lang фильтров |
+| Links | При **`strip_links=true`**: `links.rs` удаляет URL; link-only → `speakable: false`. При **`strip_links=false`**: URL остаются в speak text; отказ только если нет лингвистического содержания без strip ссылок |
+| Mentions | TTS path: `normalize_twitch_mentions` (`@user` → `user`, текст сообщения сохраняется). Clean/detection path: `strip_twitch_mentions` |
+| Symbols | `strip_symbols` — comma-separated токены (default `@, &, $, _`); `&`/`$` между цифрами → пробел (URL query `&` сохраняется); digit groups (`500&100`) озвучиваются; optional `replace_underscore_with_space` |
+| Lang | Lingua 1.8 subset + Unicode heuristics + whatlang; `strip_leading_speaker_label` (не трактует `https:` как метку спикера) |
+| UI | `TwitchPanel.svelte`: connection card, save queue (`saveNow` / debounce), бейдж «Настройки применены», `?` nick help (`popover-position.ts`); advanced overrides — live **rate/volume** (`playback-format.ts`) |
 
 Config: `user-data/modules/tts/config.toml` → секция `[twitch]`.
 
@@ -853,31 +973,31 @@ Default `release_root`: `F:\AI\VoiceSub - release\v{version}\`
 **Sources:** `src/`  
 **Build:** `vite.config.ts` → `bin/dashboard/` (`base` implicit `/`)
 
-### Navigation
+### Navigation (Material 3 shell, 0.5.3+)
 
-Single-page **tab switch** (no SvelteKit router):
+Single-page app с **primary destinations** (`src/lib/navigation.ts`) — без SvelteKit router:
 
-| Tab ID | Panel |
+| Destination ID | Panel / hub |
 | --- | --- |
+| `live` | Live overview (`OverviewSection.svelte`) — primary pane compact layout |
 | `translation` | `TranslationPanel.svelte` |
-| `subtitles` | `SubtitlesPanel.svelte` |
-| `style` | `StylePanel.svelte` |
-| `theme` | `ThemePanel.svelte` |
+| `subtitles` | Hub → `SubtitlesPanel.svelte` + `StylePanel.svelte` |
 | `obs` | `ObsPanel.svelte` |
-| `replacement` | `ReplacementPanel.svelte` |
-| `tools` | `ToolsPanel.svelte` |
-| `settings` | `SettingsPanel.svelte` |
-| `help` | `HelpPanel.svelte` |
+| `modules` | `ModulesPanel.svelte` (launcher TTS module) |
+| `more` | Hub → `ThemePanel`, `ReplacementPanel`, `ToolsPanel`, `SettingsPanel`, `HelpPanel` |
 
-Compact layout adds pane `"live"` (overview).
+Standard layout использует те же destinations через `NavRail` / `BottomNav`. Command palette (`Ctrl+K`) — deep links через `NavTarget`.
 
 ### Key libs
 
 | File | Роль |
 | --- | --- |
-| `src/lib/api.ts` | REST client |
-| `src/lib/ws.ts` | `/ws/events` + stale guard |
-| `src/lib/stores/app.ts` | App state |
+| `src/lib/api.ts` | REST helpers (prefer `loopback-api-client.ts` для authed fetch) |
+| `src/lib/loopback-api.ts` | Token bootstrap (`get_loopback_api_token` + HTML injection) |
+| `src/lib/runtime-events.ts` | **Production** Tauri `runtime-event` consumer + snapshot replay |
+| `src/lib/ui-config-sync.ts` | Cross-window UI sync → `POST /api/ui/sync` + `ui_config_sync` |
+| `src/lib/ws.ts` | Legacy `/ws/events` client (dev / external browser) |
+| `src/lib/stores/app.ts` | App state + WS/event dispatch |
 | `src/lib/config-*.ts` | Config normalize/save |
 
 ### Layout IPC
@@ -888,7 +1008,7 @@ Compact layout adds pane `"live"` (overview).
 
 **Файлы:** `src/lib/preview-payload.ts`, `src/lib/components/SubtitleOutputPreview.svelte` (встроен из `OverviewSection.svelte`)
 
-Пока runtime в фазе `idle`, dashboard показывает **placeholder preview** (`preview.source_line`, labels переводов) вместо live `overlay_update` с WS. Пустой `overlay_update` после Save **не затирает** preview. При `running=true` preview переключается на live payload (`subtitle_payload_update` / `overlay_update`). Тест: `src/lib/preview-payload.test.ts`.
+Пока runtime в фазе `idle`, dashboard показывает **placeholder preview** (`preview.source_line`, labels переводов) вместо live `overlay_update`. Пустой `overlay_update` после Save **не затирает** preview. При `running=true` preview переключается на live `overlay_update` (и `subtitle_payload_update` из Tauri snapshot при connect). Тест: `src/lib/preview-payload.test.ts`.
 
 ## 21. Frontend: overlay (vanilla)
 
@@ -903,10 +1023,10 @@ Compact layout adds pane `"live"` (overview).
 | `shared/js/core/ws-stale-guard-logic.js` | Stale filter |
 | `shared/js/i18n/` | Overlay i18n bundle |
 
-**WS:** `ws(s)://{host}/ws/events` — handles `transcript_update`, `overlay_update`.  
-**Reconnect:** exponential backoff 1s → 10s max; last frame preserved on disconnect (OBS UX).  
+**WS:** `ws(s)://{host}/ws/events` — **только `overlay_update`** (live кадры + replay при connect). OBS overlay не потребляет `transcript_update` (dashboard / внешние WS-клиенты могут). Payload нормализуется в `overlay.js` (`normalizeOverlayPayload`, allowlist lifecycle как в `src/lib/overlay-normalizer.ts`).  
+**Reconnect:** exponential backoff 1s → 10s max; последний кадр сохраняется при disconnect (OBS UX).  
 **Debug:** `?debug=1` включает буфер `writeDebug` + `console.debug`; `?debug-subtitles=1` — ring trace эффектов (`window.__sstOverlaySubtitleTrace`). В production hot path нет `console.log`.  
-**Empty payload:** `disposeRenderContainer(linesContainer)` when render returns `empty: true` (TTL / Stop / idle). Idle TTL также требует `hasVisibleRenderedFrame()` — иначе очистка state без `render()` оставляет последний кадр в OBS. Cache-bust: `overlay.html` → `overlay.js?v=20260615a`.
+**Empty payload:** `disposeRenderContainer(linesContainer)` when render returns `empty: true` (TTL / Stop / idle). Idle TTL также требует `hasVisibleRenderedFrame()` — иначе очистка state без `render()` оставляет последний кадр в OBS. Pending RAF отменяется при явной очистке. Cache-bust: `overlay.html` → `overlay.js?v=20260621a`.
 
 ## 22. Frontend: browser worker (Svelte)
 
@@ -934,9 +1054,9 @@ Config key: `ui.language` (empty = browser default).
 
 ## 24. Версионирование и проверка обновлений
 
-- **Single source (interim):** `voicesub-types::PROJECT_VERSION` = `"0.5.3"`
-- Workspace `Cargo.toml` `[workspace.package].version` = `0.5.3`
-- `package.json`, `tauri.conf.json` — aligned `0.5.3`
+- **Single source (interim):** `voicesub-types::PROJECT_VERSION` = `"0.5.4"`
+- Workspace `Cargo.toml` `[workspace.package].version` = `0.5.4`
+- `package.json`, `tauri.conf.json` — aligned `0.5.4`
 - `GET /api/version`, `POST /api/updates/check` — GitHub Releases poll (`voicesub-runtime/src/http/update_service.rs`, `voicesub-types::version`)
 - Config `updates.*` — defaults in `voicesub-config::defaults`; legacy configs merge via `normalize_updates_config`
 - Dashboard banner: `UpdateBanner.svelte`; download → Tauri `open_external_https_url` (`src-tauri/src/shell.rs`)
@@ -956,7 +1076,7 @@ Config key: `ui.language` (empty = browser default).
 | Unit | `crates/*/src/**` | FSM, stale drop, normalization |
 | Golden | `tests/golden/` + crate `tests/golden_*.rs` | Payload parity |
 | Integration | `tests/integration/`, `voicesub-http/tests/` | HTTP/WS smoke |
-| Frontend | `npm run test:frontend` (Vitest) | i18n, normalizers, worker, `popover-position`, `twitch-channels` |
+| Frontend | `npm run test:frontend` (Vitest: `test:lib` + `test:worker` + `test:renderer`) | i18n, normalizers, worker, preview, twitch-chat-log, loopback-api |
 
 ### Key test files
 
@@ -967,7 +1087,7 @@ Config key: `ui.language` (empty = browser default).
 - `voicesub-browser/tests/worker_svelte_contract.rs`, `launcher.rs` launch skip
 - `voicesub-subtitle/tests/overlay_contract.rs` — overlay lifecycle + empty cleanup
 - `src/lib/preview-payload.test.ts`, `tests/renderer/dashboard-panel.contract.test.ts` — idle/live preview + контракт `SubtitleOutputPreview`
-- `src-tts/lib/popover-position.test.ts`, `twitch-channels.test.ts`
+- `src-tts/lib/twitch-chat-log.test.ts`, `src-tts/lib/popover-position.test.ts`, `twitch-channels.test.ts`
 
 ## 26. Продуктовые инварианты
 

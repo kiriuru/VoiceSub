@@ -19,7 +19,7 @@ pub use engine::{
 pub use preview_lineage::TranslationPreviewLineage;
 pub use providers::{
     DEFAULT_HTTP_CONNECT_TIMEOUT_SECONDS, DEFAULT_HTTP_KEEPALIVE_EXPIRY_SECONDS,
-    DEFAULT_HTTP_KEEPALIVE_LIMIT, DEFAULT_HTTP_TOTAL_LIMIT, DEFAULT_REQUEST_TIMEOUT_SECONDS,
+    DEFAULT_HTTP_KEEPALIVE_LIMIT, DEFAULT_REQUEST_TIMEOUT_SECONDS,
     GoogleCloudTranslationV3Provider, ProviderError, ProviderInfo, SUPPORTED_PROVIDERS,
     SharedHttpClient, StubTranslationProvider, TranslateRequest, TranslationProvider,
     build_default_registry, build_translation_http_client,

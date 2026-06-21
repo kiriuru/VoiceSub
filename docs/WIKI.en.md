@@ -1,6 +1,6 @@
 # VoiceSub — WIKI
 
-Operational guide for the VoiceSub `0.5.3` UI. Each element is described as: **what it is**, **why it exists**, **how it works**, **what it affects**, and **common mistakes**.
+Operational guide for the VoiceSub `0.5.4` UI. Each element is described as: **what it is**, **why it exists**, **how it works**, **what it affects**, and **common mistakes**.
 
 Technical architecture: `docs/TECHNICAL_ARCHITECTURE.en.md`. SST `0.4.4` is a frozen predecessor; core behavior in this document is VoiceSub-specific.
 
@@ -9,8 +9,8 @@ Technical architecture: `docs/TECHNICAL_ARCHITECTURE.en.md`. SST `0.4.4` is a fr
 ## 0. About the product
 
 ### Element: VoiceSub vs SST
-- **VoiceSub** — active `0.5.3` line (Rust + Tauri + Svelte); first release baseline is `0.5.0`.
-- **SST** `0.4.4` — frozen reference; settings import works, but Parakeet/Experimental modes are not started in core.
+- **VoiceSub** — active `0.5.4` line (Rust + Tauri + Svelte); first release baseline is `0.5.0`.
+- **SST** `0.4.4` — frozen reference; settings import works, but legacy local ASR and experimental browser modes are not started in core.
 - **New overlay URL:** `http://127.0.0.1:8765/overlay` — update OBS Browser Source manually.
 
 ### Element: system requirements
@@ -20,7 +20,7 @@ Technical architecture: `docs/TECHNICAL_ARCHITECTURE.en.md`. SST `0.4.4` is a fr
 - Microphone in the Chrome worker; internet for external translation providers (optional).
 
 ### Element: install and update (NSIS)
-- **What it does:** `VoiceSub_0.5.3_x64-setup.exe` installs `VoiceSub.exe` and bundled static assets (dashboard, overlay, worker, tts).
+- **What it does:** `VoiceSub_0.5.4_x64-setup.exe` installs `VoiceSub.exe` and bundled static assets (dashboard, overlay, worker, tts).
 - **Why:** single installer without Python/Node in runtime; downloads WebView2 via bootstrapper when missing (`downloadBootstrapper` in Tauri).
 - **Update:** close app → run new `setup.exe` over existing → `user-data/` and `logs/` persist next to install/project root.
 - **Developers:** `build-release-msi.bat` → `build-release.ps1` → `F:\AI\VoiceSub - release\v{version}\`.
@@ -128,8 +128,11 @@ Technical architecture: `docs/TECHNICAL_ARCHITECTURE.en.md`. SST `0.4.4` is a fr
 - If worker has text but dashboard is empty — issue is ingest/WS, not Chrome recognition.
 
 ### Element: advanced Web Speech settings
-- **Settings** → “Advanced Web Speech settings” (`asr.browser.*`).
+- **Settings** → “Advanced Web Speech settings” (`asr.browser.*`, `asr.realtime` partial filters).
 - Groups: forced final, restart, network reconnect, session rotation, partial filtering.
+- Each field has an **`!` help button** with a short description of what it affects.
+- **Defaults (0.5.4+):** faster restarts (150 ms), stricter forced-final threshold (8 chars), earlier session prepare cycle (30 s before 3 min max age). See `docs/TECHNICAL_ARCHITECTURE.en.md` §12.
+- **Deprecated (ignore in manual config):** `pause_to_finalize_ms` / `finalization_hold_ms`, `hard_max_phrase_ms` / `max_segment_ms` — legacy sync only; use worker **`force_finalization_timeout_ms`** for idle forced-final timing.
 - After changes: Save config → **Stop/Start** and reopen worker if needed.
 
 ### Element: worker stability (ported from SST)
@@ -137,8 +140,9 @@ Technical architecture: `docs/TECHNICAL_ARCHITECTURE.en.md`. SST `0.4.4` is a fr
 - Session rotation `max_browser_session_age_ms` (default 180000 ms).
 - Network preflight → terminal `recognition_network_unreachable` after repeated network errors.
 - Force-finalization for stuck partials.
+- **Long-segment flush (0.5.4+):** after a committed final ≥200 characters, worker resets the Web Speech results buffer so the next phrases are not chopped into short finals. See `docs/TECHNICAL_ARCHITECTURE.en.md` §12.
 
-**Not in core:** local Parakeet, experimental `/google-asr-experimental`.
+**Not in core:** legacy local ASR (`asr.mode: local`), experimental `/google-asr-experimental`.
 
 ---
 
@@ -250,8 +254,9 @@ Technical architecture: `docs/TECHNICAL_ARCHITECTURE.en.md`. SST `0.4.4` is a fr
 
 ### Element: Speech
 - TTS provider, voice, rate/pitch/volume.
+- **Volume:** 0–**150%** (native `amplify` via IPC); slider with live numeric label (`85%`, `150%`).
 - **Playback:** **Native** mode (cpal @ 1.0×) or **Sonic** (libsonic tempo stretch); separate WASAPI devices for speech and Twitch.
-- Subtitle-driven planner (`tts_plan_subtitle_speech`); playback via IPC `tts_play_audio` (no browser HTMLAudio).
+- Subtitle-driven planner runs in Rust (`speech_pipeline.rs`); manual sample test via `tts_speak_sample`; playback via IPC `tts_play_audio` (no browser HTMLAudio).
 
 ### Element: Twitch
 - OAuth via system browser; implicit grant + token poll.
@@ -259,7 +264,8 @@ Technical architecture: `docs/TECHNICAL_ARCHITECTURE.en.md`. SST `0.4.4` is a fr
 - IRC chat → speech queue (`twitch` channel); emote/link/symbol/lang filters apply **live** without IRC reconnect.
 - **Auto-reconnect** on IRC/TLS drop — exponential backoff 1→30 s; OAuth/auth errors do not retry; manual Disconnect stops the loop.
 - **Symbols not spoken** field — comma-separated tokens removed from text (empty = all symbols may be read).
-- Digits in messages (`5`, `100`, ordinals like `5ю`) are preserved during emoji/emote stripping.
+- **Advanced:** optional rate/volume overrides with live numeric labels (`1.25×`, `85%`) like the Speech tab; `@mentions` spoken with username (no `@`); with **`strip_links=false`**, URLs stay in speak text.
+- Digits in messages (`5`, `100`, `500&100`, ordinals like `5ю`) preserved during emoji/emote stripping; invisible filler chars (U+034F, etc.) stripped before filters.
 - **?** help on **Bot nick** — IRC login used for `JOIN` (not a viewer display name); popover clamped to viewport (`popover-position.ts`).
 - Crate `voicesub-twitch`; UI `TwitchPanel.svelte`; config `user-data/modules/tts/config.toml`.
 
@@ -340,7 +346,7 @@ Built-in topics: overview, recognition, translation, subtitles/style, OBS, tools
 
 | SST feature | VoiceSub status |
 | --- | --- |
-| Local Parakeet | `legacy/modules-source/parakeet/` → Phase 4 module |
+| Legacy local ASR | Removed from core; SST import maps `local` → `browser_google` |
 | Experimental browser | `legacy/experimental-browser/` — routes removed |
 | PyInstaller bootstrap | Replaced by Tauri NSIS installer |
 | Splash startup profiles | None — single `VoiceSub.exe` |

@@ -11,7 +11,7 @@
 </script>
 
 <div class="more-settings-hub subtitles-settings-hub">
-  <p class="muted" style="margin: 0;">{tr("nav.subtitles.hint")}</p>
+  <p class="muted muted--flush">{tr("nav.subtitles.hint")}</p>
 
   <ul class="more-settings-list">
     {#each SUBTITLES_SETTINGS_ITEMS as item}

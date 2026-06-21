@@ -1,14 +1,16 @@
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
-use std::time::Duration;
 
 use base64::Engine as _;
 
 use serde::Serialize;
 use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
-use tokio::time::sleep;
 use tracing::debug;
+
+use crate::upstream_retry::{
+    MAX_UPSTREAM_ATTEMPTS, is_retryable_upstream_error, upstream_retry_delay,
+};
 
 pub const SCRIPT_NAME: &str = "google_tts_fetch.py";
 const TEXT_ENV_B64: &str = "VOICESUB_TTS_TEXT_B64";
@@ -162,34 +164,22 @@ async fn run_fetch_command(
     }
 }
 
-fn is_retryable_fetch_error(message: &str) -> bool {
-    let lower = message.to_ascii_lowercase();
-    lower.contains("ssl")
-        || lower.contains("unexpected_eof")
-        || lower.contains("timed out")
-        || lower.contains("timeout")
-        || lower.contains("connection reset")
-        || lower.contains("connection aborted")
-        || lower.contains("temporarily unavailable")
-}
-
 async fn run_fetch_with_retries(
     program: &str,
     args: &[String],
     lang: &str,
     text: &str,
 ) -> Result<Vec<u8>, String> {
-    const MAX_ATTEMPTS: usize = 3;
     let mut last_error = String::from("fetch failed");
-    for attempt in 1..=MAX_ATTEMPTS {
+    for attempt in 1..=MAX_UPSTREAM_ATTEMPTS {
         match run_fetch_command(program, args, lang, text).await {
             Ok(bytes) => return Ok(bytes),
             Err(err) => {
                 last_error = err;
-                if attempt >= MAX_ATTEMPTS || !is_retryable_fetch_error(&last_error) {
+                if attempt >= MAX_UPSTREAM_ATTEMPTS || !is_retryable_upstream_error(&last_error) {
                     break;
                 }
-                sleep(Duration::from_millis(300 * attempt as u64)).await;
+                upstream_retry_delay(attempt).await;
             }
         }
     }
@@ -349,6 +339,7 @@ pub async fn probe_python_runtime(tts_module_dir: &Path) -> PythonRuntimeStatus 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::upstream_retry::is_retryable_upstream_error;
 
     #[test]
     fn embedded_path_uses_platform_dir() {
@@ -391,9 +382,9 @@ mod tests {
 
     #[test]
     fn retryable_errors_include_ssl_eof() {
-        assert!(is_retryable_fetch_error(
+        assert!(is_retryable_upstream_error(
             "SSL: UNEXPECTED_EOF_WHILE_READING EOF occurred in violation of protocol"
         ));
-        assert!(!is_retryable_fetch_error("empty text"));
+        assert!(!is_retryable_upstream_error("empty text"));
     }
 }

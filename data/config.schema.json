@@ -42,17 +42,17 @@
           "type": "integer"
         },
         "normal_restart_delay_ms": {
-          "default": 350,
+          "default": 150,
           "title": "Normal Restart Delay Ms",
           "type": "integer"
         },
         "no_speech_restart_delay_ms": {
-          "default": 350,
+          "default": 150,
           "title": "No Speech Restart Delay Ms",
           "type": "integer"
         },
         "network_reconnect_initial_ms": {
-          "default": 1000,
+          "default": 500,
           "title": "Network Reconnect Initial Ms",
           "type": "integer"
         },
@@ -62,7 +62,7 @@
           "type": "integer"
         },
         "stuck_stopping_timeout_ms": {
-          "default": 2500,
+          "default": 2000,
           "title": "Stuck Stopping Timeout Ms",
           "type": "integer"
         },
@@ -72,7 +72,7 @@
           "type": "integer"
         },
         "prepare_cycle_before_ms": {
-          "default": 15000,
+          "default": 30000,
           "title": "Prepare Cycle Before Ms",
           "type": "integer"
         },
@@ -82,12 +82,12 @@
           "type": "boolean"
         },
         "force_final_min_chars": {
-          "default": 3,
+          "default": 8,
           "title": "Force Final Min Chars",
           "type": "integer"
         },
         "force_final_min_stable_ms": {
-          "default": 700,
+          "default": 750,
           "title": "Force Final Min Stable Ms",
           "type": "integer"
         }
@@ -105,44 +105,6 @@
           "title": "Mode",
           "type": "string"
         },
-        "provider_preference": {
-          "default": "official_eu_parakeet_low_latency",
-          "enum": [
-            "official_eu_parakeet_low_latency"
-          ],
-          "title": "Provider Preference",
-          "type": "string"
-        },
-        "prefer_gpu": {
-          "default": true,
-          "title": "Prefer Gpu",
-          "type": "boolean"
-        },
-        "model_load_mode": {
-          "default": "auto",
-          "enum": [
-            "auto",
-            "local_nemo",
-            "from_pretrained"
-          ],
-          "title": "Model Load Mode",
-          "type": "string"
-        },
-        "model_revision": {
-          "default": "",
-          "title": "Model Revision",
-          "type": "string"
-        },
-        "rnnoise_enabled": {
-          "default": false,
-          "title": "Rnnoise Enabled",
-          "type": "boolean"
-        },
-        "rnnoise_strength": {
-          "default": 70,
-          "title": "Rnnoise Strength",
-          "type": "integer"
-        },
         "browser": {
           "$ref": "#/$defs/AsrBrowserConfig"
         },
@@ -155,92 +117,6 @@
     },
     "AsrRealtimeConfig": {
       "properties": {
-        "latency_preset": {
-          "default": "balanced",
-          "enum": [
-            "ultra_low_latency",
-            "balanced",
-            "quality",
-            "custom"
-          ],
-          "title": "Latency Preset",
-          "type": "string"
-        },
-        "vad_mode": {
-          "default": 3,
-          "title": "Vad Mode",
-          "type": "integer"
-        },
-        "energy_gate_enabled": {
-          "default": false,
-          "title": "Energy Gate Enabled",
-          "type": "boolean"
-        },
-        "min_rms_for_recognition": {
-          "default": 0.0018,
-          "title": "Min Rms For Recognition",
-          "type": "number"
-        },
-        "min_voiced_ratio": {
-          "default": 0.0,
-          "title": "Min Voiced Ratio",
-          "type": "number"
-        },
-        "first_partial_min_speech_ms": {
-          "default": 180,
-          "title": "First Partial Min Speech Ms",
-          "type": "integer"
-        },
-        "partial_emit_interval_ms": {
-          "default": 450,
-          "title": "Partial Emit Interval Ms",
-          "type": "integer"
-        },
-        "min_speech_ms": {
-          "default": 180,
-          "title": "Min Speech Ms",
-          "type": "integer"
-        },
-        "max_segment_ms": {
-          "default": 5500,
-          "title": "Max Segment Ms",
-          "type": "integer"
-        },
-        "silence_hold_ms": {
-          "default": 180,
-          "title": "Silence Hold Ms",
-          "type": "integer"
-        },
-        "finalization_hold_ms": {
-          "default": 350,
-          "title": "Finalization Hold Ms",
-          "type": "integer"
-        },
-        "chunk_window_ms": {
-          "default": 0,
-          "title": "Chunk Window Ms",
-          "type": "integer"
-        },
-        "chunk_overlap_ms": {
-          "default": 0,
-          "title": "Chunk Overlap Ms",
-          "type": "integer"
-        },
-        "partial_min_delta_chars": {
-          "default": 4,
-          "title": "Partial Min Delta Chars",
-          "type": "integer"
-        },
-        "partial_coalescing_ms": {
-          "default": 160,
-          "title": "Partial Coalescing Ms",
-          "type": "integer"
-        },
-        "streaming_decode": {
-          "default": true,
-          "title": "Streaming Decode",
-          "type": "boolean"
-        },
         "partial_emit_mode": {
           "default": "word_growth",
           "enum": [
@@ -255,14 +131,28 @@
           "title": "Partial Min New Words",
           "type": "integer"
         },
-        "vad_speech_attack_frames": {
-          "default": 2,
-          "title": "Vad Speech Attack Frames",
+        "partial_min_delta_chars": {
+          "default": 0,
+          "title": "Partial Min Delta Chars",
           "type": "integer"
         },
-        "vad_speech_preroll_frames": {
-          "default": 5,
-          "title": "Vad Speech Preroll Frames",
+        "partial_coalescing_ms": {
+          "default": 0,
+          "title": "Partial Coalescing Ms",
+          "type": "integer"
+        },
+        "finalization_hold_ms": {
+          "default": 350,
+          "deprecated": true,
+          "description": "Deprecated: legacy sync with subtitle_lifecycle.pause_to_finalize_ms; no runtime effect. Use asr.browser.force_finalization_timeout_ms (worker UI) for forced-final idle timing.",
+          "title": "Finalization Hold Ms",
+          "type": "integer"
+        },
+        "max_segment_ms": {
+          "default": 5500,
+          "deprecated": true,
+          "description": "Deprecated: legacy sync with subtitle_lifecycle.hard_max_phrase_ms; no runtime effect.",
+          "title": "Max Segment Ms",
           "type": "integer"
         }
       },
@@ -676,6 +566,8 @@
         },
         "pause_to_finalize_ms": {
           "default": 350,
+          "deprecated": true,
+          "description": "Deprecated: legacy sync with asr.realtime.finalization_hold_ms; no runtime effect. Use asr.browser.force_finalization_timeout_ms (worker UI) for forced-final idle timing.",
           "title": "Pause To Finalize Ms",
           "type": "integer"
         },
@@ -696,6 +588,8 @@
         },
         "hard_max_phrase_ms": {
           "default": 5500,
+          "deprecated": true,
+          "description": "Deprecated: legacy sync with asr.realtime.max_segment_ms; no runtime effect.",
           "title": "Hard Max Phrase Ms",
           "type": "integer"
         }

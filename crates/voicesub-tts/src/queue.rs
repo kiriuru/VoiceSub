@@ -38,14 +38,13 @@ fn default_speech_lang() -> String {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
-pub enum SpeechQueueState {
+enum SpeechQueueState {
     #[default]
     Idle,
     Speaking,
-    Paused,
 }
 
-/// In-memory FIFO queue used by the TTS window (Phase 1 prototype).
+/// In-memory FIFO queue used by the Rust TTS orchestrator.
 #[derive(Debug)]
 pub struct SpeechQueue {
     items: VecDeque<SpeechQueueItem>,
@@ -64,32 +63,12 @@ impl Default for SpeechQueue {
 }
 
 impl SpeechQueue {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn state(&self) -> SpeechQueueState {
-        self.state
-    }
-
-    pub fn current_id(&self) -> Option<&str> {
-        self.current_id.as_deref()
-    }
-
     pub fn len(&self) -> usize {
         self.items.len()
     }
 
-    pub fn is_empty(&self) -> bool {
-        self.items.is_empty()
-    }
-
     pub fn snapshot(&self) -> Vec<SpeechQueueItem> {
         self.items.iter().cloned().collect()
-    }
-
-    pub fn enqueue(&mut self, item: SpeechQueueItem) -> Vec<SpeechQueueItem> {
-        self.enqueue_with_cap(item, 8)
     }
 
     /// Returns items removed by adaptive drop before enqueueing `item`.
@@ -156,18 +135,6 @@ impl SpeechQueue {
         MarkFinishedOutcome::MismatchForcedIdle
     }
 
-    pub fn pause(&mut self) {
-        if self.state == SpeechQueueState::Speaking {
-            self.state = SpeechQueueState::Paused;
-        }
-    }
-
-    pub fn resume(&mut self) {
-        if self.state == SpeechQueueState::Paused {
-            self.state = SpeechQueueState::Speaking;
-        }
-    }
-
     /// Reset a stuck `Speaking` state without dropping queued items.
     pub fn force_idle(&mut self) {
         self.current_id = None;
@@ -224,9 +191,9 @@ mod tests {
 
     #[test]
     fn fifo_order() {
-        let mut q = SpeechQueue::new();
-        q.enqueue(item("a", "one"));
-        q.enqueue(item("b", "two"));
+        let mut q = SpeechQueue::default();
+        q.enqueue_with_cap(item("a", "one"), 8);
+        q.enqueue_with_cap(item("b", "two"), 8);
         assert_eq!(q.begin_next().unwrap().id, "a");
         assert_eq!(q.mark_finished("a"), MarkFinishedOutcome::Matched);
         assert_eq!(q.begin_next().unwrap().id, "b");
@@ -234,7 +201,7 @@ mod tests {
 
     #[test]
     fn enqueue_with_cap_trims_to_low_water_when_saturated() {
-        let mut q = SpeechQueue::new();
+        let mut q = SpeechQueue::default();
         for index in 0..10 {
             q.enqueue_with_cap(item(&format!("id-{index}"), "x"), 8);
         }
@@ -268,37 +235,36 @@ mod tests {
 
     #[test]
     fn clear_resets_state() {
-        let mut q = SpeechQueue::new();
-        q.enqueue(item("a", "one"));
+        let mut q = SpeechQueue::default();
+        q.enqueue_with_cap(item("a", "one"), 8);
         let _ = q.begin_next();
         q.clear();
-        assert!(q.is_empty());
-        assert_eq!(q.state(), SpeechQueueState::Idle);
+        assert_eq!(q.len(), 0);
+        q.enqueue_with_cap(item("b", "two"), 8);
+        assert_eq!(q.begin_next().unwrap().id, "b");
     }
 
     #[test]
     fn mark_finished_mismatch_forces_idle() {
-        let mut q = SpeechQueue::new();
-        q.enqueue(item("a", "one"));
-        q.enqueue(item("b", "two"));
+        let mut q = SpeechQueue::default();
+        q.enqueue_with_cap(item("a", "one"), 8);
+        q.enqueue_with_cap(item("b", "two"), 8);
         let _ = q.begin_next();
         assert_eq!(
             q.mark_finished("wrong"),
             MarkFinishedOutcome::MismatchForcedIdle
         );
-        assert_eq!(q.state(), SpeechQueueState::Idle);
         assert_eq!(q.begin_next().unwrap().id, "b");
     }
 
     #[test]
     fn force_idle_unblocks_stuck_speaking_state() {
-        let mut q = SpeechQueue::new();
-        q.enqueue(item("a", "one"));
-        q.enqueue(item("b", "two"));
+        let mut q = SpeechQueue::default();
+        q.enqueue_with_cap(item("a", "one"), 8);
+        q.enqueue_with_cap(item("b", "two"), 8);
         let _ = q.begin_next();
-        assert_eq!(q.state(), SpeechQueueState::Speaking);
+        assert!(q.begin_next().is_none());
         q.force_idle();
-        assert_eq!(q.state(), SpeechQueueState::Idle);
         assert_eq!(q.begin_next().unwrap().id, "b");
     }
 

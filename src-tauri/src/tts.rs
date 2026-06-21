@@ -3,20 +3,18 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use serde_json::Value;
-
 use tauri::{AppHandle, Manager, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 use tracing::{debug, info, warn};
 
 use voicesub_audio::{CHANNEL_SPEECH, CHANNEL_TWITCH, PlaybackHub};
 use voicesub_tts::{
-    ChannelEnqueueResult, SpeechQueueItem, TTS_WINDOW_LABEL, TtsConfig, TtsModuleService,
+    ChannelEnqueueResult, TTS_WINDOW_LABEL, TtsConfig, TtsModuleService,
     TtsSpeechPipeline, TtsSpeechSettings, bind_window_process, build_tts_module_url,
-    speech_queue_item_id, tts_webview_data_dir, validate_twitch_oauth_url,
+    tts_webview_data_dir, validate_twitch_oauth_url,
 };
 use voicesub_twitch::TwitchConnectionStatus;
-use voicesub_twitch::{SourceTextReplacementSettings, TwitchTtsSettings};
+use voicesub_twitch::TwitchTtsSettings;
 
 use crate::webview_memory::{self, SharedWebviewMemoryManager};
 
@@ -26,6 +24,7 @@ pub fn recover_tts_after_window_closed(state: &TtsState) {
         target: "voicesub.tts",
         "recovering speech queues after TTS module window closed"
     );
+    state.pipeline.set_window_open(false);
     let _ = state.playback.stop_channel(CHANNEL_SPEECH);
     let _ = state.playback.stop_channel(CHANNEL_TWITCH);
     state.service.queue_force_idle_all();
@@ -395,32 +394,6 @@ pub fn tts_update_voice_settings(
 }
 
 #[tauri::command]
-
-pub fn tts_plan_subtitle_speech(
-    state: State<'_, TtsState>,
-
-    payload: Value,
-) -> Result<Vec<SpeechQueueItem>, String> {
-    let sequence = payload
-        .get("sequence")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(0);
-
-    debug!(
-
-        target: "voicesub.tts.ipc",
-
-        sequence,
-
-        "tts_plan_subtitle_speech"
-
-    );
-
-    Ok(state.service.plan_subtitle_speech(&payload))
-}
-
-#[tauri::command]
-
 pub fn tts_reset_subtitle_planner(state: State<'_, TtsState>) -> Result<(), String> {
     info!(target: "voicesub.tts.ipc", "tts_reset_subtitle_planner");
 
@@ -430,56 +403,20 @@ pub fn tts_reset_subtitle_planner(state: State<'_, TtsState>) -> Result<(), Stri
 }
 
 #[tauri::command]
-pub fn tts_channel_enqueue(
+pub fn tts_speak_sample(
     state: State<'_, TtsState>,
-    channel: String,
-    id: String,
     text: String,
     lang: String,
 ) -> Result<ChannelEnqueueResult, String> {
     info!(
         target: "voicesub.tts.ipc",
-        channel = %channel,
-        id = %id,
         text_len = text.chars().count(),
         lang = %lang,
-        "tts_channel_enqueue"
+        "tts_speak_sample"
     );
     state
-        .service
-        .enqueue_channel(
-            &channel,
-            SpeechQueueItem {
-                id,
-                text,
-                source: channel.clone(),
-                lang,
-                dedupe_key: None,
-            },
-        )
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub fn tts_channel_begin_next(
-    state: State<'_, TtsState>,
-    channel: String,
-) -> Result<Option<SpeechQueueItem>, String> {
-    state
-        .service
-        .queue_begin_next(&channel)
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub fn tts_channel_finish(
-    state: State<'_, TtsState>,
-    channel: String,
-    item_id: String,
-) -> Result<(), String> {
-    state
-        .service
-        .queue_mark_finished(&channel, &item_id)
+        .pipeline
+        .enqueue_speech_test(text, lang)
         .map_err(|e| e.to_string())
 }
 
@@ -503,46 +440,6 @@ pub fn tts_channel_force_idle(state: State<'_, TtsState>, channel: String) -> Re
     state
         .service
         .queue_force_idle(&channel)
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub fn tts_channel_snapshot(
-    state: State<'_, TtsState>,
-    channel: String,
-) -> Result<Vec<SpeechQueueItem>, String> {
-    state
-        .service
-        .queue_snapshot(&channel)
-        .map_err(|e| e.to_string())
-}
-
-/// Deprecated: use [`tts_channel_enqueue`] with channel `speech`.
-#[tauri::command]
-pub fn tts_enqueue(
-    state: State<'_, TtsState>,
-    text: String,
-    source: Option<String>,
-) -> Result<usize, String> {
-    let id = speech_queue_item_id();
-    warn!(
-        target: "voicesub.tts.ipc",
-        id = %id,
-        "tts_enqueue is deprecated; use tts_channel_enqueue"
-    );
-    state
-        .service
-        .enqueue_channel(
-            voicesub_audio::CHANNEL_SPEECH,
-            SpeechQueueItem {
-                id,
-                text,
-                source: source.unwrap_or_default(),
-                lang: "en".to_string(),
-                dedupe_key: None,
-            },
-        )
-        .map(|result| result.queue_len)
         .map_err(|e| e.to_string())
 }
 
@@ -595,30 +492,6 @@ pub fn tts_update_twitch_settings(
         .set_device_label(CHANNEL_TWITCH, label)
         .map_err(|e| e.to_string())?;
     Ok(config)
-}
-
-#[tauri::command]
-pub fn tts_sync_source_text_replacement(
-    state: State<'_, TtsState>,
-    replacement: SourceTextReplacementSettings,
-) -> Result<(), String> {
-    info!(
-        target: "voicesub.tts.ipc",
-        enabled = replacement.enabled,
-        pairs = replacement.pairs.len(),
-        "tts_sync_source_text_replacement"
-    );
-    state
-        .service
-        .sync_source_text_replacement(replacement)
-        .map_err(|e| {
-            warn!(
-                target: "voicesub.tts.ipc",
-                error = %e,
-                "tts_sync_source_text_replacement failed"
-            );
-            e.to_string()
-        })
 }
 
 #[tauri::command]
@@ -685,6 +558,7 @@ async fn open_tts_window(
             guard.set_tts_visible(true);
             guard.set_tts_focused(true);
         }
+        state.pipeline.set_window_open(true);
         webview_memory::refresh_from_state(&app, memory);
 
         return Ok(());
@@ -719,6 +593,7 @@ async fn open_tts_window(
         guard.set_tts_visible(true);
         guard.set_tts_focused(true);
     }
+    state.pipeline.set_window_open(true);
     webview_memory::refresh_from_state(&app, memory);
 
     info!(target: "voicesub.tts.ipc", "tts module window opened");
