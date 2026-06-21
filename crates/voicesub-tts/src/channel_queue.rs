@@ -85,14 +85,8 @@ impl DualChannelSpeechQueue {
     }
 
     pub fn clear_all(&self) {
-        self.speech
-            .lock()
-            .expect("speech queue lock")
-            .clear();
-        self.twitch
-            .lock()
-            .expect("twitch queue lock")
-            .clear();
+        self.speech.lock().expect("speech queue lock").clear();
+        self.twitch.lock().expect("twitch queue lock").clear();
         debug!(target: "voicesub.tts", "all channel queues cleared");
     }
 
@@ -116,14 +110,8 @@ impl DualChannelSpeechQueue {
 
     /// Reset stuck `Speaking` on both channels without dropping queued items.
     pub fn force_idle_all(&self) {
-        self.speech
-            .lock()
-            .expect("speech queue lock")
-            .force_idle();
-        self.twitch
-            .lock()
-            .expect("twitch queue lock")
-            .force_idle();
+        self.speech.lock().expect("speech queue lock").force_idle();
+        self.twitch.lock().expect("twitch queue lock").force_idle();
         debug!(target: "voicesub.tts", "all channel queues forced idle");
     }
 }

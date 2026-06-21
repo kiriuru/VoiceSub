@@ -55,7 +55,11 @@ mod tests {
     #[test]
     fn ui_sync_null_body_coerced_to_empty_object() {
         let ui_null: Value = serde_json::from_str("null").unwrap();
-        let coerced = if ui_null.is_object() { ui_null } else { json!({}) };
+        let coerced = if ui_null.is_object() {
+            ui_null
+        } else {
+            json!({})
+        };
         assert!(coerced.is_object());
         assert_eq!(coerced.as_object().map(|m| m.len()), Some(0));
     }

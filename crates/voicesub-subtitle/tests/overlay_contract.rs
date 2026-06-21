@@ -157,7 +157,11 @@ fn overlay_normalizes_lifecycle_state() {
     ] {
         assert_contains(&source, &format!("\"{state}\""), "lifecycle allowlist");
     }
-    assert_contains(&source, "normalizeOverlayPayload", "overlay payload normalizer");
+    assert_contains(
+        &source,
+        "normalizeOverlayPayload",
+        "overlay payload normalizer",
+    );
     assert_contains(
         &source,
         "LIFECYCLE_STATES.has(rawLifecycle) ? rawLifecycle : \"idle\"",
@@ -178,8 +182,16 @@ fn overlay_uses_overlay_update_only() {
 #[test]
 fn overlay_signature_uses_renderable_completed_fields() {
     let source = read_workspace_file("bin/overlay/overlay.js");
-    assert_contains(&source, "signatureCompletedItems", "renderable signature helper");
-    assert_contains(&source, "buildEmptyRenderSignature", "empty signature helper");
+    assert_contains(
+        &source,
+        "signatureCompletedItems",
+        "renderable signature helper",
+    );
+    assert_contains(
+        &source,
+        "buildEmptyRenderSignature",
+        "empty signature helper",
+    );
 }
 
 #[test]
@@ -210,11 +222,7 @@ fn overlay_renderer_uses_append_only_partial_merge() {
         "OVERLAY_DENSE_PARTIAL_CHARS",
         "dense partial threshold",
     );
-    assert_contains(
-        &source,
-        "mergeFreshIntoStatic",
-        "append-only partial merge",
-    );
+    assert_contains(&source, "mergeFreshIntoStatic", "append-only partial merge");
     assert_contains(
         &source,
         "resolveFreshFragmentEffect",

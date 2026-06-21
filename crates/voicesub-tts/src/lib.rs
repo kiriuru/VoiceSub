@@ -24,8 +24,8 @@ pub use ipc::{
 };
 pub use oauth_bridge::TwitchOAuthBridge;
 pub use python_runtime::{
-    embedded_binary_path, normalize_tts_lang, probe_python_runtime, run_google_tts_fetch,
-    PythonRuntimeKind, PythonRuntimeStatus,
+    PythonRuntimeKind, PythonRuntimeStatus, embedded_binary_path, normalize_tts_lang,
+    probe_python_runtime, run_google_tts_fetch,
 };
 pub use queue::{ChannelEnqueueResult, SpeechQueueItem};
 pub use service::TtsModuleService;

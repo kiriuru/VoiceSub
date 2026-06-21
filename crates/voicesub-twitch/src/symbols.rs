@@ -111,14 +111,8 @@ mod tests {
     #[test]
     fn separator_symbols_keep_space_between_digit_groups() {
         let symbols = vec!["@".into(), "&".into(), "$".into()];
-        assert_eq!(
-            strip_configured_symbols("500&100", &symbols),
-            "500 100"
-        );
-        assert_eq!(
-            strip_configured_symbols("500$100", &symbols),
-            "500 100"
-        );
+        assert_eq!(strip_configured_symbols("500&100", &symbols), "500 100");
+        assert_eq!(strip_configured_symbols("500$100", &symbols), "500 100");
     }
 
     #[test]

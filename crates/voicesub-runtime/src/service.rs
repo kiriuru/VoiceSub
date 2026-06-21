@@ -4,7 +4,8 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 
 use std::sync::{
-    Arc, Condvar, Mutex, RwLock as StdRwLock, atomic::{AtomicBool, AtomicU64, Ordering},
+    Arc, Condvar, Mutex, RwLock as StdRwLock,
+    atomic::{AtomicBool, AtomicU64, Ordering},
 };
 
 use tokio::sync::RwLock as TokioRwLock;
@@ -93,9 +94,7 @@ impl SubtitlePayloadForwarder {
             .spawn(move || {
                 loop {
                     let body = {
-                        let mut guard = queue_for_thread
-                            .lock()
-                            .unwrap_or_else(|e| e.into_inner());
+                        let mut guard = queue_for_thread.lock().unwrap_or_else(|e| e.into_inner());
                         while guard.is_empty() {
                             guard = notify_for_thread
                                 .wait(guard)
@@ -115,7 +114,9 @@ impl SubtitlePayloadForwarder {
                         // the forwarder thread and stop all subsequent subtitle speech
                         // (review §6 / MED#6).
                         if let Err(panic) =
-                            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| callback(body)))
+                            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                                callback(body)
+                            }))
                         {
                             let detail = panic
                                 .downcast_ref::<&str>()
@@ -920,7 +921,8 @@ mod tests {
     fn evict_falls_back_to_oldest_when_all_speakable() {
         let mut queue = VecDeque::new();
         queue.push_back(serde_json::json!({ "lifecycle_state": "completed_only", "id": 1 }));
-        queue.push_back(serde_json::json!({ "lifecycle_state": "completed_with_partial", "id": 2 }));
+        queue
+            .push_back(serde_json::json!({ "lifecycle_state": "completed_with_partial", "id": 2 }));
 
         assert_eq!(evict_one_for_capacity(&mut queue), Some(false));
         let ids: Vec<u64> = queue

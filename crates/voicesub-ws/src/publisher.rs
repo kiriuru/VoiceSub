@@ -188,11 +188,7 @@ mod tests {
         let bus_for_thread = bus.clone();
 
         std::thread::spawn(move || {
-            broadcast_now(
-                &hub,
-                json!({"type": "test_event"}),
-                Some(&bus_for_thread),
-            );
+            broadcast_now(&hub, json!({"type": "test_event"}), Some(&bus_for_thread));
         })
         .join()
         .unwrap();

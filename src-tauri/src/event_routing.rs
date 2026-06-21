@@ -44,7 +44,10 @@ pub fn snapshot_to_envelopes(snapshot: &RuntimeStateSnapshot) -> Vec<Value> {
     push("diagnostics_update", snapshot.diagnostics.as_ref());
     // Twitch connection status is consumed by the TTS window; replay it so its connection
     // UI is restored after a bus lag (review MED#7).
-    push("twitch_connection_update", snapshot.twitch_connection.as_ref());
+    push(
+        "twitch_connection_update",
+        snapshot.twitch_connection.as_ref(),
+    );
     envelopes
 }
 

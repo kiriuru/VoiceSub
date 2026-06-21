@@ -602,7 +602,11 @@ mod tests {
         assert!(is_transient_irc_disconnect_message(
             "peer closed connection without sending TLS close_notify"
         ));
-        assert!(is_transient_irc_disconnect_message("connection reset by peer"));
-        assert!(!is_transient_irc_disconnect_message("login authentication failed"));
+        assert!(is_transient_irc_disconnect_message(
+            "connection reset by peer"
+        ));
+        assert!(!is_transient_irc_disconnect_message(
+            "login authentication failed"
+        ));
     }
 }

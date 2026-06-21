@@ -264,12 +264,7 @@ async fn process_ingest_work(work: IngestWork) {
                     Some(event.sequence),
                 );
             }
-            work.transcript
-                .handle_event(
-                    event,
-                    ingest_started,
-                )
-                .await;
+            work.transcript.handle_event(event, ingest_started).await;
         }
         IngestWorkKind::Final {
             text,
@@ -292,12 +287,7 @@ async fn process_ingest_work(work: IngestWork) {
                     forced_final,
                 );
             }
-            work.transcript
-                .handle_event(
-                    event,
-                    ingest_started,
-                )
-                .await;
+            work.transcript.handle_event(event, ingest_started).await;
         }
     }
 }

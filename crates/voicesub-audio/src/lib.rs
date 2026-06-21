@@ -16,8 +16,8 @@ pub use error::AudioError;
 #[cfg(windows)]
 pub use platform::is_per_process_routing_enabled;
 pub use playback::{
-    apply_speech_volume_to_pcm, CHANNEL_SPEECH, CHANNEL_TWITCH, PlaybackFinished, PlaybackHub,
-    clamp_speech_volume, resolve_output_device, SPEECH_VOLUME_MAX,
+    CHANNEL_SPEECH, CHANNEL_TWITCH, PlaybackFinished, PlaybackHub, SPEECH_VOLUME_MAX,
+    apply_speech_volume_to_pcm, clamp_speech_volume, resolve_output_device,
 };
 pub use process_stats::{ProcessResourceSnapshot, ResourceTelemetry, collect_resource_telemetry};
 

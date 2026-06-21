@@ -59,9 +59,9 @@ pub fn has_meaningful_linguistic_content(text: &str, strip_links: bool) -> bool 
     };
     let without_label = strip_leading_speaker_label(&working);
     let without_mentions = strip_twitch_mentions(&without_label);
-    let normalized = crate::emoji::normalize_whitespace(&crate::emoji::strip_invisible_chat_characters(
-        &without_mentions,
-    ));
+    let normalized = crate::emoji::normalize_whitespace(
+        &crate::emoji::strip_invisible_chat_characters(&without_mentions),
+    );
     if normalized.is_empty() {
         return false;
     }
@@ -83,9 +83,7 @@ pub fn has_meaningful_linguistic_content(text: &str, strip_links: bool) -> bool 
 
     if words
         .iter()
-        .all(|word| {
-            crate::emoji::is_plain_decimal_token(word) || is_digit_group_token(word)
-        })
+        .all(|word| crate::emoji::is_plain_decimal_token(word) || is_digit_group_token(word))
     {
         return true;
     }
@@ -112,7 +110,10 @@ fn is_digit_group_token(token: &str) -> bool {
     }
     trimmed.chars().all(|ch| {
         crate::emoji::is_plain_decimal_char(ch)
-            || matches!(ch, '&' | '$' | '#' | '%' | '+' | '-' | '|' | '/' | '=' | '.')
+            || matches!(
+                ch,
+                '&' | '$' | '#' | '%' | '+' | '-' | '|' | '/' | '=' | '.'
+            )
             || crate::emoji::is_invisible_noise_char(ch)
     })
 }
@@ -847,7 +848,10 @@ mod tests {
 
     #[test]
     fn detects_english_hello() {
-        assert_eq!(detect_language_code("hello", 4, true).as_deref(), Some("en"));
+        assert_eq!(
+            detect_language_code("hello", 4, true).as_deref(),
+            Some("en")
+        );
         assert_eq!(resolve_message_language("hello", 4, "ru", true), "en");
     }
 
@@ -874,19 +878,34 @@ mod tests {
 
     #[test]
     fn detects_polish_diacritics() {
-        assert_eq!(detect_language_code("cześć", 4, true).as_deref(), Some("pl"));
-        assert_eq!(detect_language_code("dziękuję", 4, true).as_deref(), Some("pl"));
+        assert_eq!(
+            detect_language_code("cześć", 4, true).as_deref(),
+            Some("pl")
+        );
+        assert_eq!(
+            detect_language_code("dziękuję", 4, true).as_deref(),
+            Some("pl")
+        );
     }
 
     #[test]
     fn detects_german_diacritics() {
-        assert_eq!(detect_language_code("schön", 4, true).as_deref(), Some("de"));
-        assert_eq!(detect_language_code("grüße", 4, true).as_deref(), Some("de"));
+        assert_eq!(
+            detect_language_code("schön", 4, true).as_deref(),
+            Some("de")
+        );
+        assert_eq!(
+            detect_language_code("grüße", 4, true).as_deref(),
+            Some("de")
+        );
     }
 
     #[test]
     fn detects_spanish_diacritics() {
-        assert_eq!(detect_language_code("español", 4, true).as_deref(), Some("es"));
+        assert_eq!(
+            detect_language_code("español", 4, true).as_deref(),
+            Some("es")
+        );
     }
 
     #[test]
@@ -904,7 +923,10 @@ mod tests {
 
     #[test]
     fn detects_italian_diacritics() {
-        assert_eq!(detect_language_code("città", 4, true).as_deref(), Some("it"));
+        assert_eq!(
+            detect_language_code("città", 4, true).as_deref(),
+            Some("it")
+        );
         assert_eq!(detect_language_code("così", 4, true).as_deref(), Some("it"));
     }
 
@@ -916,8 +938,14 @@ mod tests {
 
     #[test]
     fn detects_japanese_kana() {
-        assert_eq!(detect_language_code("こんにちは", 4, true).as_deref(), Some("ja"));
-        assert_eq!(detect_language_code("カタカナ", 4, true).as_deref(), Some("ja"));
+        assert_eq!(
+            detect_language_code("こんにちは", 4, true).as_deref(),
+            Some("ja")
+        );
+        assert_eq!(
+            detect_language_code("カタカナ", 4, true).as_deref(),
+            Some("ja")
+        );
     }
 
     #[test]
@@ -991,7 +1019,10 @@ mod tests {
 
     #[test]
     fn detects_hindi_devanagari() {
-        assert_eq!(detect_language_code("नमस्ते दोस्त", 4, true).as_deref(), Some("hi"));
+        assert_eq!(
+            detect_language_code("नमस्ते दोस्त", 4, true).as_deref(),
+            Some("hi")
+        );
     }
 
     #[test]
@@ -1004,7 +1035,10 @@ mod tests {
 
     #[test]
     fn detects_thai() {
-        assert_eq!(detect_language_code("สวัสดีทุกคน", 4, true).as_deref(), Some("th"));
+        assert_eq!(
+            detect_language_code("สวัสดีทุกคน", 4, true).as_deref(),
+            Some("th")
+        );
     }
 
     #[test]
@@ -1017,8 +1051,14 @@ mod tests {
 
     #[test]
     fn strips_punctuation_before_detection() {
-        assert_eq!(detect_language_code("привет!!!", 4, true).as_deref(), Some("ru"));
-        assert_eq!(detect_language_code("cześć!!!", 4, true).as_deref(), Some("pl"));
+        assert_eq!(
+            detect_language_code("привет!!!", 4, true).as_deref(),
+            Some("ru")
+        );
+        assert_eq!(
+            detect_language_code("cześć!!!", 4, true).as_deref(),
+            Some("pl")
+        );
     }
 
     #[test]
@@ -1058,7 +1098,10 @@ mod tests {
         let sample = "Wallenber: https://www.youtube.com/watch?v=zqBnOfSmKQo";
         assert_eq!(detect_language_code(sample, 2, true), None);
         assert_eq!(resolve_message_language(sample, 2, "ru", true), "ru");
-        assert_eq!(detect_language_code("Wallenber", 2, true).as_deref(), Some("en"));
+        assert_eq!(
+            detect_language_code("Wallenber", 2, true).as_deref(),
+            Some("en")
+        );
     }
 
     #[test]
@@ -1081,15 +1124,15 @@ mod tests {
 
     #[test]
     fn normalize_twitch_mentions_keeps_usernames() {
-        assert_eq!(
-            normalize_twitch_mentions("@Kiriuru hello"),
-            "Kiriuru hello"
-        );
+        assert_eq!(normalize_twitch_mentions("@Kiriuru hello"), "Kiriuru hello");
         assert_eq!(
             normalize_twitch_mentions("@KamakiriMeido Привет"),
             "KamakiriMeido Привет"
         );
-        assert_eq!(normalize_twitch_mentions("hi @friend there"), "hi friend there");
+        assert_eq!(
+            normalize_twitch_mentions("hi @friend there"),
+            "hi friend there"
+        );
     }
 
     #[test]

@@ -9,8 +9,8 @@ use thiserror::Error;
 use tracing::{debug, info, warn};
 
 use crate::subtitle_speech::TtsSpeechSettings;
-use voicesub_twitch::{TwitchTtsSettings, normalize_twitch_settings};
 use voicesub_audio::clamp_speech_volume;
+use voicesub_twitch::{TwitchTtsSettings, normalize_twitch_settings};
 
 #[derive(Debug, Error)]
 pub enum TtsConfigError {
@@ -181,10 +181,10 @@ impl TtsConfigStore {
 
     pub fn load(&self) -> Result<TtsConfig, TtsConfigError> {
         let current_mtime = self.file_mtime();
-        if let Some(cached) = self.cache.read().expect("tts config cache lock").as_ref() {
-            if cached.mtime == current_mtime {
-                return Ok(cached.config.clone());
-            }
+        if let Some(cached) = self.cache.read().expect("tts config cache lock").as_ref()
+            && cached.mtime == current_mtime
+        {
+            return Ok(cached.config.clone());
         }
         let config = self.load_from_disk()?;
         // Re-stat after `load_from_disk` so a defaults/migration write is reflected and the

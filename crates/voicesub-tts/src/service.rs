@@ -17,9 +17,9 @@ use crate::config::{
     normalize_tts_provider,
 };
 
-use voicesub_audio::{CHANNEL_SPEECH, CHANNEL_TWITCH};
 use crate::channel_queue::DualChannelSpeechQueue;
 use crate::queue::{ChannelEnqueueResult, MarkFinishedOutcome, SpeechQueueItem};
+use voicesub_audio::{CHANNEL_SPEECH, CHANNEL_TWITCH};
 
 use crate::subtitle_speech::{SubtitleSpeechPlanner, TtsSpeechSettings};
 
@@ -55,11 +55,7 @@ pub struct TtsModuleService {
 
 impl TtsModuleService {
     pub fn new(user_data_dir: impl Into<PathBuf>) -> Self {
-        Self::with_broadcaster(
-            user_data_dir,
-            Arc::new(|_| {}),
-            shared_handle(),
-        )
+        Self::with_broadcaster(user_data_dir, Arc::new(|_| {}), shared_handle())
     }
 
     pub fn with_broadcaster(

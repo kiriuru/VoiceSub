@@ -809,9 +809,12 @@ async fn late_translation_during_active_partial_republishes_completed_sequence()
     )
     .await;
 
-    let after_translation =
-        wait_for_visible_texts(&recorder, &["Вторая", "First EN"], Duration::from_millis(200))
-            .await;
+    let after_translation = wait_for_visible_texts(
+        &recorder,
+        &["Вторая", "First EN"],
+        Duration::from_millis(200),
+    )
+    .await;
     assert_eq!(after_translation.completed_sequence, Some(1));
     assert!(recorder.publish_count() > publishes_before);
     assert!(

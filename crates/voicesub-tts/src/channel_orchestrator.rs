@@ -543,10 +543,10 @@ impl ChannelOrchestrator {
 mod tests {
     use super::*;
     use crate::async_runtime::shared_handle;
-    use voicesub_audio::CHANNEL_SPEECH;
     use crate::queue::SpeechQueueItem;
     use std::time::Duration;
     use tempfile::tempdir;
+    use voicesub_audio::CHANNEL_SPEECH;
 
     #[tokio::test]
     async fn completion_waiter_notifies_exact_match() {

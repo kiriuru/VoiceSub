@@ -191,6 +191,9 @@ mod tests {
             strip_invisible_chat_characters("500&100 \u{3164}"),
             "500&100"
         );
-        assert_eq!(strip_invisible_chat_characters("hello \u{200B}world"), "hello world");
+        assert_eq!(
+            strip_invisible_chat_characters("hello \u{200B}world"),
+            "hello world"
+        );
     }
 }

@@ -420,12 +420,7 @@ fn poll_worker_control(
     }
 }
 
-fn append_sonic_pcm_to_sink(
-    sink: &Sink,
-    pcm: Vec<f32>,
-    channels: u16,
-    sample_rate: u32,
-) {
+fn append_sonic_pcm_to_sink(sink: &Sink, pcm: Vec<f32>, channels: u16, sample_rate: u32) {
     if pcm.is_empty() {
         return;
     }
@@ -466,12 +461,7 @@ fn play_pcm_sonic_streaming(ctx: SonicStreamContext<'_>) -> Result<(), AudioErro
     sonic.write(&ctx.pcm)?;
     drop(ctx.pcm);
     sonic.flush()?;
-    drain_sonic_to_sink(
-        &mut sonic,
-        ctx.sink,
-        ctx.channels,
-        ctx.sample_rate,
-    )?;
+    drain_sonic_to_sink(&mut sonic, ctx.sink, ctx.channels, ctx.sample_rate)?;
     if ctx.sink.empty() {
         return Err(AudioError::PlaybackFailed(
             "sonic produced no output".into(),

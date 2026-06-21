@@ -55,10 +55,8 @@ pub fn process_chat_message(
         &crate::lang::normalize_twitch_mentions(&clean_text),
         settings,
     );
-    clean_text = apply_post_mention_filters(
-        &crate::lang::strip_twitch_mentions(&clean_text),
-        settings,
-    );
+    clean_text =
+        apply_post_mention_filters(&crate::lang::strip_twitch_mentions(&clean_text), settings);
 
     if !crate::lang::has_meaningful_linguistic_content(&clean_text, settings.strip_links) {
         return empty_result(
@@ -443,18 +441,15 @@ mod tests {
         };
         let registry = EmoteRegistry::new();
         let raw = "https://github.com/kiriuru/VoiceSub";
-        let after_emotes = registry.clean_message_text(
-            raw,
-            None,
-            &settings.emote_sources,
-            settings.strip_emoji,
-        );
+        let after_emotes =
+            registry.clean_message_text(raw, None, &settings.emote_sources, settings.strip_emoji);
         assert_eq!(after_emotes, raw, "emote pass mangled URL");
-        let after_symbols = crate::symbols::strip_configured_symbols(
-            &after_emotes,
-            &settings.strip_symbols,
+        let after_symbols =
+            crate::symbols::strip_configured_symbols(&after_emotes, &settings.strip_symbols);
+        assert_eq!(
+            after_symbols, raw,
+            "symbol pass mangled URL: {after_symbols}"
         );
-        assert_eq!(after_symbols, raw, "symbol pass mangled URL: {after_symbols}");
     }
 
     #[test]
@@ -590,7 +585,11 @@ mod tests {
             sample,
             None,
         );
-        assert!(out.speakable, "expected speakable, got {:?}", out.skip_reason);
+        assert!(
+            out.speakable,
+            "expected speakable, got {:?}",
+            out.skip_reason
+        );
         assert_eq!(out.clean_text, sample);
         assert!(out.speak_text.contains("youtube.com"));
     }

@@ -244,9 +244,7 @@ impl TtsSpeechPipeline {
             lang: lang.clone(),
             dedupe_key: None,
         };
-        let result = self
-            .service
-            .enqueue_channel(CHANNEL_SPEECH, item.clone())?;
+        let result = self.service.enqueue_channel(CHANNEL_SPEECH, item.clone())?;
         self.speech
             .wake_after_enqueue(item.id.clone(), result.dropped_ids.clone());
         debug!(

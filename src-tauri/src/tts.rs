@@ -9,9 +9,9 @@ use tracing::{debug, info, warn};
 
 use voicesub_audio::{CHANNEL_SPEECH, CHANNEL_TWITCH, PlaybackHub};
 use voicesub_tts::{
-    ChannelEnqueueResult, TTS_WINDOW_LABEL, TtsConfig, TtsModuleService,
-    TtsSpeechPipeline, TtsSpeechSettings, bind_window_process, build_tts_module_url,
-    tts_webview_data_dir, validate_twitch_oauth_url,
+    ChannelEnqueueResult, TTS_WINDOW_LABEL, TtsConfig, TtsModuleService, TtsSpeechPipeline,
+    TtsSpeechSettings, bind_window_process, build_tts_module_url, tts_webview_data_dir,
+    validate_twitch_oauth_url,
 };
 use voicesub_twitch::TwitchConnectionStatus;
 use voicesub_twitch::TwitchTtsSettings;
