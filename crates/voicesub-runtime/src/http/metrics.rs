@@ -24,6 +24,9 @@ pub struct RuntimeMetricsCollector {
     runtime_status_duplicate_suppressed: AtomicU64,
     runtime_status_heartbeat_sent: AtomicU64,
     runtime_events_duplicate_suppressed: AtomicU64,
+    event_bus_consumer_lagged_total: AtomicU64,
+    event_bus_consumer_lagged_messages_skipped: AtomicU64,
+    overlay_ipc_coalesced_suppressed: AtomicU64,
     inner: Mutex<MetricsInner>,
 }
 
@@ -46,6 +49,9 @@ impl RuntimeMetricsCollector {
             runtime_status_duplicate_suppressed: AtomicU64::new(0),
             runtime_status_heartbeat_sent: AtomicU64::new(0),
             runtime_events_duplicate_suppressed: AtomicU64::new(0),
+            event_bus_consumer_lagged_total: AtomicU64::new(0),
+            event_bus_consumer_lagged_messages_skipped: AtomicU64::new(0),
+            overlay_ipc_coalesced_suppressed: AtomicU64::new(0),
             inner: Mutex::new(MetricsInner::default()),
         }
     }
@@ -68,6 +74,18 @@ impl RuntimeMetricsCollector {
 
     pub fn record_runtime_events_duplicate_suppressed(&self) {
         self.runtime_events_duplicate_suppressed
+            .fetch_add(1, Ordering::Relaxed);
+    }
+
+    pub fn record_event_bus_consumer_lagged(&self, skipped: u64) {
+        self.event_bus_consumer_lagged_total
+            .fetch_add(1, Ordering::Relaxed);
+        self.event_bus_consumer_lagged_messages_skipped
+            .fetch_add(skipped, Ordering::Relaxed);
+    }
+
+    pub fn record_overlay_ipc_coalesced(&self) {
+        self.overlay_ipc_coalesced_suppressed
             .fetch_add(1, Ordering::Relaxed);
     }
 
@@ -120,6 +138,12 @@ impl RuntimeMetricsCollector {
         self.runtime_status_heartbeat_sent
             .store(0, Ordering::Relaxed);
         self.runtime_events_duplicate_suppressed
+            .store(0, Ordering::Relaxed);
+        self.event_bus_consumer_lagged_total
+            .store(0, Ordering::Relaxed);
+        self.event_bus_consumer_lagged_messages_skipped
+            .store(0, Ordering::Relaxed);
+        self.overlay_ipc_coalesced_suppressed
             .store(0, Ordering::Relaxed);
         if let Ok(mut inner) = self.inner.lock() {
             *inner = MetricsInner::default();
@@ -208,6 +232,21 @@ impl RuntimeMetricsCollector {
             json!(self.suppressed_partial_updates.load(Ordering::Relaxed)),
         );
         map.insert(
+            "event_bus_consumer_lagged_total".into(),
+            json!(self.event_bus_consumer_lagged_total.load(Ordering::Relaxed)),
+        );
+        map.insert(
+            "event_bus_consumer_lagged_messages_skipped".into(),
+            json!(
+                self.event_bus_consumer_lagged_messages_skipped
+                    .load(Ordering::Relaxed)
+            ),
+        );
+        map.insert(
+            "overlay_ipc_coalesced_suppressed".into(),
+            json!(self.overlay_ipc_coalesced_suppressed.load(Ordering::Relaxed)),
+        );
+        map.insert(
             "browser_transcript_stale_dropped".into(),
             json!(browser_stale_dropped),
         );
@@ -234,5 +273,27 @@ impl RuntimeMetricsCollector {
         }
 
         Value::Object(map)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn ipc_fanout_metrics_record_lag_and_coalesce() {
+        let metrics = RuntimeMetricsCollector::new();
+        metrics.record_event_bus_consumer_lagged(12);
+        metrics.record_event_bus_consumer_lagged(3);
+        metrics.record_overlay_ipc_coalesced();
+        let snapshot = metrics.snapshot(
+            &EventsHubDiagnostics::default(),
+            0,
+            &json!({}),
+        );
+        assert_eq!(snapshot["event_bus_consumer_lagged_total"], 2);
+        assert_eq!(snapshot["event_bus_consumer_lagged_messages_skipped"], 15);
+        assert_eq!(snapshot["overlay_ipc_coalesced_suppressed"], 1);
     }
 }

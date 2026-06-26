@@ -2,11 +2,58 @@
 
 <p align="center"><a href="./CHANGELOG.en.md">English</a> • <a href="./CHANGELOG.md">Русский</a></p>
 
-Единая история изменений desktop-линии: **VoiceSub** `0.5.4` (текущая линия), **VoiceSub** `0.5.3`, **VoiceSub** `0.5.2`, **VoiceSub** `0.5.1`, **VoiceSub** `0.5.0` (первый релиз новой линии, baseline — SST `0.4.4`) и **SST Desktop** `0.4.4` и ниже.
+Единая история изменений desktop-линии: **VoiceSub** `0.5.5` (текущая линия), **VoiceSub** `0.5.4`, **VoiceSub** `0.5.3`, **VoiceSub** `0.5.2`, **VoiceSub** `0.5.1`, **VoiceSub** `0.5.0` (первый релиз новой линии, baseline — SST `0.4.4`) и **SST Desktop** `0.4.4` и ниже.
 
 
 
 **Формат записей (как [GitHub Release v0.2.9.2](https://github.com/kiriuru/stream_sub_translator/releases/tag/v0.2.9.2)):** одно предложение о версии; буллеты «что вошло» — только факты изменений; для desktop-exe / installer — блок «формат release» (структура поставки, без перечисления старых профилей как новинки).
+
+## 0.5.5
+
+Patch release. `PROJECT_VERSION` — **0.5.5**; `config_version` **8** (без изменений). Фокус: дальнейшее снижение нагрузки Tauri IPC и CPU на hot path субтитров/ASR — коалесинг `overlay_update` IPC для dashboard (OBS WebSocket без изменений), развязка ingest и fanout, lock-free WS event sequencing, метрики bus lag, безопасный debounce lag-resync. **Контракты без изменений:** OBS `/ws/events` по-прежнему получает каждый `overlay_update`; lifecycle субтитров, shape overlay payload, протокол browser worker `/ws/asr_worker`.
+
+### Runtime — Tauri IPC pump (CPU / WebView2)
+
+- **`src-tauri/src/ipc_pump.rs`** (новый) — отдельный bus→IPC pump: **trailing-edge коалесинг** `overlay_update` только для **main dashboard** (default 90 ms, env `VOICESUB_OVERLAY_IPC_MIN_INTERVAL_MS`; `0` = выкл.). OBS overlay и клиенты `/ws/events` получают каждый кадр.
+- **`runtime_update` / `translation_update`** немедленно сбрасывают pending overlay.
+- При `broadcast::RecvError::Lagged`: метрики, **debounce** полного snapshot resync (200 ms), resync в **фоновой задаче** — pump продолжает обрабатывать события и overlay-таймеры.
+- Flush pending overlay при закрытии bus.
+
+### Runtime — ingest vs fanout
+
+- **`transcript_controller.rs`** — subtitle lifecycle **до** WS/IPC fanout; partial `transcript_update` — **async** (`tokio::spawn`), ingest не блокируется на enrich/broadcast.
+- Final по-прежнему await `transcript_update`; порядок для `submit_final` сохранён через await `handle_transcript`.
+
+### Runtime — WS enrich + diagnostics
+
+- **`voicesub-ws/event_sequence.rs`** — `global_sequence` через `AtomicU64`; hot-path enrich без внешнего `Mutex`.
+- **`RuntimeMetricsCollector`** — `event_bus_consumer_lagged_total`, `event_bus_consumer_lagged_messages_skipped`, `overlay_ipc_coalesced_suppressed` в metrics `/api/runtime/status`.
+
+### Dashboard
+
+- **`App.svelte`** — пропуск 4 s HTTP poll при активном Tauri IPC; safety-net poll 30 s при подключённом IPC.
+
+### Документация
+
+- **`docs/TECHNICAL_ARCHITECTURE.en.md`** / **`docs/TECHNICAL_ARCHITECTURE.md`** — IPC pump, env overlay IPC coalescing, порядок ingest.
+
+### Env (новые / затронутые в 0.5.5)
+
+| Variable | Назначение |
+| --- | --- |
+| `VOICESUB_OVERLAY_IPC_MIN_INTERVAL_MS` | Trailing-edge коалесинг `overlay_update` IPC dashboard (default **90**; **`0`** = выкл.; OBS WS без изменений) |
+
+### Формат desktop release
+
+| Пункт | Значение |
+| --- | --- |
+| Installer | **`VoiceSub_0.5.5_x64-setup.exe`** |
+| Сборка | `build-release-msi.bat` → `build-release.ps1` → `F:\AI\VoiceSub - release\v0.5.5\` |
+
+### Миграция
+
+- `config_version` **не менялся** — конфиги 0.5.4 загружаются как есть.
+- Live preview dashboard может обновлять overlay IPC с задержкой до ~90 ms при быстрых partial; тайминг OBS overlay **без изменений**.
 
 ## 0.5.4
 
@@ -674,7 +721,7 @@ npm run test:frontend
 
 ## 0.4.4
 
-> **Frozen line.** SST `0.4.4` — read-only reference (`F:\AI\stream-sub-translator`). Активная разработка — VoiceSub `0.5.4`.
+> **Frozen line.** SST `0.4.4` — read-only reference (`F:\AI\stream-sub-translator`). Активная разработка — VoiceSub `0.5.5`.
 
 Patch release. `PROJECT_VERSION` в `backend/versioning.py` — **0.4.4**; `config_version` **7**. Публичные HTTP/WebSocket route contracts и subtitle/translation lifecycle **не менялись**.
 

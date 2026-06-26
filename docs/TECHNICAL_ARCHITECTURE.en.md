@@ -1,6 +1,6 @@
-# VoiceSub 0.5.4 — Technical Architecture Document
+# VoiceSub 0.5.5 — Technical Architecture Document
 
-Valid for the codebase where `voicesub-types::PROJECT_VERSION = "0.5.4"`.
+Valid for the codebase where `voicesub-types::PROJECT_VERSION = "0.5.5"`.
 
 This document describes the VoiceSub project layout, HTTP/WebSocket/Tauri IPC contracts, configuration schema, data flow through the Rust runtime, and frontend surfaces. It is the **canonical technical reference** for active development. README is a short product overview; CHANGELOG is release history; agent policy is `AGENTS.md`.
 
@@ -556,13 +556,14 @@ Payload enrichment: `event_sequence`, `created_at_ms`, `event_type` (`WsEventPub
 | `dashboard_nav.rs` | Main webview URL helpers |
 | `webview2_gate.rs` | WebView2 runtime presence check before window create |
 | `tts.rs` | TTS IPC adapter → `voicesub-tts` |
-| `shell.rs` | External URL open helpers |
+| `event_routing.rs` | Per-window `runtime-event` type filters + snapshot replay envelopes |
+| `ipc_pump.rs` | Bus→IPC pump: overlay coalescing (dashboard only), lag-resync debounce |
 
 **Tauri events (shell clients):** `runtime-event` (WS-shaped envelopes), `tts-speech-activity` (planned speech queue items for TTS UI log).
 
-**`runtime-event` routing (per window):** the bus→IPC pump (`src-tauri/src/event_routing.rs`) emits with `emit_to(label, …)`, not a global `emit`. The **main** dashboard window receives every envelope; the **tts** window receives only `twitch_chat_message`, `twitch_connection_update`, `runtime_update`, `runtime_status`, `ui_config_sync` (the types `handleRuntimeEvent` acts on). This keeps the high-frequency `transcript_update` / `overlay_update` stream off the TTS webview's IPC channel. Payloads are forwarded by reference (no per-event deep clone). On `broadcast::RecvError::Lagged`, the pump re-fetches `runtime_state_snapshot` and re-emits envelopes (`snapshot_to_envelopes`) so a lagged dashboard re-synchronizes instead of silently dropping state.
+**`runtime-event` routing (per window):** the bus→IPC pump (`src-tauri/src/ipc_pump.rs`, filters in `event_routing.rs`) emits with `emit_to(label, …)`, not a global `emit`. The **main** dashboard window receives every envelope; the **tts** window receives only `twitch_chat_message`, `twitch_connection_update`, `runtime_update`, `runtime_status`, `ui_config_sync` (the types `handleRuntimeEvent` acts on). This keeps the high-frequency `transcript_update` / `overlay_update` stream off the TTS webview's IPC channel. Payloads are forwarded by reference (no per-event deep clone). **`overlay_update` IPC to the main dashboard is trailing-edge coalesced** (default 90 ms, env `VOICESUB_OVERLAY_IPC_MIN_INTERVAL_MS`); OBS `/ws/events` still receives every frame. `runtime_update` / `translation_update` flush any pending coalesced overlay immediately. On `broadcast::RecvError::Lagged`, the pump records metrics (`event_bus_consumer_lagged_*`), debounces full snapshot resync (200 ms), then re-emits envelopes (`snapshot_to_envelopes`).
 
-**Partial coalescing:** `transcript_update` partials are leading-edge throttled in `TranscriptController` (default 90 ms, env `VOICESUB_TRANSCRIPT_PARTIAL_MIN_INTERVAL_MS`; new phrase/`sequence` and all finals bypass). The subtitle lifecycle and `overlay_update` path still see every partial — only the redundant transcript channel is rate-limited.
+**Partial coalescing:** `transcript_update` partials are leading-edge throttled in `TranscriptController` (default 90 ms, env `VOICESUB_TRANSCRIPT_PARTIAL_MIN_INTERVAL_MS`; new phrase/`sequence` and all finals bypass). Subtitle lifecycle and WS `overlay_update` still see every partial; ingest applies subtitle state **before** async transcript fanout. Only the redundant transcript IPC/WS channel is rate-limited.
 
 **Lifecycle:** main webview → `http://{bind_addr}/` on setup; on close → TTS shutdown → runtime stop.
 
@@ -617,6 +618,7 @@ With `logging.full_enabled`, close steps (`shutdown_begin`, `shutdown_step`, `sh
 | --- | --- |
 | `VOICESUB_ALLOW_LAN` | Bind `0.0.0.0` |
 | `VOICESUB_TRANSCRIPT_PARTIAL_MIN_INTERVAL_MS` | Min interval for partial `transcript_update` IPC/WS (default **90**; `0` = no coalescing; does not affect `overlay_update`) |
+| `VOICESUB_OVERLAY_IPC_MIN_INTERVAL_MS` | Trailing-edge coalesce for dashboard `overlay_update` IPC only (default **90**; **`0`** = disabled; OBS WS unaffected) |
 | `VOICESUB_BROWSER_AFFINITY` | Enable CPU affinity for browser worker (`1` / `true`) |
 | `VOICESUB_BROWSER_AFFINITY_MASK` | Hex CPU affinity mask override |
 | `VOICESUB_BROWSER_AFFINITY_EXCLUDE_LOW` | Exclude low-power cores from affinity mask (`1` default) |
@@ -1054,9 +1056,9 @@ Config key: `ui.language` (empty = browser default).
 
 ## 24. Versioning and Update Checks
 
-- **Single source (interim):** `voicesub-types::PROJECT_VERSION` = `"0.5.4"`
-- Workspace `Cargo.toml` `[workspace.package].version` = `0.5.4`
-- `package.json`, `tauri.conf.json` — aligned `0.5.4`
+- **Single source (interim):** `voicesub-types::PROJECT_VERSION` = `"0.5.5"`
+- Workspace `Cargo.toml` `[workspace.package].version` = `0.5.5`
+- `package.json`, `tauri.conf.json` — aligned `0.5.5`
 - `GET /api/version`, `POST /api/updates/check` — GitHub Releases poll (`update_service.rs`, `voicesub-types::version`)
 - Config `updates.*` — defaults + `normalize_updates_config` for legacy `config.toml`
 - Dashboard `UpdateBanner.svelte`; **Download** → Tauri `open_external_https_url` (`shell.rs`)

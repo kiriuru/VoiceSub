@@ -1,5 +1,6 @@
 mod dashboard_nav;
 mod event_routing;
+mod ipc_pump;
 mod shell;
 mod tts;
 
@@ -93,17 +94,6 @@ async fn launch_browser_worker(state: State<'_, AppState>) -> Result<String, Str
         .map_err(|err| err.to_string())?;
     info!(pid = result.pid, %state.bind_addr, "browser worker launched via IPC");
     Ok(format!("pid={}", result.pid))
-}
-
-/// Route a runtime event to the windows that consume it. The main dashboard receives
-/// every type; the TTS window only receives the few it acts on, keeping the high-frequency
-/// `transcript_update` / `overlay_update` stream off its IPC channel (review §1).
-/// Passing `&Value` avoids the per-event deep clone of the previous global emit (review §3).
-fn emit_runtime_event(app: &tauri::AppHandle, event_type: &str, payload: &serde_json::Value) {
-    let _ = app.emit_to(event_routing::MAIN_WINDOW_LABEL, "runtime-event", payload);
-    if event_routing::tts_window_wants(event_type) {
-        let _ = app.emit_to(TTS_WINDOW_LABEL, "runtime-event", payload);
-    }
 }
 
 async fn stop_runtime_session(bind_addr: SocketAddr, api_token: &str) {
@@ -289,60 +279,11 @@ pub fn run() {
             let runtime_for_bus = app.state::<AppState>().runtime.clone();
             let pipeline_for_bus = tts_state.pipeline.clone();
             let http_handle = app.state::<AppState>()._http_runtime.handle().clone();
-            http_handle.spawn(async move {
-                let mut bus_rx = runtime_for_bus.runtime_event_bus().subscribe();
-                loop {
-                    match bus_rx.recv().await {
-                        Ok(message) => {
-                            let event_type = message
-                                .get("type")
-                                .and_then(|value| value.as_str())
-                                .unwrap_or("");
-                            if event_type == "runtime_update" {
-                                let running = message
-                                    .pointer("/payload/running")
-                                    .and_then(|value| value.as_bool())
-                                    .unwrap_or(false);
-                                pipeline_for_bus.set_runtime_active(running);
-                            } else if event_type == "twitch_chat_message"
-                                && let Ok(chat) =
-                                    serde_json::from_value::<voicesub_twitch::TwitchChatMessage>(
-                                        message.get("payload").cloned().unwrap_or_default(),
-                                    )
-                            {
-                                pipeline_for_bus.handle_twitch_chat_message(&chat);
-                            }
-                            emit_runtime_event(
-                                &app_handle_for_events,
-                                event_type,
-                                message.as_ref(),
-                            );
-                        }
-                        // Bus capacity exceeded: the dashboard missed N messages and may show
-                        // stale state. Re-synchronize from a fresh snapshot instead of silently
-                        // continuing (review §9).
-                        Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped)) => {
-                            warn!(skipped, "runtime event bus lagged; resyncing snapshot");
-                            let snapshot = runtime_for_bus.runtime_state_snapshot().await;
-                            if let Some(running) = snapshot
-                                .runtime
-                                .get("running")
-                                .and_then(|value| value.as_bool())
-                            {
-                                pipeline_for_bus.set_runtime_active(running);
-                            }
-                            for envelope in event_routing::snapshot_to_envelopes(&snapshot) {
-                                let event_type = envelope
-                                    .get("type")
-                                    .and_then(|value| value.as_str())
-                                    .unwrap_or("");
-                                emit_runtime_event(&app_handle_for_events, event_type, &envelope);
-                            }
-                        }
-                        Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
-                    }
-                }
-            });
+            http_handle.spawn(ipc_pump::run_runtime_event_ipc_pump(
+                app_handle_for_events,
+                runtime_for_bus,
+                pipeline_for_bus,
+            ));
             let pipeline_for_playback = tts_state.pipeline.clone();
             std::thread::Builder::new()
                 .name("voicesub-tts-playback-events".into())

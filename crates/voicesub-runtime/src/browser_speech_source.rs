@@ -321,9 +321,7 @@ impl OrderedBrowserSpeechIngest {
             let speech = self.speech.clone();
             handle.spawn(async move {
                 while let Some(update) = rx.recv().await {
-                    // Process each update in a child task and await it: preserves WS
-                    // ordering (one in flight) while isolating a panic so it cannot
-                    // kill the consumer loop and silently stall all ingestion.
+                    // One update in flight; isolate panics so the consumer loop survives.
                     let speech = speech.clone();
                     if let Err(err) =
                         tokio::spawn(async move { speech.ingest(update).await }).await

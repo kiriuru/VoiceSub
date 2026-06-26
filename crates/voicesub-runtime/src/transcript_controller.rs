@@ -155,12 +155,21 @@ impl TranscriptController {
             (ms * 10.0).round() / 10.0
         });
         let event = self.apply_replacement(event);
-        // Only the redundant `transcript_update` WS/IPC channel is throttled here; the
-        // subtitle lifecycle and OBS source path below still receive every partial (§2).
-        if self.should_publish_transcript(&event) {
-            self.publish_transcript(&event).await;
-        }
+        // Subtitle lifecycle first; fanout must not block ingest (review §2).
         self.subtitle.handle_transcript(event.clone()).await;
+        if self.should_publish_transcript(&event) {
+            if event.event == TranscriptKind::Partial {
+                let publisher = self.publisher.clone();
+                let body = serde_json::to_value(&event).unwrap_or_default();
+                tokio::spawn(async move {
+                    publisher
+                        .broadcast_channel("transcript_update", "transcript_update", body)
+                        .await;
+                });
+            } else {
+                self.publish_transcript(&event).await;
+            }
+        }
         self.publish_source_event(&event).await;
 
         if event.event == TranscriptKind::Final {

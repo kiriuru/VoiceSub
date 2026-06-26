@@ -655,6 +655,15 @@ impl RuntimeService {
         self.runtime_event_bus.clone()
     }
 
+    pub fn record_event_bus_consumer_lagged(&self, skipped: u64) {
+        self.runtime_metrics
+            .record_event_bus_consumer_lagged(skipped);
+    }
+
+    pub fn record_overlay_ipc_coalesced(&self) {
+        self.runtime_metrics.record_overlay_ipc_coalesced();
+    }
+
     pub fn loopback_api_token(&self) -> &str {
         self.loopback_auth.token()
     }

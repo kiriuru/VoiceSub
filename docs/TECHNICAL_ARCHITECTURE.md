@@ -1,6 +1,6 @@
-# VoiceSub 0.5.4 — Технический документ
+# VoiceSub 0.5.5 — Технический документ
 
-Актуально для линии кода, где `voicesub-types::PROJECT_VERSION = "0.5.4"`.
+Актуально для линии кода, где `voicesub-types::PROJECT_VERSION = "0.5.5"`.
 
 Этот документ описывает layout проекта VoiceSub, контракт HTTP/WebSocket/Tauri IPC, схему конфигурации, поток данных через Rust runtime и поверхности frontend. Документ — **канонический technical reference** для активной разработки. README — обзор продукта; CHANGELOG — история релизов; политика агентов — `AGENTS.md`.
 
@@ -556,13 +556,14 @@ Payload enrichment: `event_sequence`, `created_at_ms`, `event_type` (`WsEventPub
 | `dashboard_nav.rs` | Main webview URL helpers |
 | `webview2_gate.rs` | WebView2 runtime presence check before window create |
 | `tts.rs` | TTS IPC adapter → `voicesub-tts` |
-| `shell.rs` | External URL open helpers |
+| `event_routing.rs` | Per-window `runtime-event` type filters + snapshot replay envelopes |
+| `ipc_pump.rs` | Bus→IPC pump: overlay coalescing (dashboard only), lag-resync debounce |
 
 **Tauri events (shell clients):** `runtime-event` (WS-shaped envelopes), `tts-speech-activity` (planned speech queue items for TTS UI log).
 
-**`runtime-event` routing (per window):** bus→IPC pump (`src-tauri/src/event_routing.rs`) эмитит через `emit_to(label, …)`, не global `emit`. **Main** dashboard получает все envelope; **tts** window — только `twitch_chat_message`, `twitch_connection_update`, `runtime_update`, `runtime_status`, `ui_config_sync`. Высокочастотный `transcript_update` / `overlay_update` не флудит IPC TTS webview. Payload по ссылке (без deep-clone). При `broadcast::RecvError::Lagged` pump re-fetch `runtime_state_snapshot` и re-emit (`snapshot_to_envelopes`).
+**`runtime-event` routing (per window):** bus→IPC pump (`src-tauri/src/ipc_pump.rs`, фильтры в `event_routing.rs`) эмитит через `emit_to(label, …)`, не global `emit`. **Main** dashboard получает все envelope; **tts** window — только `twitch_chat_message`, `twitch_connection_update`, `runtime_update`, `runtime_status`, `ui_config_sync`. Высокочастотный `transcript_update` / `overlay_update` не флудит IPC TTS webview. Payload по ссылке (без deep-clone). **`overlay_update` IPC на main dashboard коалесится** (trailing-edge, default 90 ms, env `VOICESUB_OVERLAY_IPC_MIN_INTERVAL_MS`); OBS `/ws/events` получает каждый кадр. `runtime_update` / `translation_update` сбрасывают pending overlay немедленно. При `RecvError::Lagged` — метрики `event_bus_consumer_lagged_*`, debounce resync 200 ms, затем `snapshot_to_envelopes`.
 
-**Partial coalescing:** partial `transcript_update` — leading-edge throttle в `TranscriptController` (default 90 ms, env `VOICESUB_TRANSCRIPT_PARTIAL_MIN_INTERVAL_MS`; новая фраза/`sequence` и все final — без задержки). Subtitle lifecycle и `overlay_update` видят каждый partial.
+**Partial coalescing:** partial `transcript_update` — leading-edge throttle в `TranscriptController` (default 90 ms, env `VOICESUB_TRANSCRIPT_PARTIAL_MIN_INTERVAL_MS`; новая фраза/`sequence` и все final — без задержки). Subtitle lifecycle и WS `overlay_update` видят каждый partial; ingest сначала обновляет subtitle, затем async fanout transcript. Коалесится только избыточный transcript IPC/WS канал.
 
 **Lifecycle:** main webview → `http://{bind_addr}/` on setup; on close → TTS shutdown → runtime stop.
 
@@ -617,6 +618,7 @@ Verbose runtime-events: `VOICESUB_TRACE_RUNTIME_EVENTS_VERBOSE`.
 | --- | --- |
 | `VOICESUB_ALLOW_LAN` | Bind `0.0.0.0` |
 | `VOICESUB_TRANSCRIPT_PARTIAL_MIN_INTERVAL_MS` | Мин. интервал partial `transcript_update` (default **90**; `0` = без коалесинга; не влияет на `overlay_update`) |
+| `VOICESUB_OVERLAY_IPC_MIN_INTERVAL_MS` | Trailing-edge коалесинг `overlay_update` IPC dashboard (default **90**; **`0`** = выкл.; OBS WS без изменений) |
 | `VOICESUB_BROWSER_AFFINITY` | CPU affinity browser worker (`1` / `true`) |
 | `VOICESUB_BROWSER_AFFINITY_MASK` | Hex override маски affinity |
 | `VOICESUB_BROWSER_AFFINITY_EXCLUDE_LOW` | Исключить low-power ядра из маски (default `1`) |
@@ -1054,9 +1056,9 @@ Config key: `ui.language` (empty = browser default).
 
 ## 24. Версионирование и проверка обновлений
 
-- **Single source (interim):** `voicesub-types::PROJECT_VERSION` = `"0.5.4"`
-- Workspace `Cargo.toml` `[workspace.package].version` = `0.5.4`
-- `package.json`, `tauri.conf.json` — aligned `0.5.4`
+- **Single source (interim):** `voicesub-types::PROJECT_VERSION` = `"0.5.5"`
+- Workspace `Cargo.toml` `[workspace.package].version` = `0.5.5`
+- `package.json`, `tauri.conf.json` — aligned `0.5.5`
 - `GET /api/version`, `POST /api/updates/check` — GitHub Releases poll (`voicesub-runtime/src/http/update_service.rs`, `voicesub-types::version`)
 - Config `updates.*` — defaults in `voicesub-config::defaults`; legacy configs merge via `normalize_updates_config`
 - Dashboard banner: `UpdateBanner.svelte`; download → Tauri `open_external_https_url` (`src-tauri/src/shell.rs`)

@@ -520,6 +520,10 @@
     });
 
     const poll = window.setInterval(async () => {
+      const connected = get(appStore).wsConnected;
+      if (connected) {
+        return;
+      }
       try {
         const runtime = await fetchRuntimeStatus();
         patchApp({ runtime });
@@ -528,8 +532,22 @@
       }
     }, 4000);
 
+    // Slow safety-net poll when Tauri IPC is active (wedged channel without disconnect).
+    const slowPoll = window.setInterval(async () => {
+      if (!get(appStore).wsConnected) {
+        return;
+      }
+      try {
+        const runtime = await fetchRuntimeStatus();
+        patchApp({ runtime });
+      } catch {
+        // server may be restarting
+      }
+    }, 30_000);
+
     return () => {
       window.clearInterval(poll);
+      window.clearInterval(slowPoll);
     };
   });
 

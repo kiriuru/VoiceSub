@@ -44,9 +44,7 @@ impl WsEventPublisher {
     }
 
     pub fn reset_broadcast_state(&self) {
-        if let Ok(mut guard) = self.sequencer.lock() {
-            guard.reset_broadcast_state();
-        }
+        self.sequencer.reset_broadcast_state();
     }
 
     pub async fn broadcast_channel(&self, channel: &str, enrich_as: &str, payload: Value) {
@@ -98,10 +96,7 @@ impl WsEventPublisher {
     }
 
     fn enrich_payload(&self, enrich_as: &str, payload: Value) -> Value {
-        match self.sequencer.lock() {
-            Ok(mut guard) => guard.enrich(enrich_as, payload),
-            Err(_) => payload,
-        }
+        self.sequencer.enrich(enrich_as, payload)
     }
 }
 
@@ -159,7 +154,7 @@ fn broadcast_now(events: &EventsHub, message: Value, event_bus: Option<&RuntimeE
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
 
     use super::*;
     use crate::event_bus::RuntimeEventBus;
@@ -169,12 +164,10 @@ mod tests {
     fn enrich_as_can_differ_from_channel() {
         let publisher = WsEventPublisher::new(
             EventsHub::new(),
-            Arc::new(Mutex::new(EventSequencer::default())),
+            Arc::new(EventSequencer::default()),
         );
         let body = publisher
             .sequencer()
-            .lock()
-            .unwrap()
             .enrich("runtime_status", json!({ "running": true }));
         assert_eq!(body["event_type"], "runtime_status");
     }

@@ -2,7 +2,7 @@ use voicesub_ws::{EventSequencer, EventsHub, WsEventPublisher, shared_event_sequ
 
 #[test]
 fn sequencer_reset_does_not_rewind_global_stream() {
-    let mut seq = EventSequencer::default();
+    let seq = EventSequencer::default();
     let first = seq.enrich("runtime_status", serde_json::json!({ "phase": "idle" }));
     seq.reset_broadcast_state();
     let second = seq.enrich(
