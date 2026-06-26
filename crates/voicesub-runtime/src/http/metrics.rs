@@ -244,7 +244,10 @@ impl RuntimeMetricsCollector {
         );
         map.insert(
             "overlay_ipc_coalesced_suppressed".into(),
-            json!(self.overlay_ipc_coalesced_suppressed.load(Ordering::Relaxed)),
+            json!(
+                self.overlay_ipc_coalesced_suppressed
+                    .load(Ordering::Relaxed)
+            ),
         );
         map.insert(
             "browser_transcript_stale_dropped".into(),
@@ -287,11 +290,7 @@ mod tests {
         metrics.record_event_bus_consumer_lagged(12);
         metrics.record_event_bus_consumer_lagged(3);
         metrics.record_overlay_ipc_coalesced();
-        let snapshot = metrics.snapshot(
-            &EventsHubDiagnostics::default(),
-            0,
-            &json!({}),
-        );
+        let snapshot = metrics.snapshot(&EventsHubDiagnostics::default(), 0, &json!({}));
         assert_eq!(snapshot["event_bus_consumer_lagged_total"], 2);
         assert_eq!(snapshot["event_bus_consumer_lagged_messages_skipped"], 15);
         assert_eq!(snapshot["overlay_ipc_coalesced_suppressed"], 1);

@@ -14,7 +14,7 @@ use tokio::sync::broadcast;
 use tokio::time::{Instant, Sleep};
 use tracing::warn;
 use voicesub_runtime::RuntimeService;
-use voicesub_tts::{TtsSpeechPipeline, TTS_WINDOW_LABEL};
+use voicesub_tts::{TTS_WINDOW_LABEL, TtsSpeechPipeline};
 use voicesub_twitch::TwitchChatMessage;
 
 use crate::event_routing;
@@ -65,7 +65,9 @@ struct IpcPumpState {
 impl IpcPumpState {
     fn new() -> Self {
         let mut overlay_timer = Box::pin(tokio::time::sleep(Duration::from_secs(3600)));
-        overlay_timer.as_mut().reset(Instant::now() + Duration::from_secs(3600));
+        overlay_timer
+            .as_mut()
+            .reset(Instant::now() + Duration::from_secs(3600));
         Self {
             overlay_pending: None,
             overlay_timer,
@@ -75,20 +77,13 @@ impl IpcPumpState {
         }
     }
 
-    fn queue_overlay(
-        &mut self,
-        message: Arc<Value>,
-        runtime: &RuntimeService,
-        coalesce: Duration,
-    ) {
+    fn queue_overlay(&mut self, message: Arc<Value>, runtime: &RuntimeService, coalesce: Duration) {
         if self.overlay_pending.is_some() {
             runtime.record_overlay_ipc_coalesced();
         }
         self.overlay_pending = Some(message);
         // Trailing-edge: each new frame pushes the flush deadline forward.
-        self.overlay_timer
-            .as_mut()
-            .reset(Instant::now() + coalesce);
+        self.overlay_timer.as_mut().reset(Instant::now() + coalesce);
         self.overlay_timer_active = true;
     }
 
@@ -102,12 +97,7 @@ impl IpcPumpState {
         self.overlay_timer_active = false;
     }
 
-    fn handle_immediate(
-        &mut self,
-        app: &AppHandle,
-        event_type: &str,
-        payload: &Value,
-    ) {
+    fn handle_immediate(&mut self, app: &AppHandle, event_type: &str, payload: &Value) {
         if self.overlay_pending.is_some() {
             self.flush_overlay(app);
         }
@@ -115,11 +105,7 @@ impl IpcPumpState {
     }
 }
 
-fn apply_pipeline_side_effects(
-    pipeline: &TtsSpeechPipeline,
-    event_type: &str,
-    message: &Value,
-) {
+fn apply_pipeline_side_effects(pipeline: &TtsSpeechPipeline, event_type: &str, message: &Value) {
     if event_type == "runtime_update" {
         let running = message
             .pointer("/payload/running")
@@ -153,9 +139,7 @@ fn lag_resync_debounced(state: &IpcPumpState) -> bool {
 
 fn mark_lag_resync_started(state: &mut IpcPumpState) {
     state.last_lag_resync = Some(Instant::now());
-    state
-        .lag_resync_in_flight
-        .store(true, Ordering::Release);
+    state.lag_resync_in_flight.store(true, Ordering::Release);
 }
 
 fn spawn_lag_snapshot_resync(

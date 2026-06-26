@@ -162,10 +162,8 @@ mod tests {
 
     #[test]
     fn enrich_as_can_differ_from_channel() {
-        let publisher = WsEventPublisher::new(
-            EventsHub::new(),
-            Arc::new(EventSequencer::default()),
-        );
+        let publisher =
+            WsEventPublisher::new(EventsHub::new(), Arc::new(EventSequencer::default()));
         let body = publisher
             .sequencer()
             .enrich("runtime_status", json!({ "running": true }));
