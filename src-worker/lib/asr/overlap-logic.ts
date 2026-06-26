@@ -117,7 +117,6 @@ export function overlapLifecycleLimits(state: BrowserAsrState): {
 const OVERLAP_BUDDY_TERMINAL_ERRORS = new Set([
   "not-allowed",
   "service-not-allowed",
-  "audio-capture",
 ]);
 
 function ensureOverlapSlotTrackingArrays(state: BrowserAsrState): void {

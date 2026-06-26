@@ -152,6 +152,7 @@
   "browser_asr.network.preflight_failed_log": "웹 음성: 네트워크 프리플라이트 실패 - 인식 클라우드에 연결할 수 없습니다. VPN/방화벽/DNS/프록시를 확인하고 다시 시작을 누르세요.",
   "browser_asr.error.phrases_retry": "웹 음성: 지원되지 않는 문구 - 장치에 있는 문구 힌트 없이 다시 시도합니다.",
   "browser_asr.error.language_retry": "웹 음성: 지원되지 않는 언어 — 기기 내 힌트를 지운 후 한 번 재시도합니다.",
+  "browser_asr.error.audio_capture_retry": "Web Speech audio-capture error: microphone stream lost — re-acquiring mic and retrying recognition.",
   "browser_asr.error.terminal_status": "오류: {errorKind}",
   "overlay.preview.config_not_loaded": "구성이 로드될 때까지 자막 스타일 미리보기를 사용할 수 없습니다.",
   "overlay.preview.renderer_unavailable": "SubtitleStyleRenderer를 사용할 수 없습니다.",

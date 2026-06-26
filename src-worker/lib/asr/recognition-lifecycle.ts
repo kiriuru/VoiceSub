@@ -1,5 +1,6 @@
 import type { AsrManagerHost } from "./types";
 import type { WorkerSpeechRecognition } from "./speech-types";
+import { ensureMicrophonePermission } from "./mic-permission-bridge";
 import {
   createOverlapRecognitionPair,
   recognitionOverlapActive,
@@ -264,7 +265,29 @@ export function scheduleRestart(
       manager.state.pendingStart = true;
       return;
     }
-    performControlledStart(manager, normalizedReason);
+    void resumeRecognitionAfterRestartDelay(manager, normalizedReason);
   }, delayMs);
   manager.emitWorkerStatus("restart-scheduled");
+}
+
+async function resumeRecognitionAfterRestartDelay(
+  manager: AsrManagerHost,
+  normalizedReason: string
+): Promise<void> {
+  if (!manager.state.desiredRunning) {
+    return;
+  }
+  if (normalizedReason === "audio_capture") {
+    try {
+      await ensureMicrophonePermission(manager);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error || "microphone re-acquire failed");
+      manager.setLastErrorInternal("audio-capture", message);
+      manager.state.pendingRestartReason = "audio_capture";
+      manager.appendLogInternal(`audio-capture retry: microphone re-acquire failed: ${message}`);
+      manager.scheduleRestartInternal("audio_capture");
+      return;
+    }
+  }
+  performControlledStart(manager, normalizedReason);
 }

@@ -4,7 +4,7 @@ import type {
   WorkerSpeechRecognitionErrorEvent,
   WorkerSpeechRecognitionEvent,
 } from "./speech-types";
-import { classifyRecognitionError, networkErrorHintMessages } from "./recognition-error-logic";
+import { classifyRecognitionError, audioCaptureRetryHintMessage, networkErrorHintMessages } from "./recognition-error-logic";
 import { parseRecognitionResultEvent } from "./recognition-result-logic";
 import {
   handleInactiveOverlapBuddyEnded,
@@ -104,6 +104,22 @@ function applyRecognitionError(
         }
       }
       registerNetworkErrorForPreflight(manager);
+      manager.emitWorkerStatus("recognition-error");
+      return;
+    case "audio_capture":
+      manager.state.audioCaptureErrorCount = Number(manager.state.audioCaptureErrorCount || 0) + 1;
+      manager.state.pendingRestartReason = "audio_capture";
+      manager.setSupervisorStateInternal("backoff");
+      manager.setStatusInternal("socket-reconnecting");
+      manager.options.releaseMicrophoneMonitor?.();
+      {
+        const now = manager.now();
+        const last = Number(manager._lastWebSpeechAudioCaptureHintAtMs || 0);
+        if (now - last > 15000) {
+          manager._lastWebSpeechAudioCaptureHintAtMs = now;
+          manager.appendLogInternal(audioCaptureRetryHintMessage((key) => manager.translate(key)));
+        }
+      }
       manager.emitWorkerStatus("recognition-error");
       return;
     case "aborted":
@@ -350,6 +366,7 @@ export function wireRecognitionHandlers(
     const restartReason =
       manager.state.pendingRestartReason ||
       (manager.state.lastErrorKind === "network" ? "network" : null) ||
+      (manager.state.lastErrorKind === "audio-capture" ? "audio_capture" : null) ||
       (manager.state.lastErrorKind === "no-speech" ? "no_speech" : null) ||
       "normal_onend";
     manager.state.pendingRestartReason = null;

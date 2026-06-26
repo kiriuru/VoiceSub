@@ -71,7 +71,7 @@ export function restartDelayForReason(state: BrowserAsrState, reason: string, li
     }
     return state.noSpeechBackoffMs;
   }
-  if (normalized === "network") {
+  if (normalized === "network" || normalized === "audio_capture") {
     return nextNetworkBackoffMs(state, limits.initialNetworkBackoffMs, limits.maxNetworkBackoffMs);
   }
   return limits.restartDelayByReasonMs[normalized] ?? limits.restartDelayByReasonMs.normal_onend ?? 0;

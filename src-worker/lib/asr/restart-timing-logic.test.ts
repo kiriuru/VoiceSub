@@ -41,6 +41,14 @@ describe("restart-timing-logic", () => {
     expect(state.browserMinimumReconnectSuppressedCount).toBe(1);
   });
 
+  it("backs off audio_capture like network", () => {
+    const state = createBrowserAsrStateSeed();
+    const first = restartDelayForReason(state, "audio_capture", limits);
+    const second = restartDelayForReason(state, "audio_capture", limits);
+    expect(first).toBeGreaterThan(0);
+    expect(second).toBeGreaterThanOrEqual(first);
+  });
+
   it("triggers network preflight after burst threshold", () => {
     const state = createBrowserAsrStateSeed();
     const now = 10_000;

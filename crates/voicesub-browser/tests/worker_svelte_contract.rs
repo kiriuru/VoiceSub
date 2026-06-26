@@ -79,12 +79,22 @@ fn session_manager_terminal_errors_block_automatic_restart() {
     for needle in [
         "\"not-allowed\"",
         "\"service-not-allowed\"",
-        "\"audio-capture\"",
-        "audio_capture_recovery",
         "phrases-not-supported",
         "language-not-supported",
     ] {
         assert_contains(&manager, needle, "terminal errors");
+    }
+}
+
+#[test]
+fn session_manager_retries_audio_capture_with_backoff() {
+    let manager = read_manager_ts_bundle();
+    for needle in [
+        "\"audio_capture\"",
+        "audioCaptureRetryHintMessage",
+        "releaseMicrophoneMonitor",
+    ] {
+        assert_contains(&manager, needle, "audio capture retry");
     }
 }
 

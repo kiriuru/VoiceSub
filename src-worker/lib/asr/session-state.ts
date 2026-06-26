@@ -18,6 +18,7 @@ export function createBrowserAsrStateSeed(existing?: Partial<BrowserAsrState>): 
     restartCount: Number(seed.restartCount || 0),
     noSpeechCount: Number(seed.noSpeechCount || 0),
     networkErrorCount: Number(seed.networkErrorCount || 0),
+    audioCaptureErrorCount: Number(seed.audioCaptureErrorCount || 0),
     websocketReady: Boolean(seed.websocketReady),
     stoppingSinceMs: seed.stoppingSinceMs ?? null,
     lastStartAtMs: Number(seed.lastStartAtMs || 0),

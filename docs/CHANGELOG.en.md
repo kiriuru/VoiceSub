@@ -10,7 +10,7 @@ Unified change history for the desktop line: **VoiceSub** `0.5.5` (current line)
 
 ## 0.5.5
 
-Patch release. `PROJECT_VERSION` — **0.5.5**; `config_version` **8** (unchanged). Focus: further reduction of Tauri IPC and CPU load on the subtitle/ASR hot path — dashboard `overlay_update` IPC coalescing (OBS WebSocket unchanged), decoupled ingest vs fanout, lock-free WS event sequencing, bus lag metrics, and safer lag-resync debouncing. **Contracts unchanged:** OBS `/ws/events` still receives every `overlay_update`; subtitle lifecycle, overlay payload shape, browser worker `/ws/asr_worker` protocol.
+Patch release. `PROJECT_VERSION` — **0.5.5**; `config_version` **8** (unchanged). Focus: further reduction of Tauri IPC and CPU load on the subtitle/ASR hot path — dashboard `overlay_update` IPC coalescing (OBS WebSocket unchanged), decoupled ingest vs fanout, lock-free WS event sequencing, bus lag metrics, and safer lag-resync debouncing; **hotfix:** Web Speech auto-retry on `audio-capture`. **Contracts unchanged:** OBS `/ws/events` still receives every `overlay_update`; subtitle lifecycle, overlay payload shape, browser worker `/ws/asr_worker` protocol.
 
 ### Runtime — Tauri IPC pump (CPU / WebView2)
 
@@ -32,6 +32,10 @@ Patch release. `PROJECT_VERSION` — **0.5.5**; `config_version` **8** (unchange
 ### Dashboard
 
 - **`App.svelte`** — skips 4 s HTTP runtime poll when Tauri IPC is connected; adds 30 s safety-net poll when IPC is active.
+
+### Browser worker — auto-retry `audio-capture`
+
+- **`src-worker/lib/asr/`** — Web Speech **`audio-capture`** no longer stops recognition permanently: exponential backoff (same as `network`), microphone monitor release, `getUserMedia` re-acquire, and automatic session restart. Only `not-allowed` / `service-not-allowed` remain terminal.
 
 ### Documentation
 

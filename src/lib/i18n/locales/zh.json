@@ -152,6 +152,7 @@
   "browser_asr.network.preflight_failed_log": "网络语音：网络预检失败——识别云无法访问。检查 VPN/防火墙/DNS/代理，然后再次按“开始”。",
   "browser_asr.error.phrases_retry": "网络语音：不支持短语 — 在没有设备上短语提示的情况下重试。",
   "browser_asr.error.language_retry": "网络语音：不支持语言 — 清除设备上的提示后重试一次。",
+  "browser_asr.error.audio_capture_retry": "Web Speech audio-capture error: microphone stream lost — re-acquiring mic and retrying recognition.",
   "browser_asr.error.terminal_status": "错误：{错误类型}",
   "overlay.preview.config_not_loaded": "在配置加载之前，字幕样式预览不可用。",
   "overlay.preview.renderer_unavailable": "SubtitleStyleRenderer 不可用。",

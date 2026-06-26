@@ -152,6 +152,7 @@
   "browser_asr.network.preflight_failed_log": "Web Speech: сетевой preflight provalil — облако распознавания недоступно. Проверьте VPN/firewall/DNS/прокси и нажмите Start заново.",
   "browser_asr.error.phrases_retry": "Web Speech: phrases-not-supported — повтор без on-device phrase hints.",
   "browser_asr.error.language_retry": "Web Speech: language-not-supported — одна попытка повтора после сброса on-device подсказок.",
+  "browser_asr.error.audio_capture_retry": "Web Speech: ошибка audio-capture — потерян поток микрофона, повторный захват и перезапуск распознавания.",
   "browser_asr.error.terminal_status": "ошибка: {errorKind}",
   "overlay.preview.config_not_loaded": "Предпросмотр стиля субтитров появится после загрузки config.",
   "overlay.preview.renderer_unavailable": "SubtitleStyleRenderer недоступен.",

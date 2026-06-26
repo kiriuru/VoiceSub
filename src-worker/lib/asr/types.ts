@@ -52,6 +52,7 @@ export interface BrowserAsrState {
   restartCount: number;
   noSpeechCount: number;
   networkErrorCount: number;
+  audioCaptureErrorCount: number;
   websocketReady: boolean;
   stoppingSinceMs: number | null;
   lastStartAtMs: number;
@@ -193,6 +194,7 @@ export interface SessionManagerOptions {
   setStatus?: (status: string) => void;
   updateCounters?: () => void;
   ensureMicrophonePermission?: () => Promise<MediaStream>;
+  releaseMicrophoneMonitor?: () => void;
   getRecognitionSettings?: () => RecognitionSettings;
   isForceFinalizationEnabled?: () => boolean;
   setPartialText?: (value: string) => void;
@@ -237,6 +239,7 @@ export interface AsrManagerHost {
   minimumReconnectIntervalMs: number;
   recognitionStartLogMinGapMs: number;
   _lastWebSpeechNetworkHintAtMs?: number;
+  _lastWebSpeechAudioCaptureHintAtMs?: number;
   _permissionPromise: Promise<unknown> | null;
   _appendLogThrottleState: Map<string, number> | null;
   _wakeLockSentinel: WakeLockSentinel | null;

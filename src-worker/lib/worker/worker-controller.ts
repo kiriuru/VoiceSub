@@ -207,6 +207,7 @@ export function createWorkerController(ui: WorkerUiStore): WorkerController {
     setStatus: (status) => ui.setStatus(status),
     updateCounters,
     ensureMicrophonePermission: () => ensureMicrophonePermission(state, appendLog),
+    releaseMicrophoneMonitor: () => releaseMicrophoneMonitor(state),
     getRecognitionSettings: () => ({
       language: state.configuredLanguage,
       interimResults: ui.interimResults,

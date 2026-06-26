@@ -152,6 +152,7 @@
   "browser_asr.network.preflight_failed_log": "Web スピーチ: ネットワーク プリフライトに失敗しました — 認識クラウドに到達できません。 VPN/ファイアウォール/DNS/プロキシを確認し、もう一度開始を押します。",
   "browser_asr.error.phrases_retry": "Web 音声: フレーズがサポートされていません - デバイス上のフレーズ ヒントなしで再試行します。",
   "browser_asr.error.language_retry": "Web 音声: サポートされていない言語 — デバイス上のヒントをクリアした後、1 回再試行します。",
+  "browser_asr.error.audio_capture_retry": "Web Speech audio-capture error: microphone stream lost — re-acquiring mic and retrying recognition.",
   "browser_asr.error.terminal_status": "エラー: {errorKind}",
   "overlay.preview.config_not_loaded": "字幕スタイルのプレビューは、設定が読み込まれるまで利用できません。",
   "overlay.preview.renderer_unavailable": "SubtitleStyleRenderer は使用できません。",

@@ -2,7 +2,7 @@ import type { BrowserAsrState, ClassifiedRecognitionError } from "./types";
 import type { WorkerSpeechRecognitionErrorEvent } from "./speech-types";
 import { webSpeechRecognitionPolicy } from "./web-speech-policy";
 
-const TERMINAL_PERMISSION_ERRORS = ["not-allowed", "service-not-allowed", "audio-capture"];
+const TERMINAL_PERMISSION_ERRORS = ["not-allowed", "service-not-allowed"];
 
 function normalizeErrorKind(event: WorkerSpeechRecognitionErrorEvent): string {
   return String(event?.error || "")
@@ -44,6 +44,9 @@ export function classifyRecognitionError(
   if (errorKind === "network") {
     return { kind: "network", errorKind, errorMessage, logKey: "network_hint" };
   }
+  if (errorKind === "audio-capture") {
+    return { kind: "audio_capture", errorKind, errorMessage, logKey: "audio_capture_hint" };
+  }
   if (errorKind === "aborted") {
     return { kind: "aborted", errorKind, errorMessage };
   }
@@ -52,7 +55,7 @@ export function classifyRecognitionError(
       kind: "terminal_permission",
       errorKind,
       errorMessage,
-      terminalReason: errorKind === "audio-capture" ? "audio_capture_recovery" : "permission_denied",
+      terminalReason: "permission_denied",
     };
   }
   if (isLanguageUnsupported(errorKind, policy)) {
@@ -67,4 +70,12 @@ export function networkErrorHintMessages(translate: (key: string) => string): st
     return translated;
   }
   return "Web Speech network error: recognition service unreachable (VPN, firewall, DNS, proxy, blockers). Check connectivity; changing the browser microphone usually does not fix this.";
+}
+
+export function audioCaptureRetryHintMessage(translate: (key: string) => string): string {
+  const translated = translate("browser_asr.error.audio_capture_retry");
+  if (translated !== "browser_asr.error.audio_capture_retry") {
+    return translated;
+  }
+  return "Web Speech audio-capture error: microphone stream lost — re-acquiring mic and retrying recognition.";
 }

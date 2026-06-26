@@ -33,6 +33,12 @@ describe("recognition-error-logic", () => {
     expect(classified.terminalReason).toBe("permission_denied");
   });
 
+  it("retries audio-capture instead of terminal stop", () => {
+    const state = createBrowserAsrStateSeed();
+    const classified = classifyRecognitionError(errorEvent("audio-capture"), undefined, state);
+    expect(classified.kind).toBe("audio_capture");
+  });
+
   it("maps exhausted language fallback to terminal language reason", () => {
     const state = createBrowserAsrStateSeed({ webSpeechLanguageSoftFallbackUsed: true });
     const classified = classifyRecognitionError(errorEvent("language-not-supported"), undefined, state);
