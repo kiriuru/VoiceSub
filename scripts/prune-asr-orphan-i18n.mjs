@@ -3,6 +3,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import vm from "node:vm";
+import { pathToFileURL } from "node:url";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const JSON_LOCALES_DIR = path.join(ROOT, "src/lib/i18n/locales");
@@ -119,26 +120,37 @@ function loadLocaleJs(filePath, localeCode) {
   return { code, data: sandbox.window.__SST_I18N_LOCALES[localeCode] || {} };
 }
 
-let totalRemoved = 0;
+export function runPruneAsrOrphanI18n() {
+  let totalRemoved = 0;
 
-for (const code of LOCALE_CODES) {
-  const jsonPath = path.join(JSON_LOCALES_DIR, `${code}.json`);
-  if (fs.existsSync(jsonPath)) {
-    const data = JSON.parse(fs.readFileSync(jsonPath, "utf8"));
-    const removed = pruneObject(data);
-    fs.writeFileSync(jsonPath, `${JSON.stringify(data, null, 2)}\n`, "utf8");
-    totalRemoved += removed;
-    console.log(`${path.basename(jsonPath)}: removed ${removed} keys`);
+  for (const code of LOCALE_CODES) {
+    const jsonPath = path.join(JSON_LOCALES_DIR, `${code}.json`);
+    if (fs.existsSync(jsonPath)) {
+      const data = JSON.parse(fs.readFileSync(jsonPath, "utf8"));
+      const removed = pruneObject(data);
+      fs.writeFileSync(jsonPath, `${JSON.stringify(data, null, 2)}\n`, "utf8");
+      totalRemoved += removed;
+      console.log(`${path.basename(jsonPath)}: removed ${removed} keys`);
+    }
+
+    const jsPath = path.join(JS_LOCALES_DIR, `${code}.js`);
+    if (fs.existsSync(jsPath)) {
+      const { data } = loadLocaleJs(jsPath, code);
+      const removed = pruneObject(data);
+      fs.writeFileSync(jsPath, serializeLocaleJs("", code, data), "utf8");
+      totalRemoved += removed;
+      console.log(`${path.basename(jsPath)}: removed ${removed} keys`);
+    }
   }
 
-  const jsPath = path.join(JS_LOCALES_DIR, `${code}.js`);
-  if (fs.existsSync(jsPath)) {
-    const { data } = loadLocaleJs(jsPath, code);
-    const removed = pruneObject(data);
-    fs.writeFileSync(jsPath, serializeLocaleJs("", code, data), "utf8");
-    totalRemoved += removed;
-    console.log(`${path.basename(jsPath)}: removed ${removed} keys`);
-  }
+  console.log(`Total removed: ${totalRemoved}`);
+  return totalRemoved;
 }
 
-console.log(`Total removed: ${totalRemoved}`);
+const isMain =
+  process.argv[1] &&
+  pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url;
+
+if (isMain) {
+  runPruneAsrOrphanI18n();
+}

@@ -46,7 +46,12 @@ pub fn validate_external_https_url(url: &str) -> Result<(), String> {
         .to_ascii_lowercase();
     let allowed = matches!(
         host.as_str(),
-        "github.com" | "www.github.com" | "id.twitch.tv"
+        "github.com"
+            | "www.github.com"
+            | "id.twitch.tv"
+            | "developer.nvidia.com"
+            | "www.nvidia.com"
+            | "nvidia.com"
     );
     if !allowed {
         return Err(format!("host is not allowed: {host}"));
@@ -80,6 +85,15 @@ mod tests {
             validate_external_https_url("https://github.com/kiriuru/VoiceSub/releases/tag/v0.5.2")
                 .is_ok()
         );
+    }
+
+    #[test]
+    fn allows_cuda_toolkit_download_urls() {
+        assert!(validate_external_https_url(
+            "https://developer.nvidia.com/cuda-13-0-0-download-archive?target_os=Windows&target_arch=x86_64&target_type=exe_local"
+        )
+        .is_ok());
+        assert!(validate_external_https_url("https://www.nvidia.com/Download/index.aspx").is_ok());
     }
 
     #[test]

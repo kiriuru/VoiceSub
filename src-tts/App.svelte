@@ -96,7 +96,7 @@
 
   let externalOAuthDone = $state(false);
   let tab = $state<TtsTab>("speech");
-  let version = $state("0.5.0");
+  let version = $state("0.6.0");
   let config = $state<TtsConfig>({
     enabled: false,
     tts_provider: "browser_google",

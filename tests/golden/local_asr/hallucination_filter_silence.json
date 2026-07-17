@@ -1,0 +1,13 @@
+{
+  "source_test": "hallucination filter silent short text",
+  "config": {
+    "enabled": true,
+    "min_chars_when_silent": 5,
+    "cooldown_ms": 500
+  },
+  "cases": [
+    { "text": "hi", "speech_active": false, "expect_accept": false },
+    { "text": "hello world", "speech_active": false, "expect_accept": true },
+    { "text": "ok", "speech_active": true, "expect_accept": true }
+  ]
+}

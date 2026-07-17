@@ -54,6 +54,8 @@ pub struct HttpState {
     pub last_subtitle_payload: Arc<Mutex<Option<Value>>>,
     pub loopback_auth: Arc<LoopbackAuth>,
     pub background_tasks: Arc<BackgroundTaskRegistry>,
+    pub local_asr: Arc<voicesub_asr_local::LocalAsrModuleService>,
+    pub local_asr_speech: Arc<crate::local_asr_speech_source::SharedLocalAsrSpeechSource>,
 }
 
 impl HttpState {
@@ -104,6 +106,8 @@ impl HttpState {
         last_subtitle_payload: Arc<Mutex<Option<Value>>>,
         loopback_auth: Arc<LoopbackAuth>,
         background_tasks: Arc<BackgroundTaskRegistry>,
+        local_asr: Arc<voicesub_asr_local::LocalAsrModuleService>,
+        local_asr_speech: Arc<crate::local_asr_speech_source::SharedLocalAsrSpeechSource>,
     ) -> Arc<Self> {
         Arc::new(Self {
             paths,
@@ -134,6 +138,8 @@ impl HttpState {
             last_subtitle_payload,
             loopback_auth,
             background_tasks,
+            local_asr,
+            local_asr_speech,
         })
     }
 }

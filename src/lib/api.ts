@@ -143,6 +143,11 @@ export async function openTtsModule(): Promise<void> {
   return invoke("tts_open_window");
 }
 
+export async function openLocalAsrModule(): Promise<void> {
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke("local_asr_open_window");
+}
+
 export async function openExternalUrl(url: string): Promise<void> {
   const trimmed = url.trim();
   if (!trimmed) {

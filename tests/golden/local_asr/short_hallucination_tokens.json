@@ -1,0 +1,39 @@
+{
+  "source_test": "SST SHORT_HALLUCINATION_TOKENS + should_drop_short_hallucination parity",
+  "token_count": 22,
+  "tokens": [
+    "yeah",
+    "yeah.",
+    "mm-hmm",
+    "mm-hmm.",
+    "mhm",
+    "mhm.",
+    "uh-huh",
+    "uh-huh.",
+    "okay",
+    "okay.",
+    "ok",
+    "ok.",
+    "hmm",
+    "hmm.",
+    "uh",
+    "uh.",
+    "ah",
+    "ah.",
+    "yep",
+    "yep.",
+    "nope",
+    "nope."
+  ],
+  "cases": [
+    { "text": "", "duration_ms": 100, "is_final": false, "expect_drop": true },
+    { "text": "yeah", "duration_ms": 500, "is_final": false, "expect_drop": true },
+    { "text": "Yeah.", "duration_ms": 800, "is_final": true, "expect_drop": true },
+    { "text": "yeah", "duration_ms": 2000, "is_final": false, "expect_drop": false },
+    { "text": "hello world", "duration_ms": 200, "is_final": true, "expect_drop": false },
+    { "text": "ok", "duration_ms": 400, "is_final": false, "expect_drop": true },
+    { "text": "mm-hmm", "duration_ms": 600, "is_final": false, "expect_drop": true },
+    { "text": "uh-huh.", "duration_ms": 850, "is_final": true, "expect_drop": true },
+    { "text": "nope.", "duration_ms": 1200, "is_final": false, "expect_drop": false }
+  ]
+}

@@ -9,12 +9,14 @@ use serde_json::{Value, json};
 use tokio::sync::Mutex;
 use voicesub_browser::BrowserWorkerLauncher;
 use voicesub_config::{
-    base_url_from_socket, overlay_url, read_full_logging_enabled, worker_url_for_payload,
+    ASR_MODE_LOCAL_PARAKEET, base_url_from_socket, overlay_url, read_full_logging_enabled,
+    worker_url_for_payload,
 };
 use voicesub_logging::apply_logging_preferences;
 use voicesub_translation::DispatcherCallbacks;
 
 use super::asr_diagnostics::assemble_browser_asr_diagnostics;
+use super::local_asr::local_asr_module_json;
 use super::partial_emit::partial_emit_settings_from_config;
 use super::state::HttpState;
 
@@ -25,6 +27,7 @@ pub(crate) struct OrchestratorInner {
     started_at_utc: Option<String>,
     last_error: Option<String>,
     worker_pid: Option<u32>,
+    status_message: Option<String>,
 }
 
 impl Default for OrchestratorInner {
@@ -35,6 +38,7 @@ impl Default for OrchestratorInner {
             started_at_utc: None,
             last_error: None,
             worker_pid: None,
+            status_message: None,
         }
     }
 }
@@ -79,6 +83,32 @@ impl RuntimeOrchestrator {
             state.subtitle.republish_latest().await;
         }
 
+        let config_payload = state.config.read().await;
+        let payload = config_payload.payload().clone();
+        let asr_mode = asr_mode_from_payload(&payload);
+        let use_local_asr = asr_mode == ASR_MODE_LOCAL_PARAKEET;
+        drop(config_payload);
+
+        if use_local_asr {
+            let module_status = state.local_asr.status();
+            if !module_status.ready {
+                let mut inner = self.inner.lock().await;
+                inner.phase = "error";
+                inner.last_error = Some(format!(
+                    "Local ASR module is not ready: {}",
+                    module_status.message
+                ));
+                inner.running = false;
+                inner.status_message = None;
+                drop(inner);
+                state.runtime_broadcaster.broadcast_preflight(false).await;
+                let inner = self.inner.lock().await;
+                let response = runtime_action_response("start", &inner, state).await;
+                broadcast_runtime_update(state, &inner, true).await;
+                return response;
+            }
+        }
+
         let previous = {
             let inner = self.inner.lock().await;
             (inner.phase.to_string(), inner.running)
@@ -103,6 +133,66 @@ impl RuntimeOrchestrator {
         state.obs_captions.apply_live_settings().await;
         state.subtitle.reset().await;
         state.runtime_metrics.reset();
+
+        if use_local_asr {
+            {
+                let module_status = state.local_asr.status();
+                let mut inner = self.inner.lock().await;
+                inner.status_message = Some(local_asr_startup_message(&module_status));
+            }
+            {
+                let inner = self.inner.lock().await;
+                broadcast_runtime_update(state, &inner, true).await;
+            }
+
+            match state.local_asr_speech.start().await {
+                Ok(()) => {
+                    let mut inner = self.inner.lock().await;
+                    inner.worker_pid = None;
+                    inner.running = true;
+                    inner.phase = "listening";
+                    inner.started_at_utc = Some(started_at);
+                    inner.status_message = None;
+                    state.pipeline_log.state_changed(
+                        &previous.0,
+                        inner.phase,
+                        previous.1,
+                        inner.running,
+                        None,
+                    );
+                    state.pipeline_log.start_complete(inner.phase, None);
+                    drop(inner);
+                    let inner = self.inner.lock().await;
+                    let response = runtime_action_response("start", &inner, state).await;
+                    broadcast_runtime_update(state, &inner, true).await;
+                    return response;
+                }
+                Err(err) => {
+                    let _ = state.local_asr_speech.stop().await;
+                    let mut inner = self.inner.lock().await;
+                    inner.phase = "error";
+                    inner.last_error = Some(err.clone());
+                    inner.running = false;
+                    inner.status_message = None;
+                    drop(inner);
+                    state
+                        .runtime_running
+                        .store(false, std::sync::atomic::Ordering::Relaxed);
+                    state.browser_speech.stop().await;
+                    state.obs_captions.stop().await;
+                    state.translation.lock().await.stop().await;
+                    {
+                        let mut partial_emit = state.partial_emit.lock().await;
+                        partial_emit.reset();
+                    }
+                    let inner = self.inner.lock().await;
+                    let response = runtime_action_response("start", &inner, state).await;
+                    broadcast_runtime_update(state, &inner, true).await;
+                    state.runtime_broadcaster.broadcast_preflight(false).await;
+                    return response;
+                }
+            }
+        }
 
         let base = resolve_base_url(state).await;
         let config_payload = state.config.read().await;
@@ -185,6 +275,10 @@ impl RuntimeOrchestrator {
             inner.worker_pid
         };
 
+        if let Err(err) = state.local_asr_speech.stop().await {
+            tracing::warn!(error = %err, "local ASR runtime capture stop failed");
+        }
+
         let _ = state
             .asr_worker
             .send_control("stop", Some("runtime_stop"))
@@ -223,6 +317,7 @@ impl RuntimeOrchestrator {
         inner.phase = "idle";
         inner.worker_pid = None;
         inner.started_at_utc = None;
+        inner.status_message = None;
         state.pipeline_log.state_changed(
             &previous.0,
             inner.phase,
@@ -301,11 +396,8 @@ async fn build_runtime_status(inner: &OrchestratorInner, state: &HttpState) -> V
     let base = resolve_base_url(state).await;
     let store = state.config.read().await;
     let payload = store.payload();
-    let asr_mode = payload
-        .get("asr")
-        .and_then(|v| v.get("mode"))
-        .and_then(|v| v.as_str())
-        .unwrap_or("browser_google");
+    let asr_mode = asr_mode_from_payload(payload);
+    let use_local_asr = asr_mode == ASR_MODE_LOCAL_PARAKEET;
     let obs_diag = state.obs_captions.diagnostics().await;
     let obs_captions = json!({
         "enabled": obs_diag.get("enabled").cloned().unwrap_or(json!(false)),
@@ -323,13 +415,17 @@ async fn build_runtime_status(inner: &OrchestratorInner, state: &HttpState) -> V
         .and_then(|v| v.as_str())
         .unwrap_or("en-US");
     let partial_emit = partial_emit_settings_from_config(payload);
-    let asr_diagnostics = assemble_browser_asr_diagnostics(
-        asr_mode,
-        browser_lang,
-        &browser_diag,
-        &partial_emit,
-        inner.running,
-    );
+    let asr_diagnostics = if use_local_asr {
+        state.local_asr.diagnostics()
+    } else {
+        assemble_browser_asr_diagnostics(
+            asr_mode,
+            browser_lang,
+            &browser_diag,
+            &partial_emit,
+            inner.running,
+        )
+    };
 
     let mut metrics = state.runtime_metrics.snapshot(
         &ws_diag,
@@ -356,21 +452,28 @@ async fn build_runtime_status(inner: &OrchestratorInner, state: &HttpState) -> V
         obj.insert("background_tasks".into(), state.background_tasks.snapshot());
     }
 
+    let local_module = local_asr_module_json(&state.local_asr.status());
+
     json!({
         "running": inner.running,
         "starting": inner.phase == "starting",
         "stopping": false,
-        "degraded_mode": browser_diag.degraded_reason.is_some(),
+        "degraded_mode": if use_local_asr {
+            false
+        } else {
+            browser_diag.degraded_reason.is_some()
+        },
         "fallback_reason": null,
         "phase": inner.phase,
         "status": inner.phase,
         "is_running": inner.running,
         "started_at_utc": inner.started_at_utc,
         "last_error": inner.last_error,
-        "status_message": null,
+        "status_message": inner.status_message,
         "active_config_source": store.document().loaded_from(),
         "asr": {
             "active_mode": asr_mode,
+            "local_module": local_module,
             "diagnostics": {
                 "browser_worker": browser_diag
             }
@@ -393,6 +496,26 @@ async fn broadcast_runtime_update(state: &HttpState, inner: &OrchestratorInner, 
         .runtime_broadcaster
         .broadcast_runtime(runtime, force)
         .await;
+}
+
+fn local_asr_startup_message(status: &voicesub_asr_local::LocalAsrModuleStatus) -> String {
+    let model = voicesub_asr_local::model_display_label(
+        &status.active_model_family,
+        &status.active_model_variant,
+    );
+    format!(
+        "Loading {} ({})…",
+        model,
+        status.execution_provider.to_ascii_uppercase()
+    )
+}
+
+fn asr_mode_from_payload(payload: &Value) -> &str {
+    payload
+        .get("asr")
+        .and_then(|v| v.get("mode"))
+        .and_then(|v| v.as_str())
+        .unwrap_or(voicesub_config::ASR_MODE_BROWSER)
 }
 
 fn log_runtime_stop(state: &HttpState) {

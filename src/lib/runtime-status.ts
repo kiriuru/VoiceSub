@@ -1,3 +1,9 @@
+import {
+  ASR_MODE_BROWSER,
+  ASR_MODE_LOCAL_PARAKEET,
+  isLocalAsrMode,
+  normalizeAsrMode,
+} from "./asr-mode";
 import type { RuntimeStatus } from "./types";
 
 export type RuntimePhaseChip =
@@ -23,9 +29,14 @@ export interface RuntimeConnectionChips {
   wsConnected: boolean;
   workerConnected: boolean;
   asrMode: string;
+  asrModeLabelKey: string;
+  asrSourceConnected: boolean;
+  showBrowserWorkerChip: boolean;
+  showLocalAsrChip: boolean;
   obsStatus: "ready" | "disabled" | "error";
   obsLabel: string;
   lastError: string | null;
+  statusMessage: string | null;
 }
 
 export function resolveRuntimePhase(runtime: RuntimeStatus): string {
@@ -55,14 +66,31 @@ export function buildRuntimeConnectionChips(
 ): RuntimeConnectionChips {
   const browserWorker = runtime.asr?.diagnostics?.browser_worker as Record<string, unknown> | undefined;
   const obs = resolveObsChipStatus(obsDiagnostics, runtime);
+  const asrMode = normalizeAsrMode(runtime.asr?.active_mode || ASR_MODE_BROWSER);
+  const useLocalAsr = isLocalAsrMode(asrMode);
+  const phase = resolveRuntimePhase(runtime);
+  const running = Boolean(runtime.running || runtime.is_running);
+
+  const asrSourceConnected = useLocalAsr
+    ? running && (phase === "listening" || phase === "transcribing")
+    : Boolean(browserWorker?.worker_connected);
+
   return {
-    phase: resolveRuntimePhase(runtime),
-    running: Boolean(runtime.running || runtime.is_running),
+    phase,
+    running,
     wsConnected,
     workerConnected: Boolean(browserWorker?.worker_connected),
-    asrMode: runtime.asr?.active_mode || "browser_google",
+    asrMode,
+    asrModeLabelKey:
+      asrMode === ASR_MODE_LOCAL_PARAKEET
+        ? "overview.recognition.mode.local_asr"
+        : "overview.recognition.mode.browser_google",
+    asrSourceConnected,
+    showBrowserWorkerChip: !useLocalAsr,
+    showLocalAsrChip: useLocalAsr,
     obsStatus: obs.status,
     obsLabel: obs.label,
     lastError: runtime.last_error ? String(runtime.last_error) : null,
+    statusMessage: runtime.status_message ? String(runtime.status_message) : null,
   };
 }

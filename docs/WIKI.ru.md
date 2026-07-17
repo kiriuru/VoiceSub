@@ -1,6 +1,6 @@
 # VoiceSub — WIKI
 
-Операционный гайд по интерфейсу VoiceSub `0.5.4`. Формат описания элементов: **что это**, **зачем**, **как работает**, **на что влияет**, **типовые ошибки**.
+Операционный гайд по интерфейсу VoiceSub `0.6.0`. Формат описания элементов: **что это**, **зачем**, **как работает**, **на что влияет**, **типовые ошибки**.
 
 Техническая архитектура: `docs/TECHNICAL_ARCHITECTURE.md`. Предшественник SST `0.4.4` — только reference; поведение core описано здесь для VoiceSub.
 
@@ -9,18 +9,18 @@
 ## 0. О продукте и версии
 
 ### Элемент: VoiceSub vs SST
-- **VoiceSub** — активная линия `0.5.4` (Rust + Tauri + Svelte); baseline первого релиза — `0.5.0`.
+- **VoiceSub** — активная линия `0.6.0` (Rust + Tauri + Svelte); baseline первого релиза — `0.5.0`.
 - **SST** `0.4.4` — frozen reference; настройки импортируются, но legacy local ASR и experimental browser в core не поднимаются.
 - **Overlay URL новый:** `http://127.0.0.1:8765/overlay` — обновите Browser Source в OBS вручную.
 
 ### Элемент: системные требования
 - **Windows 10/11 x64**
-- **WebView2 Runtime** — обязателен для `VoiceSub.exe` (dashboard в Tauri/WebView2, окно `/tts`). Без WebView2 приложение не запустится. На Win11 чаще уже есть; на Win10 установщик может предложить bootstrapper.
-- **Google Chrome** — отдельно, для окна Web Speech worker (`/google-asr`), не путать с WebView2.
-- Микрофон в Chrome worker; интернет — для внешних провайдеров перевода (опционально).
+- **WebView2 Runtime** — обязателен для `VoiceSub.exe` (dashboard в Tauri/WebView2, окна `/tts` и `/local-asr`). Без WebView2 приложение не запустится. На Win11 чаще уже есть; на Win10 установщик может предложить bootstrapper.
+- **Google Chrome** — отдельно, для окна Web Speech worker (`/google-asr`), не путать с WebView2. Не нужен, если используется только Local ASR.
+- Микрофон в Chrome worker **или** через нативный захват Local ASR; интернет — для внешних провайдеров перевода (опционально) и первой загрузки модели/ORT Local ASR.
 
 ### Элемент: установка и обновление (NSIS)
-- **Что делает:** `VoiceSub_0.5.4_x64-setup.exe` ставит `VoiceSub.exe` и статические ресурсы (`bin/dashboard`, overlay, worker, tts).
+- **Что делает:** `VoiceSub_0.6.0_x64-setup.exe` ставит `VoiceSub.exe` и статические ресурсы (`bin/dashboard`, overlay, worker, tts, local-asr).
 - **Для чего:** один установщик без Python/Node в runtime; при отсутствии WebView2 — загрузка через bootstrapper (`downloadBootstrapper` в Tauri).
 - **Обновление:** закройте приложение → запустите новый `setup.exe` поверх → `user-data/` и `logs/` сохраняются рядом с install path / project root.
 - **Разработчикам:** `build-release-msi.bat` → `build-release.ps1` → `F:\AI\VoiceSub - release\v{version}\`.
@@ -33,6 +33,7 @@
 | `/overlay` | OBS Browser Source |
 | `/google-asr` | Browser Speech worker |
 | `/tts` | TTS-модуль |
+| `/local-asr` | Модуль Local ASR |
 
 ---
 
@@ -43,8 +44,8 @@
 2. Dashboard откроется в главном окне Tauri (`http://127.0.0.1:8765/`).
 3. Добавьте в OBS Browser Source: `http://127.0.0.1:8765/overlay`.
 4. Настройте язык UI (Settings), перевод (Translation) при необходимости.
-5. Нажмите **Start** — откроется окно Chrome с `/google-asr?autostart=1`.
-6. Разрешите микрофон в Chrome и говорите.
+5. Нажмите **Start** — откроется окно Chrome с `/google-asr?autostart=1` (Web Speech) **или** стартует Local ASR in-process, если выбран `local_parakeet` и модуль ready.
+6. Разрешите микрофон в Chrome (Web Speech) **или** выберите mic в модуле Local ASR и говорите.
 
 ### Элемент: панель runtime (Start / Stop)
 - **Start:** `POST /api/runtime/start` — запуск worker, translation, OBS CC, ingest ASR.
@@ -54,7 +55,7 @@
 ### Элемент: предпросмотр субтитров (overview)
 - **Что делает:** в верхней области «Предпросмотр субтитров» показывает placeholder до Start и live payload после.
 - **Зачем:** калибровка стиля без запущенного ASR; пустой `overlay_update` после Save не затирает preview.
-- **Подробно:** `TECHNICAL_ARCHITECTURE.md` §20 (Idle subtitle preview).
+- **Подробно:** `TECHNICAL_ARCHITECTURE.md` §21 (Idle subtitle preview).
 
 ### Элемент: компактный макет
 - **Что делает:** переключает окно Tauri (~390×844) и навигацию с pane **Live** + вкладки настроек.
@@ -67,9 +68,9 @@
 
 ### Сценарий: нет вообще никакого текста
 - Runtime запущен (**Start**)?
-- Окно Chrome `/google-asr` открыто и **видимо** (не свёрнуто надолго)?
-- Микрофон разрешён в Chrome (не только в Windows)?
-- Вкладка **Tools & Data** → runtime diagnostics: `browser_worker_connected`?
+- **Web Speech:** окно Chrome `/google-asr` открыто и **видимо**? Микрофон разрешён в Chrome?
+- **Local ASR:** выбран режим `local_parakeet` и модуль `ready`? Mic выбран в `/local-asr`?
+- Вкладка **Tools & Data** → runtime diagnostics: `browser_worker_connected` (Web Speech) или статус Local ASR?
 
 ### Сценарий: исходный текст есть, перевода нет
 - Вкладка **Translation** → перевод включён.
@@ -142,7 +143,26 @@
 - Force-finalization при залипшем partial.
 - **Long-segment flush (0.5.4+):** после committed final ≥200 символов worker сбрасывает буфер Web Speech `results`, чтобы следующая речь не рвалась на короткие final. Подробнее — `docs/TECHNICAL_ARCHITECTURE.md` §12.
 
-**Не доступно в core:** legacy local ASR (`asr.mode: local`), experimental `/google-asr-experimental`.
+**Не доступно в core:** legacy SST local ASR (`asr.mode: local`), experimental `/google-asr-experimental`. Вместо legacy `local` используйте **модуль Local ASR** (`local_parakeet`).
+
+---
+
+## 4a. Модуль Local ASR (Parakeet)
+
+### Элемент: окно `/local-asr`
+- Отдельный UI модуля (как TTS): проверка deps, download модели, EP CPU/CUDA, realtime-пресеты, mic test bench.
+- Открытие: **Модули** или Tauri IPC `local_asr_open_window`.
+- Настройки в `user-data/modules/local-asr/config.toml` (project-wide; окно можно закрыть).
+
+### Элемент: gate готовности
+- На Эфире режим **Local ASR** появляется только при `asr.local_module.ready` (CPU-путь: ORT + model + warm load).
+- `cuda_ready` — дополнительный badge для NVIDIA CUDA EP; для Live достаточно CPU.
+- После смены realtime/VAD: **Stop → Start** Live-сессии.
+
+### Элемент: Эфир с Local ASR
+- Выберите `local_parakeet` на Overview → **Start** — без Chrome worker; захват mic нативный (cpal).
+- Текст идёт в тот же путь subtitle/translation/overlay, что и Web Speech.
+- Подробно: `TECHNICAL_ARCHITECTURE.md` §18.
 
 ---
 
@@ -302,11 +322,12 @@
 - Сохраняется в `ui.language` → Save config.
 - Worker получает `locale` query param при launch.
 - Overlay i18n: `bin/overlay/shared/js/i18n/` (регенерация: `npm run i18n:bundle` после правки source locales).
-- **Подробно:** `TECHNICAL_ARCHITECTURE.md` §23.
+- **Подробно:** `TECHNICAL_ARCHITECTURE.md` §24.
 
 ### Элемент: импорт SST config.json
 - Миграция в `config.toml`, `config_version` → 8.
 - `local` / experimental → `browser_google` + import hint.
+- `local_parakeet` **сохраняется** (для Live всё равно нужен `ready` модуля).
 
 ### Элемент: layout
 - `standard` vs `compact` — влияет на Tauri window size.
@@ -339,6 +360,7 @@
 | **browser worker** | Окно Chrome с Web Speech |
 | **completed block** | Финальный субтитр до следующей финализации |
 | **TTS module** | Sidecar `/tts` + Rust service |
+| **Local ASR** | Sidecar `/local-asr` + Parakeet ONNX (`local_parakeet`) |
 
 ---
 
@@ -346,7 +368,7 @@
 
 | Было в SST | Статус в VoiceSub |
 | --- | --- |
-| Legacy local ASR | Удалено из core; SST import `local` → `browser_google` |
+| Legacy local ASR (`asr.mode: local`) | Удалено из core; SST import `local` → `browser_google`. Преемник: модуль Local ASR (`local_parakeet`) |
 | Experimental browser | `legacy/experimental-browser/` — удалён из routes |
 | PyInstaller bootstrap | Заменён Tauri NSIS installer |
 | Splash startup profiles | Нет — единый `VoiceSub.exe` |

@@ -299,44 +299,73 @@ pub struct SharedBrowserSpeechSource {
 /// Serializes browser transcript ingest on a single async task (preserves WS order).
 pub struct OrderedBrowserSpeechIngest {
     speech: Arc<SharedBrowserSpeechSource>,
-    tx: std::sync::Mutex<Option<tokio::sync::mpsc::UnboundedSender<IngestedAsrUpdate>>>,
+    /// Local ASR capture runs on std threads without a tokio handle — use a std channel bridge.
+    cross_thread_tx: std::sync::Mutex<std::sync::mpsc::Sender<IngestedAsrUpdate>>,
+    bridge_rx: std::sync::Mutex<Option<std::sync::mpsc::Receiver<IngestedAsrUpdate>>>,
+    pump_started: AtomicBool,
 }
 
 impl OrderedBrowserSpeechIngest {
     pub fn new(speech: Arc<SharedBrowserSpeechSource>) -> Self {
+        let (cross_thread_tx, cross_thread_rx) = std::sync::mpsc::channel();
         Self {
             speech,
-            tx: std::sync::Mutex::new(None),
+            cross_thread_tx: std::sync::Mutex::new(cross_thread_tx),
+            bridge_rx: std::sync::Mutex::new(Some(cross_thread_rx)),
+            pump_started: AtomicBool::new(false),
         }
     }
 
-    pub fn enqueue(&self, update: IngestedAsrUpdate) {
-        let Ok(handle) = tokio::runtime::Handle::try_current() else {
-            tracing::warn!("browser speech ingest skipped: no tokio runtime");
+    /// Starts the cross-thread → tokio ingest pump. Call once from a tokio runtime (HTTP start).
+    pub fn spawn_pump(&self, handle: tokio::runtime::Handle) {
+        if self.pump_started.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        let Some(std_rx) = self
+            .bridge_rx
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .take()
+        else {
+            tracing::warn!("ordered browser speech ingest pump already consumed receiver");
             return;
         };
-        let mut guard = self.tx.lock().unwrap_or_else(|e| e.into_inner());
-        if guard.is_none() {
-            let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
-            let speech = self.speech.clone();
-            handle.spawn(async move {
-                while let Some(update) = rx.recv().await {
-                    // One update in flight; isolate panics so the consumer loop survives.
-                    let speech = speech.clone();
-                    if let Err(err) =
-                        tokio::spawn(async move { speech.ingest(update).await }).await
-                    {
-                        tracing::error!(error = %err, "browser speech ingest task failed; continuing");
+
+        let (tokio_tx, mut tokio_rx) = tokio::sync::mpsc::unbounded_channel();
+        if let Err(err) = std::thread::Builder::new()
+            .name("browser-speech-ingest-bridge".into())
+            .spawn(move || {
+                while let Ok(update) = std_rx.recv() {
+                    if tokio_tx.send(update).is_err() {
+                        break;
                     }
                 }
-                tracing::warn!("browser speech ingest channel closed; consumer exiting");
-            });
-            *guard = Some(tx);
-        }
-        if let Some(tx) = guard.as_ref()
-            && tx.send(update).is_err()
+            })
         {
-            tracing::warn!("browser speech ingest channel closed");
+            tracing::error!(error = %err, "failed to spawn browser speech ingest bridge thread");
+        }
+
+        let speech = self.speech.clone();
+        handle.spawn(async move {
+            while let Some(update) = tokio_rx.recv().await {
+                let speech = speech.clone();
+                if let Err(err) =
+                    tokio::spawn(async move { speech.ingest(update).await }).await
+                {
+                    tracing::error!(error = %err, "browser speech ingest task failed; continuing");
+                }
+            }
+            tracing::warn!("ordered browser speech ingest pump exited");
+        });
+    }
+
+    pub fn enqueue(&self, update: IngestedAsrUpdate) {
+        let tx = self
+            .cross_thread_tx
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        if tx.send(update).is_err() {
+            tracing::warn!("ordered browser speech ingest channel closed");
         }
     }
 }

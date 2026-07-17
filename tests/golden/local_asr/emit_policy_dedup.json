@@ -1,0 +1,10 @@
+{
+  "source_test": "realtime emit policy partial dedup",
+  "steps": [
+    { "segment_id": "s1", "text": "hello", "is_final": false, "expect_emit": true },
+    { "segment_id": "s1", "text": "hello", "is_final": false, "expect_emit": false },
+    { "segment_id": "s1", "text": "hello world", "is_final": false, "expect_emit": true },
+    { "segment_id": "s1", "text": "hello world.", "is_final": true, "expect_emit": true },
+    { "segment_id": "s1", "text": "next", "is_final": false, "expect_emit": true }
+  ]
+}

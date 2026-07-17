@@ -1,0 +1,15 @@
+id = "local-asr"
+name = "Local ASR"
+version = "0.1.0"
+description = "Offline Parakeet ASR via ONNX Runtime (CPU/CUDA), no Python"
+entry_window_label = "local-asr"
+entry_url_path = "/local-asr"
+requires_core = ">=0.6.0"
+
+[capabilities]
+onnx_runtime_cpu = true
+onnx_runtime_gpu = true
+cuda_redist_optional = true
+streaming_partials = true
+microphone_capture = true
+execution_providers = ["cpu", "cuda"]

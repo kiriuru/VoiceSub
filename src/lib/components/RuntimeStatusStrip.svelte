@@ -19,6 +19,7 @@
   $: phaseLabel = RUNTIME_STATE_PHASES.includes(chips.phase as RuntimePhaseChip)
     ? tr(`runtime.state.${chips.phase}` as "runtime.state.idle")
     : tr("runtime.badge.runtime", { value: chips.phase });
+  $: asrModeLabel = tr(chips.asrModeLabelKey as "overview.recognition.mode.browser_google");
 </script>
 
 <section class="live-hero surface-card panel-padding" aria-labelledby="live-runtime-heading">
@@ -29,11 +30,18 @@
         {phaseLabel}
       </h2>
       <p class="muted live-hero__hint">
-        {chips.running ? tr("runtime.strip.running") : tr("runtime.strip.stopped")}
+        {#if chips.statusMessage}
+          {chips.statusMessage}
+        {:else}
+          {chips.running ? tr("runtime.strip.running") : tr("runtime.strip.stopped")}
+        {/if}
       </p>
     </div>
 
     <div class="live-hero__chips" role="list" aria-label={tr("runtime.strip.connections")}>
+      <span class="filter-chip" role="listitem">
+        {tr("runtime.chip.asr")}: {asrModeLabel}
+      </span>
       <span
         class="filter-chip"
         class:ok={chips.wsConnected}
@@ -42,14 +50,26 @@
       >
         {tr("runtime.chip.ws")}: {chips.wsConnected ? tr("common.connected") : tr("common.disconnected")}
       </span>
-      <span
-        class="filter-chip"
-        class:ok={chips.workerConnected}
-        class:warn={!chips.workerConnected}
-        role="listitem"
-      >
-        {tr("runtime.chip.worker")}: {chips.workerConnected ? tr("common.connected") : tr("common.disconnected")}
-      </span>
+      {#if chips.showBrowserWorkerChip}
+        <span
+          class="filter-chip"
+          class:ok={chips.workerConnected}
+          class:warn={!chips.workerConnected}
+          role="listitem"
+        >
+          {tr("runtime.chip.worker")}: {chips.workerConnected ? tr("common.connected") : tr("common.disconnected")}
+        </span>
+      {/if}
+      {#if chips.showLocalAsrChip}
+        <span
+          class="filter-chip"
+          class:ok={chips.asrSourceConnected}
+          class:warn={!chips.asrSourceConnected}
+          role="listitem"
+        >
+          {tr("runtime.chip.local_asr")}: {chips.asrSourceConnected ? tr("common.connected") : tr("common.disconnected")}
+        </span>
+      {/if}
       <span
         class="filter-chip"
         class:ok={chips.obsStatus === "ready"}

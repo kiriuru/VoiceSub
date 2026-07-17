@@ -1,0 +1,10 @@
+{
+  "source_test": "recognition processing gain",
+  "config": {
+    "input_gain": 2.0,
+    "preemphasis_enabled": false,
+    "noise_gate_enabled": false
+  },
+  "input": [0.25, -0.5, 0.125],
+  "expected": [0.5, -1.0, 0.25]
+}

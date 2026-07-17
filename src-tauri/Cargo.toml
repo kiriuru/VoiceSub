@@ -25,6 +25,7 @@ voicesub-types = { workspace = true }
 voicesub-browser = { workspace = true }
 voicesub-audio = { workspace = true }
 voicesub-tts = { workspace = true }
+voicesub-asr-local = { workspace = true }
 voicesub-twitch = { workspace = true }
 serde_json = { workspace = true }
 tauri = { version = "2", features = [] }

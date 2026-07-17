@@ -1,6 +1,6 @@
 # VoiceSub — WIKI
 
-Operational guide for the VoiceSub `0.5.4` UI. Each element is described as: **what it is**, **why it exists**, **how it works**, **what it affects**, and **common mistakes**.
+Operational guide for the VoiceSub `0.6.0` UI. Each element is described as: **what it is**, **why it exists**, **how it works**, **what it affects**, and **common mistakes**.
 
 Technical architecture: `docs/TECHNICAL_ARCHITECTURE.en.md`. SST `0.4.4` is a frozen predecessor; core behavior in this document is VoiceSub-specific.
 
@@ -9,18 +9,18 @@ Technical architecture: `docs/TECHNICAL_ARCHITECTURE.en.md`. SST `0.4.4` is a fr
 ## 0. About the product
 
 ### Element: VoiceSub vs SST
-- **VoiceSub** — active `0.5.4` line (Rust + Tauri + Svelte); first release baseline is `0.5.0`.
+- **VoiceSub** — active `0.6.0` line (Rust + Tauri + Svelte); first release baseline is `0.5.0`.
 - **SST** `0.4.4` — frozen reference; settings import works, but legacy local ASR and experimental browser modes are not started in core.
 - **New overlay URL:** `http://127.0.0.1:8765/overlay` — update OBS Browser Source manually.
 
 ### Element: system requirements
 - **Windows 10/11 x64**
-- **WebView2 Runtime** — required for `VoiceSub.exe` (Tauri dashboard shell, `/tts` window). The app will not start without it. Usually present on Windows 11; on Windows 10 the installer may offer the bootstrapper.
-- **Google Chrome** — separate dependency for the Web Speech worker window (`/google-asr`); not the same as WebView2.
-- Microphone in the Chrome worker; internet for external translation providers (optional).
+- **WebView2 Runtime** — required for `VoiceSub.exe` (Tauri dashboard shell, `/tts`, `/local-asr`). The app will not start without it. Usually present on Windows 11; on Windows 10 the installer may offer the bootstrapper.
+- **Google Chrome** — separate dependency for the Web Speech worker window (`/google-asr`); not the same as WebView2. Not required when using Local ASR only.
+- Microphone in the Chrome worker **or** via Local ASR native capture; internet for external translation providers (optional) and first-time Local ASR downloads.
 
 ### Element: install and update (NSIS)
-- **What it does:** `VoiceSub_0.5.4_x64-setup.exe` installs `VoiceSub.exe` and bundled static assets (dashboard, overlay, worker, tts).
+- **What it does:** `VoiceSub_0.6.0_x64-setup.exe` installs `VoiceSub.exe` and bundled static assets (dashboard, overlay, worker, tts, local-asr).
 - **Why:** single installer without Python/Node in runtime; downloads WebView2 via bootstrapper when missing (`downloadBootstrapper` in Tauri).
 - **Update:** close app → run new `setup.exe` over existing → `user-data/` and `logs/` persist next to install/project root.
 - **Developers:** `build-release-msi.bat` → `build-release.ps1` → `F:\AI\VoiceSub - release\v{version}\`.
@@ -33,6 +33,7 @@ Technical architecture: `docs/TECHNICAL_ARCHITECTURE.en.md`. SST `0.4.4` is a fr
 | `/overlay` | OBS Browser Source |
 | `/google-asr` | Browser Speech worker |
 | `/tts` | TTS module UI |
+| `/local-asr` | Local ASR module UI |
 
 ---
 
@@ -43,8 +44,8 @@ Technical architecture: `docs/TECHNICAL_ARCHITECTURE.en.md`. SST `0.4.4` is a fr
 2. Dashboard opens in the Tauri main window (`http://127.0.0.1:8765/`).
 3. Add OBS Browser Source: `http://127.0.0.1:8765/overlay`.
 4. Configure UI language (Settings) and translation (Translation) if needed.
-5. Click **Start** — Chrome opens `/google-asr?autostart=1`.
-6. Grant microphone permission in Chrome and speak.
+5. Click **Start** — Chrome opens `/google-asr?autostart=1` (Web Speech) **or** Local ASR starts in-process when `local_parakeet` is selected and ready.
+6. Grant microphone permission in Chrome (Web Speech) **or** pick a mic in the Local ASR module, then speak.
 
 ### Element: runtime bar (Start / Stop)
 - **Start:** `POST /api/runtime/start` — worker, translation, OBS CC, ASR ingest.
@@ -54,7 +55,7 @@ Technical architecture: `docs/TECHNICAL_ARCHITECTURE.en.md`. SST `0.4.4` is a fr
 ### Element: subtitle preview (overview)
 - **What it does:** top **Subtitle Output Preview** shows placeholders before Start and live payload after.
 - **Why:** style calibration without running ASR; empty post-save `overlay_update` does not clear preview.
-- **Details:** `TECHNICAL_ARCHITECTURE.en.md` §20 (Idle subtitle preview).
+- **Details:** `TECHNICAL_ARCHITECTURE.en.md` §21 (Idle subtitle preview).
 
 ### Element: compact layout
 - **What it does:** switches Tauri window (~390×844) and navigation with **Live** pane + settings tabs.
@@ -67,9 +68,9 @@ Technical architecture: `docs/TECHNICAL_ARCHITECTURE.en.md`. SST `0.4.4` is a fr
 
 ### Scenario: no text at all
 - Is runtime **Start**ed?
-- Is Chrome `/google-asr` window open and **visible**?
-- Microphone allowed in **Chrome** (not only Windows)?
-- **Tools & Data** → runtime diagnostics: `browser_worker_connected`?
+- **Web Speech:** is Chrome `/google-asr` window open and **visible**? Microphone allowed in **Chrome**?
+- **Local ASR:** is mode `local_parakeet` selected and module `ready`? Mic selected in `/local-asr`?
+- **Tools & Data** → runtime diagnostics: `browser_worker_connected` (Web Speech) or Local ASR status?
 
 ### Scenario: source text but no translation
 - **Translation** tab → translation enabled.
@@ -142,7 +143,26 @@ Technical architecture: `docs/TECHNICAL_ARCHITECTURE.en.md`. SST `0.4.4` is a fr
 - Force-finalization for stuck partials.
 - **Long-segment flush (0.5.4+):** after a committed final ≥200 characters, worker resets the Web Speech results buffer so the next phrases are not chopped into short finals. See `docs/TECHNICAL_ARCHITECTURE.en.md` §12.
 
-**Not in core:** legacy local ASR (`asr.mode: local`), experimental `/google-asr-experimental`.
+**Not in core:** legacy SST local ASR (`asr.mode: local`), experimental `/google-asr-experimental`. Use the **Local ASR module** (`local_parakeet`) instead of legacy `local`.
+
+---
+
+## 4a. Local ASR module (Parakeet)
+
+### Element: `/local-asr` window
+- Separate module UI (like TTS): deps check, model download, CPU/CUDA EP, realtime presets, mic test bench.
+- Open from **Modules** or Tauri IPC `local_asr_open_window`.
+- Settings live in `user-data/modules/local-asr/config.toml` (project-wide; window can be closed).
+
+### Element: readiness gate
+- Live tab shows **Local ASR** mode only when `asr.local_module.ready` (CPU path: ORT + model + warm load).
+- `cuda_ready` is an extra badge for NVIDIA CUDA EP; CPU path is enough for Live.
+- After changing realtime/VAD settings: **Stop → Start** the Live session.
+
+### Element: Live with Local ASR
+- Select `local_parakeet` on Overview → **Start** — no Chrome worker; mic capture is native (cpal).
+- Text goes through the same subtitle/translation/overlay path as Web Speech.
+- Details: `TECHNICAL_ARCHITECTURE.en.md` §18.
 
 ---
 
@@ -302,11 +322,12 @@ Technical architecture: `docs/TECHNICAL_ARCHITECTURE.en.md`. SST `0.4.4` is a fr
 - Saved in `ui.language` → Save config.
 - Worker gets `locale` query param on launch.
 - Overlay i18n: `bin/overlay/shared/js/i18n/` (regenerate: `npm run i18n:bundle` after editing source locales).
-- **Details:** `TECHNICAL_ARCHITECTURE.en.md` §23.
+- **Details:** `TECHNICAL_ARCHITECTURE.en.md` §24.
 
 ### Element: SST config.json import
 - Migrates to `config.toml`, `config_version` → 8.
 - `local` / experimental → `browser_google` + import hint.
+- `local_parakeet` is **preserved** (runtime still requires module `ready` before Live use).
 
 ### Element: layout
 - `standard` vs `compact` — affects Tauri window size.
@@ -339,6 +360,7 @@ Built-in topics: overview, recognition, translation, subtitles/style, OBS, tools
 | **browser worker** | Chrome window running Web Speech |
 | **completed block** | Final subtitle until next phrase finalizes |
 | **TTS module** | Sidecar `/tts` + Rust service |
+| **Local ASR** | Sidecar `/local-asr` + Parakeet ONNX (`local_parakeet`) |
 
 ---
 
@@ -346,7 +368,7 @@ Built-in topics: overview, recognition, translation, subtitles/style, OBS, tools
 
 | SST feature | VoiceSub status |
 | --- | --- |
-| Legacy local ASR | Removed from core; SST import maps `local` → `browser_google` |
+| Legacy local ASR (`asr.mode: local`) | Removed from core; SST import maps `local` → `browser_google`. Successor: Local ASR module (`local_parakeet`) |
 | Experimental browser | `legacy/experimental-browser/` — routes removed |
 | PyInstaller bootstrap | Replaced by Tauri NSIS installer |
 | Splash startup profiles | None — single `VoiceSub.exe` |

@@ -1,0 +1,16 @@
+{
+  "source_test": "partial_emit word_growth SST parity",
+  "settings": {
+    "partial_emit_mode": "word_growth",
+    "partial_min_new_words": 1,
+    "partial_min_delta_chars": 0,
+    "partial_coalescing_ms": 0
+  },
+  "steps": [
+    { "segment_id": "s1", "text": "hello", "expect_emit": true },
+    { "segment_id": "s1", "text": "hello", "expect_emit": false },
+    { "segment_id": "s1", "text": "hello world", "expect_emit": true },
+    { "segment_id": "s2", "text": "hello", "expect_emit": true },
+    { "segment_id": "s2", "text": "hello there", "expect_emit": false, "min_new_words": 2 }
+  ]
+}

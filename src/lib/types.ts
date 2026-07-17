@@ -148,10 +148,23 @@ export interface RuntimeStatus {
   status?: RuntimePhase;
   is_running?: boolean;
   last_error?: string | null;
+  status_message?: string | null;
   asr?: {
     active_mode?: string;
+    local_module?: {
+      ready?: boolean;
+      cuda_ready?: boolean;
+      phase?: string;
+      execution_provider?: string;
+      active_execution_provider?: string;
+      active_model_family?: string;
+      active_model_variant?: string;
+      message?: string;
+      last_error?: string | null;
+    };
     diagnostics?: {
       browser_worker?: Record<string, unknown>;
+      local_asr?: Record<string, unknown>;
     };
   };
   asr_diagnostics?: Record<string, unknown>;

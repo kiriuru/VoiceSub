@@ -1,6 +1,6 @@
-# VoiceSub 0.5.5 — Технический документ
+# VoiceSub 0.6.0 — Технический документ
 
-Актуально для линии кода, где `voicesub-types::PROJECT_VERSION = "0.5.5"`.
+Актуально для линии кода, где `voicesub-types::PROJECT_VERSION = "0.6.0"`.
 
 Этот документ описывает layout проекта VoiceSub, контракт HTTP/WebSocket/Tauri IPC, схему конфигурации, поток данных через Rust runtime и поверхности frontend. Документ — **канонический technical reference** для активной разработки. README — обзор продукта; CHANGELOG — история релизов; политика агентов — `AGENTS.md`.
 
@@ -27,19 +27,20 @@
 - [15. Стили субтитров и overlay](#15-стили-субтитров-и-overlay)
 - [16. OBS Closed Captions](#16-obs-closed-captions)
 - [17. TTS-модуль](#17-tts-модуль)
-- [18. Desktop runtime и NSIS release](#18-desktop-runtime-и-nsis-release)
-- [19. Хранилище и пути](#19-хранилище-и-пути)
-- [20. Frontend: dashboard (Svelte)](#20-frontend-dashboard-svelte)
-- [21. Frontend: overlay (vanilla)](#21-frontend-overlay-vanilla)
-- [22. Frontend: browser worker (Svelte)](#22-frontend-browser-worker-svelte)
-- [23. UI localization (i18n)](#23-ui-localization-i18n)
-- [24. Версионирование и проверка обновлений](#24-версионирование-и-проверка-обновлений)
-- [25. Тестирование](#25-тестирование)
-- [26. Продуктовые инварианты](#26-продуктовые-инварианты)
-- [27. Known Limitations & Technical Debt](#27-known-limitations--technical-debt)
-- [28. Security & Privacy Model](#28-security--privacy-model)
-- [29. Extension Points](#29-extension-points)
-- [30. Glossary](#30-glossary)
+- [18. Модуль Local ASR](#18-модуль-local-asr)
+- [19. Desktop runtime и NSIS release](#19-desktop-runtime-и-nsis-release)
+- [20. Хранилище и пути](#20-хранилище-и-пути)
+- [21. Frontend: dashboard (Svelte)](#21-frontend-dashboard-svelte)
+- [22. Frontend: overlay (vanilla)](#22-frontend-overlay-vanilla)
+- [23. Frontend: browser worker (Svelte)](#23-frontend-browser-worker-svelte)
+- [24. UI localization (i18n)](#24-ui-localization-i18n)
+- [25. Версионирование и проверка обновлений](#25-версионирование-и-проверка-обновлений)
+- [26. Тестирование](#26-тестирование)
+- [27. Продуктовые инварианты](#27-продуктовые-инварианты)
+- [28. Known Limitations & Technical Debt](#28-known-limitations--technical-debt)
+- [29. Security & Privacy Model](#29-security--privacy-model)
+- [30. Extension Points](#30-extension-points)
+- [31. Glossary](#31-glossary)
 
 ## Related Documentation
 
@@ -59,7 +60,7 @@
 # Rust tests
 cargo test --workspace
 
-# Frontend build (dashboard + worker + TTS)
+# Frontend build (dashboard + worker + TTS + Local ASR)
 npm run build
 
 # NSIS release (Windows)
@@ -76,20 +77,22 @@ Tauri dev: embedded HTTP на `http://127.0.0.1:8765`; main webview открыв
 | `http://127.0.0.1:8765/overlay` | OBS Browser Source |
 | `http://127.0.0.1:8765/google-asr?autostart=1` | Browser Speech worker |
 | `http://127.0.0.1:8765/google-asr-edge` | Тот же worker (Edge smoke) |
-| `http://127.0.0.1:8765/tts` | TTS module UI |
+| `http://127.0.0.1:8765/tts` | UI TTS-модуля |
+| `http://127.0.0.1:8765/local-asr` | UI модуля Local ASR |
 
 ### Ключевые API endpoint-ы
 
 | Endpoint | Назначение |
 | --- | --- |
-| `POST /api/runtime/start` | Старт сессии + launch Chrome worker |
+| `POST /api/runtime/start` | Старт сессии (Chrome worker **или** Local ASR) |
 | `POST /api/runtime/stop` | Остановка worker, translation, OBS |
-| `GET /api/runtime/status` | Runtime snapshot + diagnostics |
+| `GET /api/runtime/status` | Runtime snapshot + diagnostics (`asr.local_module`) |
 | `GET /api/settings/load` | Загрузка config + presets + fonts |
 | `POST /api/settings/save` | Нормализация + сохранение `config.toml` |
 | `POST /api/ui/sync` | UI theme/locale sync → `ui_config_sync` |
 | `GET /api/exports/diagnostics` | Redacted diagnostics ZIP |
 | `GET /api/obs/url` | `{ overlay_url }` для OBS |
+| `GET /api/asr/local/status` | Готовность модуля Local ASR / deps / model |
 
 ### WebSocket каналы
 
@@ -114,13 +117,14 @@ Tauri dev: embedded HTTP на `http://127.0.0.1:8765`; main webview открыв
 
 **VoiceSub** — локальное Windows-first desktop-приложение для субтитров в реальном времени:
 
-- захват речи через **Browser Speech worker** (отдельное окно Chrome/Edge с видимой адресной строкой, Web Speech API);
+- захват речи через **Browser Speech worker** (отдельное окно Chrome/Edge с видимой адресной строкой, Web Speech API) **или** опциональный **Local ASR** (Parakeet ONNX, in-process mic);
 - опциональный перевод на 0..5 целевых языков с независимым выбором провайдера на слот;
 - единая маршрутизация subtitle payload в Svelte dashboard, vanilla OBS overlay и OBS Closed Captions;
 - опциональный **TTS-модуль** (озвучка субтитров, Twitch chat TTS);
+- опциональный **модуль Local ASR** (`/local-asr`, режим `local_parakeet` при `local_module.ready`);
 - экспорт diagnostics ZIP и client-side trace logs.
 
-**Core ASR:** только `browser_google` — Web Speech на `/google-asr` и `/google-asr-edge`. Локальный ASR и experimental worker routes не входят в продукт.
+**Режимы ASR:** `browser_google` (default Web Speech на `/google-asr` / `/google-asr-edge`) и опциональный `local_parakeet` (модуль Local ASR, gate `asr.local_module.ready`). Legacy SST `local` и experimental worker routes в core нет.
 
 Жёсткие границы:
 
@@ -128,8 +132,8 @@ Tauri dev: embedded HTTP на `http://127.0.0.1:8765`; main webview открыв
 - без cloud backend, accounts, hosted database;
 - **Node.js запрещён в shipped runtime**; Vite/Node — только на машине разработчика/сборки;
 - dashboard и worker — Svelte (compile-time bundle); overlay — **vanilla HTML/JS** (без Svelte);
-- **WebView2 Runtime** — обязателен для Tauri shell (`VoiceSub.exe`, dashboard, `/tts`); NSIS installer может поставить bootstrapper.
-- Chrome — отдельная system dependency для Web Speech worker; core installer не тянет Python/torch/Node.
+- **WebView2 Runtime** — обязателен для Tauri shell (`VoiceSub.exe`, dashboard, `/tts`, `/local-asr`); NSIS installer может поставить bootstrapper.
+- Chrome — отдельная system dependency для Web Speech worker; core installer не тянет Python/torch/Node. Deps ONNX/CUDA и веса модели Local ASR — **lazy-download** в `user-data/modules/local-asr/` (не в core installer).
 
 ## 2. Технологический стек
 
@@ -140,11 +144,13 @@ Tauri dev: embedded HTTP на `http://127.0.0.1:8765`; main webview открыв
 | Dashboard UI | Svelte 5 + Vite → `bin/dashboard/` |
 | Browser worker | Svelte 5 + Vite → `bin/worker/` |
 | TTS UI | Svelte 5 + Vite → `bin/tts/` |
+| Local ASR UI | Svelte 5 + Vite → `bin/local-asr/` |
 | OBS overlay | Vanilla HTML/CSS/JS → `bin/overlay/` |
 | Config | TOML (`user-data/config.toml`), JSON-shaped document inside |
 | HTTP client (providers) | `reqwest` + rustls |
 | Logging | `tracing` + rotating files + opt-in JSONL |
 | TTS sidecar | Embedded Python exe в `bin/modules/tts/runtime/` (не в core Rust) |
+| Local ASR inference | `parakeet-rs` + ONNX Runtime DLL (CPU / опционально CUDA EP) |
 
 **Запрещено в active tree:** React, Webpack, Electron, pywebview, FastAPI runtime, in-process NeMo/torch.
 
@@ -168,16 +174,23 @@ flowchart LR
     CHR["Chrome/Edge window<br/>/google-asr"]
   end
 
+  subgraph LocalAsr["Local ASR (optional)"]
+    LASR["LocalAsrSpeechSource<br/>mic + VAD + Parakeet"]
+  end
+
   subgraph Surfaces["Web surfaces"]
     DASH["Svelte dashboard"]
     OVL["Vanilla overlay"]
     TTS["TTS module /tts"]
+    LASRUI["Local ASR /local-asr"]
   end
 
   TA <-->|Tauri IPC| RT
   TA --> DASH
   CHR -->|/ws/asr_worker| HTTP
   RT --> CHR
+  RT --> LASR
+  LASR -->|IngestedAsrUpdate| SUB
   HTTP -->|/ws/events| DASH
   HTTP -->|/ws/events| OVL
   RT --> SUB --> TR
@@ -185,7 +198,7 @@ flowchart LR
   RT --> TTS
 ```
 
-**Hot path:** `external_asr_update` (WS) → transcript controller → subtitle lifecycle → translation dispatcher → `overlay_update` (WS live + Tauri IPC) → dashboard + OBS overlay. `subtitle_payload_update` — только Tauri IPC snapshot/replay (не дублируется на live `/ws/events`). Partial `transcript_update` коалесится (default 90 ms); subtitle lifecycle и `overlay_update` видят каждый partial.
+**Hot path (browser):** `external_asr_update` (WS) → transcript controller → subtitle lifecycle → translation dispatcher → `overlay_update` (WS live + Tauri IPC) → dashboard + OBS overlay. **Hot path (local ASR):** mic → VAD/decode → `PartialEmitCoordinator` → тот же ingest, что и browser. `subtitle_payload_update` — только Tauri IPC snapshot/replay (не дублируется на live `/ws/events`). Partial `transcript_update` коалесится (default 90 ms); subtitle lifecycle и `overlay_update` видят каждый partial.
 
 ## 4. Layout репозитория
 
@@ -197,6 +210,7 @@ F:\AI\VoiceSub\
 ├── vite.config.ts              # → bin/dashboard/
 ├── vite.worker.config.ts       # → bin/worker/
 ├── vite.tts.config.ts          # → bin/tts/
+├── vite.local-asr.config.ts    # → bin/local-asr/
 ├── build-release-msi.bat       # back-compat → build-release.ps1
 ├── build-release.ps1           # NSIS release pipeline
 ├── build/release.config.json   # release_root для setup.exe copy
@@ -206,14 +220,16 @@ F:\AI\VoiceSub\
 ├── src/                        # Svelte dashboard sources
 ├── src-worker/                 # Svelte browser worker sources
 ├── src-tts/                    # Svelte TTS module sources
+├── src-local-asr/              # Svelte Local ASR module sources
 │
 ├── bin/                        # Shipped static assets (в NSIS resources)
 │   ├── dashboard/              # Vite build output
 │   ├── worker/                 # Worker bundle
 │   ├── tts/                    # TTS UI bundle
+│   ├── local-asr/              # Local ASR UI bundle
 │   ├── overlay/                # Vanilla OBS overlay
 │   ├── fonts/                  # Project fonts
-│   └── modules/                # Sidecar modules (tts)
+│   └── modules/                # Sidecar modules (tts, local-asr)
 │
 ├── tests/
 │   ├── golden/                 # Regression fixtures
@@ -228,14 +244,14 @@ F:\AI\VoiceSub\
 
 | Поверхность | В git | После `npm run build` / installer |
 | --- | --- | --- |
-| `crates/`, `src/`, `src-worker/`, `src-tts/` | да | компилируется в exe + static |
-| `bin/dashboard`, `bin/worker`, `bin/tts` | build output (tracked или CI) | в NSIS `resources/bin/` |
+| `crates/`, `src/`, `src-worker/`, `src-tts/`, `src-local-asr/` | да | компилируется в exe + static |
+| `bin/dashboard`, `bin/worker`, `bin/tts`, `bin/local-asr` | build output (tracked или CI) | в NSIS `resources/bin/` |
 | `bin/overlay/` | да | в installer |
 | `user-data/`, `logs/` | нет | создаётся при runtime |
 
 ## 5. Rust workspace (crates)
 
-Workspace members (`Cargo.toml`): 14 domain crates + `src-tauri` (отдельного `xtask` нет).
+Workspace members (`Cargo.toml`): 16 domain crates + `src-tauri` (отдельного `xtask` нет).
 
 ### Граф зависимостей (упрощённо)
 
@@ -244,7 +260,7 @@ voicesub-types (Layer 0: DTO, WS types, errors)
     ↑
 voicesub-config, voicesub-subtitle, voicesub-translation, voicesub-browser,
 voicesub-ws, voicesub-logging, voicesub-export, voicesub-obs, voicesub-audio,
-voicesub-tts, voicesub-twitch (Layer 1–2)
+voicesub-tts, voicesub-twitch, voicesub-asr-local, voicesub-partial-emit (Layer 1–2)
     ↑
 voicesub-runtime (Layer 3: wiring, HTTP router, orchestration)
     ↑
@@ -268,6 +284,8 @@ src-tauri (Layer 4: IPC, window, bundle only)
 | `voicesub-audio` | WinAPI audio routing helpers (TTS) |
 | `voicesub-tts` | TTS service, queue, Twitch IRC, OAuth bridge |
 | `voicesub-twitch` | Twitch IRC (до 5 каналов), emotes, links/symbols filters, Lingua lang detect, `apply_settings` hot-apply |
+| `voicesub-asr-local` | Local ASR module: deps, model, Parakeet ONNX, VAD/pipeline, test bench, status |
+| `voicesub-partial-emit` | Shared partial emit policy (`word_growth`, coalesce) для Local ASR |
 | `voicesub-runtime` | `RuntimeService`, HTTP router, transcript controller, session wiring |
 
 **Правило:** бизнес-логика не живёт в `src-tauri/`; Tauri — IPC + lifecycle hooks only.
@@ -281,13 +299,14 @@ src-tauri (Layer 4: IPC, window, bundle only)
 1. **Старт** (`POST /api/runtime/start`):
    - merge optional inline `config_payload`;
    - apply live settings (translation, OBS, subtitle, logging);
-   - launch Chrome worker → `{base}/google-asr?autostart=1[&locale=…]`;
-   - start translation dispatcher, OBS captions, browser speech ingest;
+   - if `asr.mode = browser_google` (или edge): launch Chrome worker → `{base}/google-asr?autostart=1[&locale=…]` и browser speech ingest;
+   - if `asr.mode = local_parakeet`: assert `asr.local_module.ready`, start `LocalAsrSpeechSource` (без Chrome worker);
+   - start translation dispatcher, OBS captions;
    - broadcast `preflight_update`, `runtime_update`.
 
 2. **Стоп** (`POST /api/runtime/stop`):
-   - send `browser_asr_control` stop на `/ws/asr_worker`;
-   - kill Chrome process tree (`taskkill /T /F` on Windows);
+   - browser mode: `browser_asr_control` stop на `/ws/asr_worker`; kill Chrome process tree (`taskkill /T /F` on Windows);
+   - local mode: stop `LocalAsrSpeechSource`;
    - stop translation, OBS; reset subtitle state/metrics.
 
 3. **Tauri shutdown** (`src-tauri/src/lib.rs`):
@@ -327,13 +346,16 @@ Embedded HTTP server: dedicated Tokio runtime в Tauri process; bind из `AppCo
 | `source_text_replacement` | Find/replace pairs для ASR текста |
 | `logging` | `full_enabled` — master switch deep diagnostics |
 
-### ASR mode (VoiceSub 0.5.0)
+### ASR mode (VoiceSub 0.6.0)
 
 | `asr.mode` | Статус |
 | --- | --- |
-| `browser_google` | **Active default** |
+| `browser_google` | **Active default** — Chrome/Edge Web Speech worker |
+| `local_parakeet` | Опциональный Local ASR; селектор на Эфире только при `asr.local_module.ready` |
 | `browser_google_edge` | Сохраняется при import; тот же worker, другой page URL |
 | `local`, `browser_google_experimental*` (import) | Mapped → `browser_google` + `import_hint` |
+
+SST JSON import **сохраняет** `local_parakeet` (не мапит на `browser_google`). Ready — runtime gate, не remap при импорте.
 
 ### Legacy JSON import (SST Desktop `config.json`)
 
@@ -416,6 +438,10 @@ Global middleware: CSP header, `Cache-Control: no-store`.
 | GET | `/api/tts/twitch/oauth-pending` | Poll pending token |
 | POST | `/api/tts/twitch/oauth-complete` | Store OAuth token |
 
+### Local ASR (`/api/asr/local/*`)
+
+Protected like other `/api/*`. Полная таблица в [§18 Модуль Local ASR](#18-модуль-local-asr).
+
 ### Updates
 
 | Method | Path | Назначение |
@@ -431,6 +457,7 @@ Global middleware: CSP header, `Cache-Control: no-store`.
 | GET | `/google-asr` | `bin/worker/index.html` |
 | GET | `/google-asr-edge` | Same worker bundle |
 | GET | `/tts` | `bin/tts/index.html` |
+| GET | `/local-asr` | `bin/local-asr/index.html` |
 | GET | `/project-fonts.css` | Generated `@font-face` from `bin/fonts/` |
 
 ### Static mounts
@@ -442,6 +469,7 @@ Global middleware: CSP header, `Cache-Control: no-store`.
 | `/worker-assets` | `bin/worker/` |
 | `/assets` | `bin/dashboard/assets/` |
 | `/tts-assets` | `bin/tts/` |
+| `/local-asr-assets` | `bin/local-asr/` |
 | `/project-fonts` | `bin/fonts/` |
 
 `bin/` resolved via `ProjectPaths::locate_bin_dir()` — workspace `bin/` или Tauri NSIS `resources/bin/`.
@@ -543,6 +571,7 @@ Payload enrichment: `event_sequence`, `created_at_ms`, `event_type` (`WsEventPub
 | `tts_report_webview_activity` | TTS webview heartbeat → `WebviewMemoryManager` suspend policy |
 | `tts_twitch_*` | Twitch connect/disconnect/status/settings |
 | `tts_open_window` | Open/focus `/tts` webview |
+| `local_asr_open_window` | Open/focus `/local-asr` webview |
 | `tts_open_system_url` | Open validated Twitch OAuth URL externally |
 | `get_runtime_state_snapshot` | Replay runtime/subtitle/overlay/translation/diagnostics for Tauri shell on connect |
 
@@ -556,6 +585,7 @@ Payload enrichment: `event_sequence`, `created_at_ms`, `event_type` (`WsEventPub
 | `dashboard_nav.rs` | Main webview URL helpers |
 | `webview2_gate.rs` | WebView2 runtime presence check before window create |
 | `tts.rs` | TTS IPC adapter → `voicesub-tts` |
+| `local_asr.rs` | Local ASR window open/focus only |
 | `event_routing.rs` | Per-window `runtime-event` type filters + snapshot replay envelopes |
 | `ipc_pump.rs` | Bus→IPC pump: overlay coalescing (dashboard only), lag-resync debounce |
 
@@ -913,7 +943,109 @@ Config: `user-data/modules/tts/config.toml` → секция `[twitch]`.
 
 - WinAPI per-process routing: `VOICESUB_TTS_PER_PROCESS_ROUTING` + `tts_bind_window_audio` — один device на процесс WebView; **не использовать** для dual sink (используйте native/Sonic `PlaybackHub`).
 
-## 18. Desktop runtime и NSIS release
+## 18. Модуль Local ASR
+
+Опциональный sidecar-модуль (паттерн TTS): офлайн **Parakeet TDT** через ONNX Runtime (`parakeet-rs`), без Python/NeMo/torch. Поставляется в VoiceSub **0.6.0**.
+
+### Manifest
+
+`bin/modules/local-asr/module.toml` — `entry_url_path = "/local-asr"`, `requires_core = ">=0.6.0"`, capabilities: ORT CPU/CUDA, streaming partials, захват микрофона.
+
+### Компоненты
+
+| Слой | Путь |
+| --- | --- |
+| UI | `src-local-asr/` → `bin/local-asr/` (`vite.local-asr.config.ts`, base `/local-asr-assets/`) |
+| Rust-сервис | `crates/voicesub-asr-local/` — `LocalAsrModuleService` |
+| Partial emit | `crates/voicesub-partial-emit/` — `PartialEmitCoordinator` (`word_growth`, coalesce) |
+| Runtime ingest | `voicesub-runtime/src/local_asr_speech_source.rs` — `LocalAsrSpeechSource` |
+| HTTP | `voicesub-runtime/src/http/local_asr.rs` — `/api/asr/local/*` |
+| Tauri shell | `src-tauri/src/local_asr.rs` — только `local_asr_open_window` |
+
+### Разделение config
+
+| Файл | Содержимое | Кто редактирует |
+| --- | --- | --- |
+| `user-data/modules/local-asr/config.toml` | model, deps, EP, VAD, realtime presets, mic, recognition | Только UI модуля |
+| `user-data/config.toml` → `asr.mode` | `browser_google` \| `local_parakeet` | Вкладка Эфир (когда ready) |
+
+Lazy-download в `user-data/modules/local-asr/` (модели, ORT CPU/GPU DLL, CUDA redist). В core NSIS-установщик **не** входят.
+
+### Gate готовности
+
+`GET /api/runtime/status` → `asr.local_module`:
+
+| Поле | Смысл |
+| --- | --- |
+| `ready` | CPU-путь usable (deps + model + warm load) — на Эфире доступен `local_parakeet` |
+| `cuda_ready` | deps CUDA EP + probe OK |
+| `phase` | setup / ready / error / … |
+| `execution_provider` | выбранный `cpu` \| `cuda` |
+| `active_execution_provider` | фактически используемый EP (возможен fallback на CPU) |
+
+Карточка Modules и селектор режима на Эфире читают этот snapshot (HTTP / runtime status). Отдельного runtime-event `local_asr_module_update` в 0.6.0 **нет**.
+
+### Runtime Start / Stop
+
+При `asr.mode = local_parakeet`:
+
+1. `POST /api/runtime/start` проверяет `local_module.ready`;
+2. стартует `LocalAsrSpeechSource` (cpal mic → 16 kHz → VAD → Parakeet decode → partial/final);
+3. **не** запускает Chrome Web Speech worker;
+4. отдаёт typed partial/final в тот же путь `IngestedAsrUpdate`, что и browser ASR (subtitle FSM / translation / overlay без изменений).
+
+Stop останавливает local pipeline (или browser path, если активен тот режим).
+
+### HTTP API (`x-voicesub-token`)
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/api/asr/local/status` | deps + model + ready + cuda_ready + EP |
+| GET | `/api/asr/local/config` | config модуля |
+| POST | `/api/asr/local/config/save` | сохранить config модуля |
+| POST | `/api/asr/local/deps/check` | повторный env check |
+| POST | `/api/asr/local/deps/download` | `{ kind: ort_cpu \| ort_gpu \| cuda_redist \| vcruntime }` |
+| POST | `/api/asr/local/deps/delete` | удалить скачанный kind |
+| POST | `/api/asr/local/deps/probe` | `{ provider: cpu \| cuda }` |
+| POST | `/api/asr/local/model/download` | `{ variant, family? }` |
+| POST | `/api/asr/local/model/select` | выбрать установленный variant |
+| POST | `/api/asr/local/model/delete` | удалить файлы модели |
+| POST | `/api/asr/local/model/load` | warm ONNX session |
+| POST | `/api/asr/local/model/unload` | освободить RAM сессии |
+| POST | `/api/asr/local/test/start` | test bench модуля |
+| POST | `/api/asr/local/test/stop` | остановить тест |
+| GET | `/api/asr/local/test/status` | snapshot test bench |
+| GET | `/api/asr/local/mics/list` | enumeration микрофонов (cpal) |
+| GET | `/api/asr/local/transfer` | прогресс download |
+| POST | `/api/asr/local/transfer/cancel` | отмена transfer |
+| GET | `/api/asr/local/driver-url` | URL скачивания CUDA Toolkit 13 |
+
+Страницы: `GET /local-asr`, static `/local-asr-assets`.
+
+### Инвариант emit
+
+Модуль отдаёт готовый **partial** или **final**. Core subtitle/translation/overlay и browser Web Speech **не** дорабатывают «плавность» Parakeet — тот же ingest-контракт, что у `browser_google`.
+
+### Realtime UX (модуль)
+
+- Пресеты latency: `low` / `balanced` / `quality`
+- Partial policy: `word_growth` через `voicesub-partial-emit`
+- Hallucination filter, emit telemetry, checklist setup (deps → model → mic test → final)
+- После смены realtime/VAD: нужен **Stop → Start** Live-сессии
+
+### Тесты
+
+- Golden: `tests/golden/local_asr/`
+- Crate tests: `voicesub-asr-local`, `voicesub-partial-emit`
+
+### Non-goals (v1)
+
+- Другие model family / diarization / Sortformer
+- Веса модели в core installer
+- TensorRT EP
+- Правки browser Web Speech или subtitle FSM ради local ASR
+
+## 19. Desktop runtime и NSIS release
 
 ### Tauri config
 
@@ -926,7 +1058,7 @@ Config: `user-data/modules/tts/config.toml` → секция `[twitch]`.
 - Bundle: **NSIS** (`targets: ["nsis"]`, `installMode: currentUser`, languages en/ru/ja/ko/zh)
 - NSIS template: `src-tauri/windows/installer.nsi`, hooks: `src-tauri/windows/hooks.nsh`
 - WebView2: `downloadBootstrapper` (silent=false)
-- Resources: `bin/dashboard`, `overlay`, `worker`, `tts`, `fonts`, `modules`
+- Resources: `bin/dashboard`, `overlay`, `worker`, `tts`, `local-asr`, `fonts`, `modules`
 
 Legacy WiX `src-tauri/wix/main.wxs` — **не используется** (reference only).
 
@@ -957,20 +1089,22 @@ Default `release_root`: `F:\AI\VoiceSub - release\v{version}\`
 
 **End user install:** NSIS `setup.exe` only. No Python/Node/torch in core installer. Chrome — system dependency для Web Speech.
 
-## 19. Хранилище и пути
+## 20. Хранилище и пути
 
 | Path | Назначение |
 | --- | --- |
 | `user-data/config.toml` | Main config |
 | `user-data/profiles/` | Named profiles |
 | `user-data/browser-worker-profile-classic-*/` | Chrome isolated profiles |
+| `user-data/modules/tts/` | TTS module config + runtime state |
+| `user-data/modules/local-asr/` | Local ASR config, models, ORT/CUDA runtime |
 | `user-data/translation-cache/` | Persistent translation cache |
 | `logs/` | Runtime logs |
 | `bin/` | Shipped static (workspace or NSIS resources) |
 
 `ProjectPaths::discover(project_root)` resolves all paths relative to project root or Tauri resource dir.
 
-## 20. Frontend: dashboard (Svelte)
+## 21. Frontend: dashboard (Svelte)
 
 **Sources:** `src/`  
 **Build:** `vite.config.ts` → `bin/dashboard/` (`base` implicit `/`)
@@ -985,7 +1119,7 @@ Single-page app с **primary destinations** (`src/lib/navigation.ts`) — без
 | `translation` | `TranslationPanel.svelte` |
 | `subtitles` | Hub → `SubtitlesPanel.svelte` + `StylePanel.svelte` |
 | `obs` | `ObsPanel.svelte` |
-| `modules` | `ModulesPanel.svelte` (launcher TTS module) |
+| `modules` | `ModulesPanel.svelte` (launcher TTS + Local ASR) |
 | `more` | Hub → `ThemePanel`, `ReplacementPanel`, `ToolsPanel`, `SettingsPanel`, `HelpPanel` |
 
 Standard layout использует те же destinations через `NavRail` / `BottomNav`. Command palette (`Ctrl+K`) — deep links через `NavTarget`.
@@ -1012,7 +1146,7 @@ Standard layout использует те же destinations через `NavRail`
 
 Пока runtime в фазе `idle`, dashboard показывает **placeholder preview** (`preview.source_line`, labels переводов) вместо live `overlay_update`. Пустой `overlay_update` после Save **не затирает** preview. При `running=true` preview переключается на live `overlay_update` (и `subtitle_payload_update` из Tauri snapshot при connect). Тест: `src/lib/preview-payload.test.ts`.
 
-## 21. Frontend: overlay (vanilla)
+## 22. Frontend: overlay (vanilla)
 
 **Path:** `bin/overlay/`
 
@@ -1030,7 +1164,7 @@ Standard layout использует те же destinations через `NavRail`
 **Debug:** `?debug=1` включает буфер `writeDebug` + `console.debug`; `?debug-subtitles=1` — ring trace эффектов (`window.__sstOverlaySubtitleTrace`). В production hot path нет `console.log`.  
 **Empty payload:** `disposeRenderContainer(linesContainer)` when render returns `empty: true` (TTL / Stop / idle). Idle TTL также требует `hasVisibleRenderedFrame()` — иначе очистка state без `render()` оставляет последний кадр в OBS. Pending RAF отменяется при явной очистке. Cache-bust: `overlay.html` → `overlay.js?v=20260621a`.
 
-## 22. Frontend: browser worker (Svelte)
+## 23. Frontend: browser worker (Svelte)
 
 **Sources:** `src-worker/`  
 **Build:** `vite.worker.config.ts` → `bin/worker/` (`base: "/worker-assets/"`)
@@ -1038,7 +1172,7 @@ Standard layout использует те же destinations через `NavRail`
 Entry: `main.ts` → `WorkerApp.svelte`  
 Autostart: `?autostart=1` query param.
 
-## 23. UI localization (i18n)
+## 24. UI localization (i18n)
 
 **Locales:** `en`, `ru`, `ja`, `ko`, `zh`
 
@@ -1054,16 +1188,16 @@ Export pipeline: `npm run i18n:export` → `scripts/export-i18n.mjs` → `src/li
 Overlay bundle: `npm run i18n:bundle` → `scripts/build-locale-bundle.mjs` → `scripts/i18n-source/locales-bundle.js` + `bin/overlay/shared/js/i18n/`.  
 Config key: `ui.language` (empty = browser default).
 
-## 24. Версионирование и проверка обновлений
+## 25. Версионирование и проверка обновлений
 
-- **Single source (interim):** `voicesub-types::PROJECT_VERSION` = `"0.5.5"`
-- Workspace `Cargo.toml` `[workspace.package].version` = `0.5.5`
-- `package.json`, `tauri.conf.json` — aligned `0.5.5`
+- **Single source (interim):** `voicesub-types::PROJECT_VERSION` = `"0.6.0"`
+- Workspace `Cargo.toml` `[workspace.package].version` = `0.6.0`
+- `package.json`, `tauri.conf.json` — aligned `0.6.0`
 - `GET /api/version`, `POST /api/updates/check` — GitHub Releases poll (`voicesub-runtime/src/http/update_service.rs`, `voicesub-types::version`)
 - Config `updates.*` — defaults in `voicesub-config::defaults`; legacy configs merge via `normalize_updates_config`
 - Dashboard banner: `UpdateBanner.svelte`; download → Tauri `open_external_https_url` (`src-tauri/src/shell.rs`)
 
-## 25. Тестирование
+## 26. Тестирование
 
 ### Policy
 
@@ -1091,7 +1225,7 @@ Config key: `ui.language` (empty = browser default).
 - `src/lib/preview-payload.test.ts`, `tests/renderer/dashboard-panel.contract.test.ts` — idle/live preview + контракт `SubtitleOutputPreview`
 - `src-tts/lib/twitch-chat-log.test.ts`, `src-tts/lib/popover-position.test.ts`, `twitch-channels.test.ts`
 
-## 26. Продуктовые инварианты
+## 27. Продуктовые инварианты
 
 1. **Local-first:** default localhost bind; no cloud assumptions.
 2. **Browser worker visibility:** separate window, visible URL bar, no hidden/throttled-to-death modes.
@@ -1101,19 +1235,19 @@ Config key: `ui.language` (empty = browser default).
 6. **No Node in runtime:** only compile-time frontend toolchain.
 7. **Config import:** legacy SST `config.json` import preserves user intent except explicitly removed modes.
 
-## 27. Known Limitations & Technical Debt
+## 28. Known Limitations & Technical Debt
 
 ### 27.1 Текущие ограничения
 
 - GitHub update **check + dashboard banner** реализованы; авто-скачивание installer — нет (только ссылка на release page)
 - `POST /api/openai/models` — static list; live OpenAI model fetch deferred
-- Audio input enumeration empty (by design for browser ASR)
+- Browser ASR: audio input enumeration empty in core devices API (mic в Chrome). Local ASR: `GET /api/asr/local/mics/list` (cpal).
 
 ### 27.2 Технический долг
 
 - `PROJECT_VERSION` scattered across Cargo/package/tauri — migrate to crate-only source of truth
 
-## 28. Security & Privacy Model
+## 29. Security & Privacy Model
 
 - **Bind policy:** localhost default; LAN only via explicit `VOICESUB_ALLOW_LAN=1`
 - **CSP** on all HTTP responses (restrictive `default-src 'self'`)
@@ -1123,7 +1257,7 @@ Config key: `ui.language` (empty = browser default).
 - Twitch OAuth tokens stored locally in TTS bridge
 - Browser worker uses isolated Chrome profile (no sync)
 
-## 29. Extension Points
+## 30. Extension Points
 
 ### Safe extension
 
@@ -1142,7 +1276,7 @@ Config key: `ui.language` (empty = browser default).
 - Reintroducing experimental routes in core HTTP server
 - Business logic in `src-tauri/`
 
-## 30. Glossary
+## 31. Glossary
 
 | Term | Meaning |
 | --- | --- |
@@ -1152,6 +1286,7 @@ Config key: `ui.language` (empty = browser default).
 | **Golden test** | Fixture-based regression test |
 | **Overlay** | Vanilla OBS Browser Source page at `/overlay` |
 | **Segment / revision** | Translation supersession identity `(segment_id, revision)` |
-| **Sidecar module** | Optional feature (TTS) under `bin/modules/` |
+| **Sidecar module** | Optional feature (TTS, Local ASR) under `bin/modules/` |
 | **Stale drop** | Discarding in-flight translation superseded by newer segment |
-| **VoiceSub** | Product name for the 0.5.x line |
+| **Local ASR** | Offline Parakeet module (`/local-asr`, mode `local_parakeet`) |
+| **VoiceSub** | Product name for the 0.6.x line (baseline first release: 0.5.0) |

@@ -217,6 +217,14 @@ function orderedSlots(config: ConfigPayload): string[] {
   return ordered;
 }
 
+export function normalizeTranslationSlotId(slotId: string): string {
+  return String(slotId || "").trim().toLowerCase();
+}
+
+export function isTranslationLineEnabled(line: Pick<TranslationLine, "enabled"> | undefined): boolean {
+  return line?.enabled !== false;
+}
+
 export function getLineCards(config: ConfigPayload): TranslationLine[] {
   const lineMap = getLineMap(config.translation?.lines);
   const configured = [...lineMap.values()].map((line) => String(line.slot_id).toLowerCase());
@@ -225,15 +233,65 @@ export function getLineCards(config: ConfigPayload): TranslationLine[] {
   return [...ordered, ...remaining].map((slotId) => lineMap.get(slotId)).filter(Boolean) as TranslationLine[];
 }
 
+export function syncTranslationTargetLanguages(draft: ConfigPayload): void {
+  if (!draft.translation) draft.translation = {};
+  draft.translation.target_languages = getLineCards(draft)
+    .filter((row) => isTranslationLineEnabled(row))
+    .map((row) => row.target_lang);
+}
+
+export function setTranslationLineEnabled(
+  draft: ConfigPayload,
+  slotId: string,
+  enabled: boolean,
+  defaultProvider = "google_translate_v2",
+): void {
+  const normalizedSlot = normalizeTranslationSlotId(slotId);
+  if (!normalizedSlot) return;
+
+  if (!draft.translation) {
+    draft.translation = { enabled: false, provider: defaultProvider, lines: [] };
+  }
+  const providerFallback = normalizeProviderName(draft.translation.provider, defaultProvider);
+  const lines = Array.isArray(draft.translation.lines)
+    ? draft.translation.lines.map((line) => ({ ...line, slot_id: normalizeTranslationSlotId(line.slot_id) }))
+    : [];
+
+  const index = lines.findIndex((line) => normalizeTranslationSlotId(line.slot_id) === normalizedSlot);
+  if (index >= 0) {
+    lines[index] = { ...lines[index], slot_id: normalizedSlot, enabled };
+  } else {
+    const targetLang = "en";
+    lines.push({
+      slot_id: normalizedSlot,
+      enabled,
+      target_lang: targetLang,
+      provider: providerFallback,
+      label: targetLang.toUpperCase(),
+    });
+  }
+  draft.translation.lines = lines;
+
+  const order = [...(draft.subtitle_output?.display_order || [])];
+  draft.subtitle_output = {
+    ...(draft.subtitle_output || {}),
+    display_order: enabled
+      ? normalizeDisplayOrder([...order, normalizedSlot])
+      : order.filter((item) => normalizeTranslationSlotId(item) !== normalizedSlot),
+  };
+  syncTranslationTargetLanguages(draft);
+}
+
 export function ensureLine(config: ConfigPayload, slotId: string, seed: Partial<TranslationLine> = {}): TranslationLine {
+  const normalizedSlot = normalizeTranslationSlotId(slotId);
   const lines = config.translation?.lines ? [...config.translation.lines] : [];
   const map = getLineMap(lines);
-  const existing = map.get(slotId);
+  const existing = map.get(normalizedSlot);
   if (existing) return existing;
   const targetLang = String(seed.target_lang || "en").trim().toLowerCase() || "en";
   const nextLine: TranslationLine = {
-    slot_id: slotId,
-    enabled: seed.enabled === true,
+    slot_id: normalizedSlot,
+    enabled: seed.enabled !== false,
     target_lang: targetLang,
     provider: normalizeProviderName(seed.provider, config.translation?.provider),
     label: String(seed.label || targetLang.toUpperCase()),

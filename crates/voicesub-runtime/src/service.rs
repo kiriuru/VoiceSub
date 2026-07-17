@@ -337,6 +337,12 @@ pub struct RuntimeService {
     overlay_broadcaster: Arc<OverlayBroadcaster>,
 
     last_subtitle_payload: Arc<Mutex<Option<serde_json::Value>>>,
+
+    local_asr: Arc<voicesub_asr_local::LocalAsrModuleService>,
+
+    local_asr_speech: Arc<crate::local_asr_speech_source::SharedLocalAsrSpeechSource>,
+
+    ordered_ingest: Arc<OrderedBrowserSpeechIngest>,
 }
 
 impl RuntimeService {
@@ -589,9 +595,10 @@ impl RuntimeService {
 
         let browser_speech_for_ingest =
             Arc::new(OrderedBrowserSpeechIngest::new(browser_speech.clone()));
+        let ingest_for_browser = browser_speech_for_ingest.clone();
         let browser_asr = Arc::new(BrowserAsrService::with_hooks(
             Arc::new(move |update| {
-                browser_speech_for_ingest.enqueue(update);
+                ingest_for_browser.enqueue(update);
             }),
             Some(on_worker_connected),
             Some(on_worker_disconnected),
@@ -599,6 +606,15 @@ impl RuntimeService {
         ));
 
         let asr_worker = AsrWorkerHub::new(browser_asr.clone());
+
+        let local_asr = Arc::new(voicesub_asr_local::LocalAsrModuleService::new(
+            paths.user_data_dir.clone(),
+            paths.logs_dir.clone(),
+        ));
+        let local_asr_speech = crate::local_asr_speech_source::SharedLocalAsrSpeechSource::new(
+            local_asr.clone(),
+            browser_speech_for_ingest.clone(),
+        );
 
         Self {
             config,
@@ -642,6 +658,9 @@ impl RuntimeService {
             subtitle_payload_listener,
             overlay_broadcaster,
             last_subtitle_payload,
+            local_asr,
+            local_asr_speech,
+            ordered_ingest: browser_speech_for_ingest,
         }
     }
 
@@ -772,6 +791,8 @@ impl RuntimeService {
             self.last_subtitle_payload.clone(),
             self.loopback_auth.clone(),
             self.background_tasks.clone(),
+            self.local_asr.clone(),
+            self.local_asr_speech.clone(),
         )
     }
 
@@ -789,6 +810,9 @@ impl RuntimeService {
         // Reap a high-priority browser worker left over from a previous crashed session
         // before we accept new sessions (review §8).
         voicesub_browser::reap_orphan_worker(&self.paths.user_data_dir);
+
+        self.ordered_ingest
+            .spawn_pump(tokio::runtime::Handle::current());
 
         {
             let mut store = self.config_store.write().await;

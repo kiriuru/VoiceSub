@@ -451,6 +451,32 @@ async fn python_tts_status_reports_script() {
 }
 
 #[tokio::test]
+async fn local_asr_status_reports_module_phase() {
+    let _guard = integration_lock();
+    let runtime = EphemeralRuntime::new();
+    let handle = runtime.start().await;
+    let addr = handle.bind_addr;
+
+    let client = reqwest::Client::new();
+    let resp = runtime
+        .authed(&client)
+        .get(format!("http://{addr}/api/asr/local/status"))
+        .timeout(Duration::from_secs(3))
+        .send()
+        .await
+        .expect("local asr status");
+    assert!(resp.status().is_success());
+    let body: serde_json::Value = resp.json().await.expect("json");
+    assert_eq!(body["ok"], true);
+    assert!(body["status"].is_object());
+    assert!(body["status"]["phase"].is_string());
+    assert!(body["status"]["ready"].is_boolean());
+    assert!(body["status"]["env"].is_object());
+
+    handle.shutdown().await;
+}
+
+#[tokio::test]
 async fn obs_url_points_to_overlay() {
     let _guard = integration_lock();
     let runtime = EphemeralRuntime::new();

@@ -4,6 +4,7 @@ pub mod http;
 
 mod browser_event_builder;
 mod browser_speech_source;
+mod local_asr_speech_source;
 mod segment_state;
 mod service;
 mod trace;

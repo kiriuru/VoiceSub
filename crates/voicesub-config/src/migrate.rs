@@ -189,7 +189,10 @@ pub fn apply_voicesub_import_rules(payload: Value) -> Value {
         "" => {
             asr.insert("mode".into(), json!("browser_google"));
         }
-        _ if mode != "browser_google" && mode != "browser_google_edge" => {
+        _ if mode != "browser_google"
+            && mode != "browser_google_edge"
+            && mode != "local_parakeet" =>
+        {
             asr.insert("mode".into(), json!("browser_google"));
         }
         _ => {}
@@ -232,6 +235,15 @@ pub fn import_sst_json_value(payload: Value) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn preserves_local_parakeet_mode_on_import() {
+        let imported = import_sst_json_value(json!({
+            "config_version": 8,
+            "asr": { "mode": "local_parakeet" }
+        }));
+        assert_eq!(imported["asr"]["mode"], "local_parakeet");
+    }
 
     #[test]
     fn maps_local_asr_to_browser_google() {

@@ -29,6 +29,7 @@ fn main() {
             "tts_update_twitch_settings",
             "tts_open_window",
             "tts_open_system_url",
+            "local_asr_open_window",
             "open_external_https_url",
             "open_local_http_url",
         ]),

@@ -17,7 +17,9 @@ mod translation_normalize;
 mod translation_provider_settings;
 
 pub use bind_policy::{allow_lan_from_env, http_bind_from_env, resolve_bind_host};
-pub use defaults::{CURRENT_CONFIG_VERSION, default_config_payload};
+pub use defaults::{
+    ASR_MODE_BROWSER, ASR_MODE_LOCAL_PARAKEET, CURRENT_CONFIG_VERSION, default_config_payload,
+};
 pub use document::ConfigDocument;
 pub use fonts::{build_font_catalog, build_project_fonts_stylesheet, list_project_font_entries};
 pub use logging_preferences::{

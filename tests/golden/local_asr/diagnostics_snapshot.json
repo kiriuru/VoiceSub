@@ -1,0 +1,13 @@
+{
+  "source_test": "local asr diagnostics snapshot",
+  "expected": {
+    "mode": "local_parakeet",
+    "provider_kind": "local_onnx",
+    "true_streaming": true,
+    "partial_emit_mode": "word_growth",
+    "streaming_decode": true,
+    "model_loaded": true,
+    "decode_count": 5,
+    "finalized_segments": 2
+  }
+}

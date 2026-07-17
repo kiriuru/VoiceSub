@@ -3,6 +3,20 @@ import { normalizeConfigPayload } from "./config-normalize";
 import type { ConfigPayload } from "./types";
 
 describe("normalizeConfigPayload SST parity", () => {
+  it("preserves local_parakeet asr mode", () => {
+    const out = normalizeConfigPayload({
+      asr: { mode: "local_parakeet" },
+    } as ConfigPayload);
+    expect(out.asr?.mode).toBe("local_parakeet");
+  });
+
+  it("maps unknown asr mode to browser_google", () => {
+    const out = normalizeConfigPayload({
+      asr: { mode: "nemo" },
+    } as ConfigPayload);
+    expect(out.asr?.mode).toBe("browser_google");
+  });
+
   it("maps overlay compact preset to stacked plus compact flag", () => {
     const out = normalizeConfigPayload({
       overlay: { preset: "compact" },
@@ -124,5 +138,37 @@ describe("normalizeConfigPayload SST parity", () => {
     expect(out.subtitle_lifecycle?.hard_max_phrase_ms).toBe(6100);
     expect(out.asr?.realtime?.finalization_hold_ms).toBe(380);
     expect(out.asr?.realtime?.max_segment_ms).toBe(6100);
+  });
+
+  it("preserves disabled translation line through normalization", () => {
+    const out = normalizeConfigPayload({
+      translation: {
+        enabled: true,
+        provider: "google_translate_v2",
+        lines: [
+          {
+            slot_id: "translation_1",
+            enabled: true,
+            target_lang: "en",
+            provider: "google_translate_v2",
+          },
+          {
+            slot_id: "translation_4",
+            enabled: false,
+            target_lang: "ko",
+            provider: "experimental_google_web",
+          },
+        ],
+        target_languages: ["en"],
+      },
+      subtitle_output: {
+        display_order: ["source", "translation_1"],
+      },
+    } as ConfigPayload);
+
+    expect(out.translation?.lines?.find((line) => line.slot_id === "translation_4")?.enabled).toBe(
+      false,
+    );
+    expect(out.translation?.target_languages).toEqual(["en"]);
   });
 });

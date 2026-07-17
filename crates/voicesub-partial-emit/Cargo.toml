@@ -1,0 +1,12 @@
+[package]
+name = "voicesub-partial-emit"
+version.workspace = true
+edition.workspace = true
+description = "Shared partial emit policy (SST partial_emit_coordinator port)"
+
+[dependencies]
+serde_json = { workspace = true }
+
+[dev-dependencies]
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }

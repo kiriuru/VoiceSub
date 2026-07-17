@@ -13,13 +13,15 @@ members = [
     "crates/voicesub-obs",
     "crates/voicesub-audio",
     "crates/voicesub-tts",
+    "crates/voicesub-asr-local",
+    "crates/voicesub-partial-emit",
     "crates/voicesub-twitch",
     "crates/voicesub-runtime",
     "src-tauri",
 ]
 
 [workspace.package]
-version = "0.5.5"
+version = "0.6.0"
 edition = "2024"
 license = "MIT"
 rust-version = "1.85"
@@ -37,6 +39,8 @@ voicesub-export = { path = "crates/voicesub-export" }
 voicesub-obs = { path = "crates/voicesub-obs" }
 voicesub-audio = { path = "crates/voicesub-audio" }
 voicesub-tts = { path = "crates/voicesub-tts" }
+voicesub-asr-local = { path = "crates/voicesub-asr-local" }
+voicesub-partial-emit = { path = "crates/voicesub-partial-emit" }
 voicesub-twitch = { path = "crates/voicesub-twitch" }
 voicesub-runtime = { path = "crates/voicesub-runtime" }
 

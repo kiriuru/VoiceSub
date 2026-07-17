@@ -1,0 +1,23 @@
+{
+  "source_test": "webrtc vad partial then force finalize",
+  "config": {
+    "enabled": true,
+    "vad_mode": 2,
+    "energy_gate_enabled": false,
+    "min_rms_for_recognition": 0.001,
+    "min_voiced_ratio": 0.0,
+    "speech_attack_frames": 1,
+    "speech_preroll_frames": 0,
+    "min_speech_ms": 90,
+    "min_silence_ms": 180,
+    "silence_hold_ms": 90,
+    "partial_emit_interval_ms": 90,
+    "max_segment_ms": 30000
+  },
+  "sample_rate": 16000,
+  "frame_samples": 480,
+  "speech_level": 0.35,
+  "speech_frames": 12,
+  "expect_partial": true,
+  "expect_final": true
+}

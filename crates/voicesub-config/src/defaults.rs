@@ -5,6 +5,9 @@ use crate::translation_normalize::default_translation_provider_settings;
 
 pub const CURRENT_CONFIG_VERSION: i64 = 8;
 
+pub const ASR_MODE_BROWSER: &str = "browser_google";
+pub const ASR_MODE_LOCAL_PARAKEET: &str = "local_parakeet";
+
 /// VoiceSub 0.5.0 default — `browser_google` only.
 pub fn default_config_payload() -> Value {
     json!({

@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 use serde_json::{Value, json};
 use tokio::sync::{Mutex, Notify};
 use tokio::task::JoinHandle;
-use tracing::debug;
+use tracing::{debug, trace};
 use voicesub_subtitle::{ConfigGetter, SubtitlePayloadEvent};
 
 #[cfg(test)]
@@ -433,13 +433,18 @@ async fn connection_loop(inner: Arc<Inner>) {
             }
             Err(err) => {
                 let code = error_codes::obs_client_error_code(&err);
-                {
+                let attempt = {
                     let mut diag = inner.diagnostics.lock().await;
                     diag.reconnect_attempt_count += 1;
                     diag.last_error = Some(code.into());
                     diag.connected = false;
+                    diag.reconnect_attempt_count
+                };
+                if code == error_codes::error::CONNECTION_REFUSED && attempt > 3 {
+                    trace!(error = %err, code, attempt, "obs websocket connect failed");
+                } else {
+                    debug!(error = %err, code, attempt, "obs websocket connect failed");
                 }
-                debug!(error = %err, code, "obs websocket connect failed");
                 set_connection_state(&inner, ConnectionState::Error, Some(code)).await;
                 tokio::time::sleep(backoff).await;
                 backoff = (backoff * 2).min(Duration::from_secs(10));

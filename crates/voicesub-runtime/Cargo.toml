@@ -11,9 +11,11 @@ voicesub-translation = { workspace = true }
 voicesub-browser = { workspace = true }
 voicesub-ws = { workspace = true }
 voicesub-tts = { workspace = true }
+voicesub-asr-local = { workspace = true }
 voicesub-logging = { workspace = true }
 voicesub-export = { workspace = true }
 voicesub-obs = { workspace = true }
+voicesub-partial-emit = { workspace = true }
 voicesub-twitch = { workspace = true }
 axum = { workspace = true }
 tokio = { workspace = true }

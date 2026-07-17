@@ -32,7 +32,7 @@
     TranslationResultState,
   } from "../types";
 
-  export let version = "0.5.0";
+  export let version = "0.6.0";
   export let standardNav: NavDestinationId = "live";
   export let moreHubOpen = true;
   export let subtitlesHubOpen = true;

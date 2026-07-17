@@ -18,10 +18,13 @@
     getProviderSetting,
     getSlotDisplayLabel,
     getSlotNumber,
+    isTranslationLineEnabled,
     nextAvailableSlot,
     normalizeDisplayOrder,
     normalizeProviderName,
     setProviderSetting,
+    setTranslationLineEnabled,
+    syncTranslationTargetLanguages,
   } from "../translation-helpers";
   import TranslationResults from "../components/TranslationResults.svelte";
   import type { ConfigPayload, TranslationLine, TranslationResultState } from "../types";
@@ -115,7 +118,7 @@
     return getLineCards(draft).some(
       (line) =>
         line.slot_id !== slotId &&
-        line.enabled &&
+        isTranslationLineEnabled(line) &&
         String(line.target_lang || "").trim().toLowerCase() === normalized,
     );
   }
@@ -132,36 +135,28 @@
     }
     lineValidationMessage = "";
     mutate((draft) => {
-      const line = ensureLine(draft, slotId, { provider: defaultProvider });
-      Object.assign(line, patch);
-      if (patch.target_lang) line.label = String(patch.label || patch.target_lang.toUpperCase());
+      const normalizedSlot = String(slotId || "").trim().toLowerCase();
+      const line = ensureLine(draft, normalizedSlot, { provider: defaultProvider });
+      const nextLine = {
+        ...line,
+        ...patch,
+        slot_id: normalizedSlot,
+      };
+      if (patch.target_lang) {
+        nextLine.label = String(patch.label || patch.target_lang.toUpperCase());
+      }
+      const lines = (draft.translation?.lines || []).map((entry) =>
+        String(entry.slot_id || "").trim().toLowerCase() === normalizedSlot ? nextLine : entry,
+      );
       if (!draft.translation) draft.translation = {};
-      draft.translation.target_languages = getLineCards(draft)
-        .filter((row) => row.enabled)
-        .map((row) => row.target_lang);
+      draft.translation.lines = lines;
+      syncTranslationTargetLanguages(draft);
     });
   }
 
   function toggleLineEnabled(slotId: string, enabled: boolean) {
     mutate((draft) => {
-      const line = ensureLine(draft, slotId, { provider: defaultProvider });
-      line.enabled = enabled;
-      const order = [...(draft.subtitle_output?.display_order || [])];
-      if (enabled) {
-        draft.subtitle_output = {
-          ...(draft.subtitle_output || {}),
-          display_order: normalizeDisplayOrder([...order, slotId]),
-        };
-      } else {
-        draft.subtitle_output = {
-          ...(draft.subtitle_output || {}),
-          display_order: order.filter((item) => item !== slotId),
-        };
-      }
-      draft.translation = draft.translation || {};
-      draft.translation.target_languages = getLineCards(draft)
-        .filter((row) => row.enabled)
-        .map((row) => row.target_lang);
+      setTranslationLineEnabled(draft, slotId, enabled, defaultProvider);
     });
   }
 
@@ -351,10 +346,11 @@
         class="translation-line-list"
         class:translation-line-list--compact={layoutMode === "compact"}
       >
-        {#each lineCards as line}
+        {#each lineCards as line (line.slot_id)}
           {@const slotId = line.slot_id}
+          {@const lineEnabled = isTranslationLineEnabled(line)}
           {@const providerName = normalizeProviderName(line.provider, defaultProvider)}
-          {@const missing = line.enabled ? getMissingProviderFields(providerName, translation.provider_settings?.[providerName] || {}) : []}
+          {@const missing = lineEnabled ? getMissingProviderFields(providerName, translation.provider_settings?.[providerName] || {}) : []}
 
           <li>
             <div
@@ -382,8 +378,8 @@
                 </div>
 
                 <div class="translation-line-badges">
-                  <span class="translation-line-badge" data-tone={line.enabled ? "ready" : "muted"}>
-                    {line.enabled ? tr("translation.line.state.enabled") : tr("translation.line.state.disabled")}
+                  <span class="translation-line-badge" data-tone={lineEnabled ? "ready" : "muted"}>
+                    {lineEnabled ? tr("translation.line.state.enabled") : tr("translation.line.state.disabled")}
 
                   </span>
                   {#if missing.length}
@@ -395,11 +391,13 @@
 
               </div>
 
-              <label class="checkbox-row translation-line-enabled">
+              <label class="checkbox-row translation-line-enabled" on:click|stopPropagation>
                 <input
                   type="checkbox"
-                  checked={line.enabled}
-                  on:change={(e) => toggleLineEnabled(slotId, (e.currentTarget as HTMLInputElement).checked)}
+                  checked={lineEnabled}
+                  on:click|stopPropagation
+                  on:change|stopPropagation={(e) =>
+                    toggleLineEnabled(slotId, (e.currentTarget as HTMLInputElement).checked)}
                 />
                 <span>{tr("translation.line.enabled")}</span>
               </label>

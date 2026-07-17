@@ -1,4 +1,5 @@
 import type { ConfigPayload, TranslationLine } from "./types";
+import { ASR_MODE_BROWSER, normalizeAsrMode } from "./asr-mode";
 import { normalizeTranslationProviderSettings } from "./translation-provider-settings";
 import { PROVIDERS } from "./constants";
 import { WEBSPEECH_BROWSER_ADVANCED_DEFAULTS as browserAdv } from "./webspeech-advanced-defaults";
@@ -128,9 +129,9 @@ export function normalizeConfigPayload(raw: ConfigPayload): ConfigPayload {
     output.display_order = ["source", "translation_1"];
   }
 
-  if (!config.asr) config.asr = { mode: "browser_google" };
+  if (!config.asr) config.asr = { mode: ASR_MODE_BROWSER };
   const asr = config.asr as Record<string, unknown>;
-  asr.mode = "browser_google";
+  asr.mode = normalizeAsrMode(asr.mode);
   if (!asr.browser || typeof asr.browser !== "object") asr.browser = {};
   const browser = asr.browser as Record<string, unknown>;
   browser.recognition_language =

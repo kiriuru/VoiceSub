@@ -3,7 +3,7 @@
 use serde_json::{Value, json};
 
 /// Product version — single source until crate-only policy is enforced.
-pub const PROJECT_VERSION: &str = "0.5.5";
+pub const PROJECT_VERSION: &str = "0.6.0";
 pub const RELEASE_TRACK: &str = "stable";
 pub const DEFAULT_UPDATE_PROVIDER: &str = "github_releases";
 pub const DEFAULT_RELEASE_CHANNEL: &str = "stable";
@@ -314,17 +314,17 @@ mod tests {
                 "html_url": "https://github.com/kiriuru/VoiceSub/releases/tag/v0.5.0"
             },
             {
-                "tag_name": "v0.5.6",
+                "tag_name": "v0.6.1",
                 "draft": false,
                 "prerelease": false,
-                "html_url": "https://github.com/kiriuru/VoiceSub/releases/tag/v0.5.6"
+                "html_url": "https://github.com/kiriuru/VoiceSub/releases/tag/v0.6.1"
             }
         ]);
         let (latest, _, url) = extract_latest_github_release(&releases, "stable");
-        assert_eq!(latest.as_deref(), Some("0.5.6"));
+        assert_eq!(latest.as_deref(), Some("0.6.1"));
         assert_eq!(
             url.as_deref(),
-            Some("https://github.com/kiriuru/VoiceSub/releases/tag/v0.5.6")
+            Some("https://github.com/kiriuru/VoiceSub/releases/tag/v0.6.1")
         );
         assert!(is_remote_version_newer(
             PROJECT_VERSION,
@@ -342,7 +342,7 @@ mod tests {
         assert_eq!(payload["sync"]["update_available"], true);
         assert_eq!(
             payload["sync"]["release_url"],
-            "https://github.com/kiriuru/VoiceSub/releases/tag/v0.5.6"
+            "https://github.com/kiriuru/VoiceSub/releases/tag/v0.6.1"
         );
     }
 
@@ -353,7 +353,7 @@ mod tests {
                 "enabled": true,
                 "provider": "github_releases",
                 "github_repo": "example/repo",
-                "latest_known_version": "0.5.6"
+                "latest_known_version": "0.6.1"
             }
         })));
         assert_eq!(payload["current_version"], PROJECT_VERSION);

@@ -74,6 +74,7 @@ pub struct ProjectPaths {
     pub overlay_root: PathBuf,
     pub worker_dist: PathBuf,
     pub tts_dist: PathBuf,
+    pub local_asr_dist: PathBuf,
     pub dashboard_dist: PathBuf,
     pub fonts_dir: PathBuf,
     pub modules_dir: PathBuf,
@@ -97,6 +98,7 @@ impl ProjectPaths {
             overlay_root: bin_dir.join("overlay"),
             worker_dist: bin_dir.join("worker"),
             tts_dist: bin_dir.join("tts"),
+            local_asr_dist: bin_dir.join("local-asr"),
             dashboard_dist: bin_dir.join("dashboard"),
             fonts_dir: bin_dir.join("fonts"),
             modules_dir: bin_dir.join("modules"),
@@ -109,6 +111,14 @@ impl ProjectPaths {
 
     pub fn tts_module_dir(&self) -> PathBuf {
         self.modules_dir.join("tts")
+    }
+
+    pub fn local_asr_module_dir(&self) -> PathBuf {
+        self.modules_dir.join("local-asr")
+    }
+
+    pub fn local_asr_user_module_dir(&self) -> PathBuf {
+        self.user_data_dir.join("modules").join("local-asr")
     }
 
     pub fn config_toml_path(&self) -> PathBuf {
@@ -128,6 +138,7 @@ impl ProjectPaths {
 pub fn ensure_runtime_data_dirs(paths: &ProjectPaths) -> std::io::Result<()> {
     std::fs::create_dir_all(&paths.user_data_dir)?;
     std::fs::create_dir_all(&paths.logs_dir)?;
+    std::fs::create_dir_all(&paths.local_asr_user_module_dir())?;
     Ok(())
 }
 
@@ -276,6 +287,7 @@ mod tests {
             overlay_root: root.join("bin/overlay"),
             worker_dist: root.join("bin/worker"),
             tts_dist: root.join("bin/tts"),
+            local_asr_dist: root.join("bin/local-asr"),
             dashboard_dist: root.join("bin/dashboard"),
             fonts_dir: root.join("bin/fonts"),
             modules_dir: root.join("bin/modules"),
@@ -285,6 +297,7 @@ mod tests {
         ensure_runtime_data_dirs(&paths).expect("ensure dirs");
         assert!(paths.user_data_dir.is_dir());
         assert!(paths.logs_dir.is_dir());
+        assert!(paths.local_asr_user_module_dir().is_dir());
         let _ = std::fs::remove_dir_all(root);
     }
 

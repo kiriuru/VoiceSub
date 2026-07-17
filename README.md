@@ -1,51 +1,67 @@
 # VoiceSub
 
-**Turn your voice into live translated subtitles for streaming. Local-first, privacy-first, OBS-ready.**
+**Live translated subtitles for streamers — local-first, privacy-first, OBS-ready.**
+
+[![Version](https://img.shields.io/badge/version-0.6.0-blue.svg)](./docs/CHANGELOG.en.md)
+[![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-lightgrey.svg)](#system-requirements)
+[![Stack](https://img.shields.io/badge/stack-Rust%20%2B%20Tauri%20%2B%20Svelte-orange.svg)](#development)
+[![Changelog](https://img.shields.io/badge/changelog-Keep%20a%20Changelog-E05735.svg)](./docs/CHANGELOG.en.md)
 
 <p align="center">
-  <a href="./README.md">English</a> • <a href="./README.ru.md">Русский</a> •
-  <a href="./docs/WIKI.en.md">Wiki (EN)</a> • <a href="./docs/WIKI.ru.md">Wiki (RU)</a> •
-  <a href="./docs/TECHNICAL_ARCHITECTURE.en.md">Technical Docs (EN)</a> •
-  <a href="./docs/TECHNICAL_ARCHITECTURE.md">Technical Docs (RU)</a> •
-  <a href="./docs/CHANGELOG.en.md">Changelog (EN)</a> •
-  <a href="./docs/CHANGELOG.md">Changelog (RU)</a>
+  <a href="./README.md">English</a> ·
+  <a href="./README.ru.md">Русский</a> ·
+  <a href="./docs/WIKI.en.md">Wiki</a> ·
+  <a href="./docs/TECHNICAL_ARCHITECTURE.en.md">Architecture</a> ·
+  <a href="./docs/CHANGELOG.en.md">Changelog</a>
 </p>
 
-VoiceSub **`0.5.5`** (current line) is a Windows desktop app for streamers who need real-time subtitles with optional translation. It combines browser-based speech recognition, subtitle styling, routing, and OBS output in one local workflow. Default bind is `127.0.0.1:8765` — no cloud backend, no accounts.
+VoiceSub is a Windows desktop app that turns speech into real-time subtitles with optional translation. Recognition runs through **Chrome/Edge Web Speech** or optional offline **Local ASR** (Parakeet / ONNX). Everything stays on your machine — default bind `127.0.0.1:8765`, no cloud backend, no accounts.
 
-Successor to SST Desktop `0.4.4`; first VoiceSub release baseline: **`0.5.0`**. Core stack: **Rust + Tauri**, **Svelte dashboard**, **vanilla OBS overlay**.
+Successor to SST Desktop `0.4.4`. First VoiceSub release: **`0.5.0`**. Current line: **`0.6.0`**.
 
-## Key features
+---
 
-- Real-time speech via **Chrome/Edge Web Speech worker** (`/google-asr`)
-- Multi-language translation — **13 providers**, up to 5 translation lines
-- OBS **Browser Source overlay** + optional **OBS Closed Captions** (WebSocket)
-- Animated subtitle presets, per-slot styling, theme palette
-- **TTS module** — native/Sonic dual-sink playback; subtitle speech + Twitch chat TTS (up to **5 IRC channels** per OAuth, live filter apply); volume up to **150%**
-- Diagnostics ZIP export (redacted config + logs)
-- UI locales: **en, ru, ja, ko, zh**
-- Compact phone-style layout for secondary monitors
+## Features
 
-**Not in core 0.5.x:** local Parakeet ASR, experimental browser routes (archived in `legacy/`).
+| Area | What you get |
+| --- | --- |
+| **Speech** | Chrome/Edge Web Speech worker, or offline Local ASR (Parakeet / ONNX, CPU or CUDA) |
+| **Translation** | 13 providers, up to 5 translation lines |
+| **OBS** | Browser Source overlay + optional Closed Captions (WebSocket) |
+| **Style** | Animated presets, per-slot styling, theme palette |
+| **TTS** | Native / Sonic playback; subtitle speech + Twitch chat TTS (up to 5 channels) |
+| **Local ASR** | Setup wizard at `/local-asr`; Live mode `local_parakeet` when ready |
+| **Ops** | Diagnostics ZIP export; UI locales en / ru / ja / ko / zh |
+
+Compact phone-style layout is available for secondary monitors.
+
+---
 
 ## System requirements
 
-- Windows 10/11 x64
-- **Microsoft Edge WebView2 Runtime** — required for the VoiceSub desktop shell (dashboard and TTS window). Usually preinstalled on Windows 11; on Windows 10 the NSIS installer can run the WebView2 bootstrapper if it is missing.
-- **Google Chrome** (or Edge for smoke tests) — separate system dependency for the Web Speech worker window
-- Microphone access for the browser worker window
-- Internet for external translation providers (optional)
-- For NSIS install: no Python, Node.js, or CUDA required in core package
+- Windows 10 or 11 (x64)
+- **Microsoft Edge WebView2 Runtime** (usually preinstalled on Windows 11; the NSIS installer can bootstrap it on Windows 10)
+- **Google Chrome** or Edge — only for the Web Speech worker (not needed for Local ASR alone)
+- Microphone access
+- Internet — optional for cloud translation providers; also used for first-time Local ASR model / ORT downloads
+
+No Python, Node.js, or CUDA in the core installer. CUDA is an optional Local ASR download.
+
+---
 
 ## Quick start
 
-1. Install **VoiceSub** from the release installer (`VoiceSub_0.5.5_x64-setup.exe` or latest in your release folder; developers: `build-release-msi.bat` → `build-release.ps1`).
-2. Launch **VoiceSub.exe** — the main window opens the dashboard at `http://127.0.0.1:8765/`.
-3. In OBS, add a **Browser Source** pointing to `http://127.0.0.1:8765/overlay`.
+1. Install from `VoiceSub_0.6.0_x64-setup.exe` (or the latest build in your release folder).
+2. Launch **VoiceSub.exe** — the dashboard opens at `http://127.0.0.1:8765/`.
+3. In OBS, add a **Browser Source** → `http://127.0.0.1:8765/overlay`.
 4. Configure translation and subtitle style if needed, then click **Start**.
-5. Keep the **browser worker window** open and visible (launched automatically) — mic permission is granted there.
+5. Choose recognition:
+   - **Web Speech** — keep the browser worker window open and visible (mic permission is granted there).
+   - **Local ASR** — **Modules → Local ASR**, finish setup until ready, select Local ASR on Live, then Start.
 
-For step-by-step UI guidance, see **[Wiki (EN)](./docs/WIKI.en.md)** / **[Wiki (RU)](./docs/WIKI.ru.md)**.
+Step-by-step UI guide: [Wiki (EN)](./docs/WIKI.en.md) · [Wiki (RU)](./docs/WIKI.ru.md)
+
+---
 
 ## Local URLs
 
@@ -54,39 +70,55 @@ For step-by-step UI guidance, see **[Wiki (EN)](./docs/WIKI.en.md)** / **[Wiki (
 | `http://127.0.0.1:8765/` | Dashboard |
 | `http://127.0.0.1:8765/overlay` | OBS Browser Source |
 | `http://127.0.0.1:8765/google-asr?autostart=1` | Browser Speech worker |
-| `http://127.0.0.1:8765/tts` | TTS module UI |
+| `http://127.0.0.1:8765/tts` | TTS module |
+| `http://127.0.0.1:8765/local-asr` | Local ASR module |
 
-Overlay query examples: `?preset=single`, `?compact=1`, `?profile=default`
+Overlay query examples: `?preset=single` · `?compact=1` · `?profile=default`
 
-## Configuration and data
+---
+
+## Data paths
 
 | Path | Contents |
 | --- | --- |
-| `user-data/config.toml` | Main settings (TOML) |
-| `user-data/profiles/` | Named profile snapshots |
-| `user-data/translation-cache/` | Persistent translation cache |
+| `user-data/config.toml` | Main settings |
+| `user-data/profiles/` | Named profiles |
+| `user-data/modules/tts/` | TTS settings |
+| `user-data/modules/local-asr/` | Local ASR config, models, ORT / CUDA runtime |
+| `user-data/translation-cache/` | Translation cache |
 | `logs/` | `core.log`, `runtime-events.log`, `session-latest.jsonl` |
-| `bin/fonts/` | Project fonts for subtitle rendering |
+| `bin/fonts/` | Subtitle fonts |
 
-SST `config.json` can be imported on first run or via settings — modes like `local` and `remote` are mapped to `browser_google`. See [Technical Architecture §7](./docs/TECHNICAL_ARCHITECTURE.en.md).
+SST `config.json` can be imported on first run or from settings. Legacy `local` / experimental modes map to `browser_google`; `local_parakeet` is preserved. Details: [Architecture §7](./docs/TECHNICAL_ARCHITECTURE.en.md).
+
+---
 
 ## Troubleshooting
 
-| Symptom | Check |
+| Symptom | What to check |
 | --- | --- |
-| No subtitles at all | Runtime **Start** pressed; worker window open; mic allowed in Chrome |
-| Source text but no translation | Translation enabled; at least one line active; provider credentials |
-| OBS empty | Browser Source URL is `/overlay`; visibility toggles in Subtitles tab; reload source after app update (overlay cache-bust) |
-| OBS text stuck after TTL/Stop | Update to latest build; reload Browser Source (`overlay.js?v=20260615a`, idle TTL DOM clear fix) |
-| Update banner shows raw keys / Download does nothing | Update to latest build (i18n `updates.banner.*`, `open_external_https_url` IPC) |
-| Port conflict | Ensure `8765` is free or change bind (developer build) |
-| Worker dies silently | See Tools & Data → diagnostics; check `logs/core.log` |
+| No subtitles | **Start** pressed; worker open (Web Speech) **or** Local ASR ready + mic selected |
+| Source text, no translation | Translation on; at least one line active; provider credentials |
+| Empty OBS | Browser Source URL is `/overlay`; visibility on Subtitles tab; reload source after updates |
+| Text stuck after TTL / Stop | Update build; reload Browser Source |
+| Port in use | Free `8765` or change bind (dev builds) |
+| Local ASR missing on Live | Modules → Local ASR: finish wizard until `ready` |
 
-Full operational guide: **Wiki** → section 2 (troubleshooting).
+Full guide: [Wiki → Troubleshooting](./docs/WIKI.en.md).
+
+---
+
+## Documentation
+
+- [Wiki (EN)](./docs/WIKI.en.md) / [Wiki (RU)](./docs/WIKI.ru.md) — user guide
+- [Technical Architecture (EN)](./docs/TECHNICAL_ARCHITECTURE.en.md) / [(RU)](./docs/TECHNICAL_ARCHITECTURE.md)
+- [Changelog (EN)](./docs/CHANGELOG.en.md) / [(RU)](./docs/CHANGELOG.md) — [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
+
+---
 
 ## Contributing
 
-PRs welcome. For larger changes, open an issue first.
+Pull requests are welcome. For larger changes, open an issue first.
 
 ```powershell
 cargo test --workspace
@@ -94,34 +126,28 @@ npm run build
 npm run test:frontend
 ```
 
-## Documentation
-
-- [Wiki (EN)](./docs/WIKI.en.md) / [Wiki (RU)](./docs/WIKI.ru.md) — user guide
-- [Technical Architecture (EN)](./docs/TECHNICAL_ARCHITECTURE.en.md) / [(RU)](./docs/TECHNICAL_ARCHITECTURE.md)
-
-## Development
-
-Current patch line **`0.5.5`** — see [CHANGELOG (EN)](./docs/CHANGELOG.en.md) / [(RU)](./docs/CHANGELOG.md).
+---
 
 ## License
 
-See [LICENSE](./LICENSE).
+[MIT](./LICENSE) © 2026 Kiriuru
 
 ---
 
 <details>
-<summary>For developers: architecture and build</summary>
+<summary><strong>Developers — stack and build</strong></summary>
 
 ### Stack
 
 | Layer | Tech |
 | --- | --- |
 | Core | Rust workspace (`crates/voicesub-*`) + Axum HTTP/WS |
-| Shell | Tauri 2 → `VoiceSub.exe` (NSIS installer) |
+| Shell | Tauri 2 → `VoiceSub.exe` (NSIS) |
 | Dashboard | Svelte 5 + Vite → `bin/dashboard/` |
 | Worker | Svelte 5 → `bin/worker/` |
 | Overlay | Vanilla HTML/JS → `bin/overlay/` |
 | TTS | Svelte + Rust service + embedded Python sidecar |
+| Local ASR | Svelte + `voicesub-asr-local` + ONNX Runtime (lazy download) |
 
 Node.js is **build-time only** — not shipped in the installer.
 
@@ -129,22 +155,22 @@ Node.js is **build-time only** — not shipped in the installer.
 
 ```powershell
 npm install
-npm run build          # dashboard + worker + TTS (runs i18n:export first)
-npm run i18n:export    # scripts/i18n-source → src/lib/i18n/locales/*.json
-npm run i18n:bundle    # overlay locales-bundle.js (after editing scripts/i18n-source/)
+npm run build          # dashboard + worker + TTS + Local ASR
+npm run i18n:export    # scripts/i18n-source → locale JSON
+npm run i18n:bundle    # overlay locales bundle
 cargo test --workspace
-build-release-msi.bat  # → build-release.ps1 → NSIS setup.exe in release_root
+build-release-msi.bat  # → NSIS setup.exe in release_root
 ```
 
-Tauri `beforeBuildCommand`: `npm run build`. Resources bundled: `bin/dashboard`, `overlay`, `worker`, `tts`, `fonts`, `modules`.
+Tauri `beforeBuildCommand`: `npm run build`. Bundled resources: `bin/dashboard`, `overlay`, `worker`, `tts`, `local-asr`, `fonts`, `modules`.
 
 ### Key crates
 
-`voicesub-runtime` (orchestration), `voicesub-subtitle`, `voicesub-translation`, `voicesub-browser`, `voicesub-ws`, `voicesub-tts`, `voicesub-obs`.
+`voicesub-runtime` · `voicesub-subtitle` · `voicesub-translation` · `voicesub-browser` · `voicesub-ws` · `voicesub-tts` · `voicesub-asr-local` · `voicesub-partial-emit` · `voicesub-obs`
 
-`src-tauri/` is thin IPC only — no business logic.
+`src-tauri/` is a thin IPC shell — no domain logic.
 
-Version: `voicesub-types::PROJECT_VERSION` = **`0.5.5`**.
+Version source: `voicesub-types::PROJECT_VERSION` = **`0.6.0`**.
 
 Full reference: [Technical Architecture](./docs/TECHNICAL_ARCHITECTURE.en.md).
 

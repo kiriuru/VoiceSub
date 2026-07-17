@@ -4,6 +4,7 @@ mod asr_diagnostics;
 mod background_tasks;
 mod devices;
 mod exports;
+mod local_asr;
 mod logs;
 mod loopback_auth;
 mod metrics;

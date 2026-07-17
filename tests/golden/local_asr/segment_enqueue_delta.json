@@ -1,0 +1,11 @@
+{
+  "source_test": "segment_audio_enqueue delta threshold",
+  "sample_rate": 16000,
+  "delta_ms": 280,
+  "decode_interval_ms": 400,
+  "min_buffer_ms": 200,
+  "steps": [
+    { "push_samples": 1000, "speech_active": false, "buffer_samples": 3200, "expect_decode": false },
+    { "push_samples": 5000, "speech_active": false, "buffer_samples": 8200, "expect_decode": true }
+  ]
+}

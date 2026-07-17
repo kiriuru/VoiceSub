@@ -13,6 +13,53 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const srcDir = path.join(root, "scripts", "i18n-source", "locales");
 const outDir = path.join(root, "src", "lib", "i18n", "locales");
 
+const RETRYABLE_WRITE_CODES = new Set(["EBUSY", "EPERM", "EACCES", "UNKNOWN"]);
+
+function sleepMs(ms) {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    /* spin */
+  }
+}
+
+/** Atomic write with retries — avoids transient Windows locks on locale JSON. */
+function writeTextFileWithRetry(outPath, content) {
+  const dir = path.dirname(outPath);
+  const tmp = path.join(
+    dir,
+    `.${path.basename(outPath)}.${process.pid}.${Date.now()}.tmp`,
+  );
+  let lastErr;
+  for (let attempt = 1; attempt <= 8; attempt++) {
+    try {
+      fs.writeFileSync(tmp, content, "utf8");
+      try {
+        fs.renameSync(tmp, outPath);
+      } catch (renameErr) {
+        if (RETRYABLE_WRITE_CODES.has(renameErr?.code)) {
+          fs.rmSync(outPath, { force: true });
+          fs.renameSync(tmp, outPath);
+        } else {
+          throw renameErr;
+        }
+      }
+      return;
+    } catch (err) {
+      lastErr = err;
+      try {
+        fs.unlinkSync(tmp);
+      } catch {
+        /* ignore */
+      }
+      if (!RETRYABLE_WRITE_CODES.has(err?.code) || attempt === 8) {
+        throw err;
+      }
+      sleepMs(40 * attempt);
+    }
+  }
+  throw lastErr;
+}
+
 const dynamicPath = path.join(root, "scripts", "i18n-source", "dynamic-locales.js");
 const dynamicCode = fs.readFileSync(dynamicPath, "utf8");
 const dynamicSandbox = { window: { __SST_I18N_DYNAMIC: {} } };
@@ -494,6 +541,6 @@ for (const file of fs.readdirSync(srcDir).filter((f) => f.endsWith(".js"))) {
     }
   }
   const outPath = path.join(outDir, `${locale}.json`);
-  fs.writeFileSync(outPath, `${JSON.stringify(merged, null, 2)}\n`);
+  writeTextFileWithRetry(outPath, `${JSON.stringify(merged, null, 2)}\n`);
   console.log(`wrote ${outPath} (${Object.keys(merged).length} keys)`);
 }

@@ -1,6 +1,7 @@
 mod dashboard_nav;
 mod event_routing;
 mod ipc_pump;
+mod local_asr;
 mod shell;
 mod tts;
 
@@ -210,6 +211,7 @@ pub fn run() {
             project_root: project_root.clone(),
             _http_runtime: http_runtime,
         })
+        .manage(local_asr::LocalAsrState { bind_addr })
         .manage(TtsState {
             service: tts_service.clone(),
             bind_addr,
@@ -247,6 +249,7 @@ pub fn run() {
             tts::tts_update_twitch_settings,
             tts::tts_open_window,
             tts::tts_open_system_url,
+            local_asr::local_asr_open_window,
             tts::tts_report_webview_activity,
             shell::open_external_https_url,
             shell::open_local_http_url,
@@ -359,6 +362,8 @@ pub fn run() {
                     tts_service.shutdown();
                     log_shutdown_step("tts_window_close", json!({}));
                     tts::close_tts_window(&app);
+                    log_shutdown_step("local_asr_window_close", json!({}));
+                    local_asr::close_local_asr_window(&app);
                     let api_token = window
                         .state::<AppState>()
                         .runtime
