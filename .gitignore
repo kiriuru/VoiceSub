@@ -80,6 +80,7 @@ src-tauri/windows/installer.nsi
 legacy/
 docs/COMMIT_CONVENTIONS.md
 docs/LOCAL_ASR_MODULE_PLAN.ru.md
+docs/GITHUB_RELEASE_NOTES.template.md
 .github/
 .husky/
 
