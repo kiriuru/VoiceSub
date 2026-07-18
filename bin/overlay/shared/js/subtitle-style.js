@@ -38,6 +38,13 @@
   };
 
   function clone(value) {
+    if (typeof structuredClone === "function") {
+      try {
+        return structuredClone(value);
+      } catch (_error) {
+        // Fall through for values structuredClone rejects.
+      }
+    }
     return JSON.parse(JSON.stringify(value));
   }
 
@@ -97,25 +104,44 @@
     return normalized || fallback;
   }
 
+  function canonicalizeFontFamilyStack(stack) {
+    return String(stack || "")
+      .replace(/"JetBrains Mono Regular"/g, '"Jet Brains Mono Regular"')
+      .replace(/"JetBrains Mono Bold"/g, '"Jet Brains Mono Bold"');
+  }
+
   function normalizeBaseStyle(rawBase) {
     const defaults = DEFAULT_BASE_STYLE;
     const current = rawBase && typeof rawBase === "object" ? rawBase : {};
     const textAlign = ["left", "center", "right"].includes(String(current.text_align || "").toLowerCase())
       ? String(current.text_align).toLowerCase()
       : defaults.text_align;
-    const effect = ["none", "fade", "subtle_pop", "slide_up", "zoom_in", "blur_in", "glow"].includes(String(current.effect || "").toLowerCase())
+    const effect = [
+      "none",
+      "fade",
+      "subtle_pop",
+      "slide_up",
+      "zoom_in",
+      "blur_in",
+      "glow",
+      "pulse",
+      "reveal",
+    ].includes(String(current.effect || "").toLowerCase())
       ? String(current.effect).toLowerCase()
       : defaults.effect;
 
     return {
-      font_family: String(current.font_family || defaults.font_family),
+      font_family: canonicalizeFontFamilyStack(String(current.font_family || defaults.font_family)),
       font_size_px: clampInt(current.font_size_px, defaults.font_size_px, 12, 96),
       font_weight: clampInt(current.font_weight, defaults.font_weight, 300, 900),
       fill_color: normalizeColor(current.fill_color, defaults.fill_color),
       stroke_color: normalizeColor(current.stroke_color, defaults.stroke_color),
-      stroke_width_px: Number(clampFloat(current.stroke_width_px, defaults.stroke_width_px, 0, 8).toFixed(2)),
+      // ASS/Aegisub outline: 0–4 CSS px (UI step 0.1). Classic SSA listed 0–4;
+      // `\bord` accepts floats (0.1, 1.5, …). Legacy 5–20 values clamp down.
+      stroke_width_px: Number(clampFloat(current.stroke_width_px, defaults.stroke_width_px, 0, 4).toFixed(1)),
       shadow_color: normalizeColor(current.shadow_color, defaults.shadow_color),
-      shadow_blur_px: Number(clampFloat(current.shadow_blur_px, defaults.shadow_blur_px, 0, 32).toFixed(2)),
+      // Clamp ranges must stay aligned with StyleFieldGroup.svelte (dashboard UI).
+      shadow_blur_px: Number(clampFloat(current.shadow_blur_px, defaults.shadow_blur_px, 0, 40).toFixed(2)),
       shadow_offset_x_px: Number(clampFloat(current.shadow_offset_x_px, defaults.shadow_offset_x_px, -24, 24).toFixed(2)),
       shadow_offset_y_px: Number(clampFloat(current.shadow_offset_y_px, defaults.shadow_offset_y_px, -24, 24).toFixed(2)),
       background_color: normalizeColor(current.background_color, defaults.background_color),
@@ -123,8 +149,8 @@
       background_padding_x_px: clampInt(current.background_padding_x_px, defaults.background_padding_x_px, 0, 40),
       background_padding_y_px: clampInt(current.background_padding_y_px, defaults.background_padding_y_px, 0, 24),
       background_radius_px: clampInt(current.background_radius_px, defaults.background_radius_px, 0, 40),
-      line_spacing_em: Number(clampFloat(current.line_spacing_em, defaults.line_spacing_em, 0.8, 2.2).toFixed(2)),
-      letter_spacing_em: Number(clampFloat(current.letter_spacing_em, defaults.letter_spacing_em, -0.08, 0.2).toFixed(3)),
+      line_spacing_em: Number(clampFloat(current.line_spacing_em, defaults.line_spacing_em, 0.8, 2.5).toFixed(2)),
+      letter_spacing_em: Number(clampFloat(current.letter_spacing_em, defaults.letter_spacing_em, -0.2, 0.5).toFixed(3)),
       text_align: textAlign,
       line_gap_px: clampInt(current.line_gap_px, defaults.line_gap_px, 0, 40),
       effect,
@@ -250,31 +276,131 @@
     };
   }
 
+  let _colorProbeEl = null;
+
+  // Minimal CSS Level 1/3 named colors for environments (e.g. jsdom) that leave
+  // getComputedStyle().color as the keyword instead of resolving to rgb().
+  const NAMED_CSS_COLORS = {
+    black: { r: 0, g: 0, b: 0 },
+    white: { r: 255, g: 255, b: 255 },
+    red: { r: 255, g: 0, b: 0 },
+    green: { r: 0, g: 128, b: 0 },
+    blue: { r: 0, g: 0, b: 255 },
+    transparent: null,
+  };
+
+  function _parseRgbChannels(cssColor) {
+    const match = String(cssColor || "").match(
+      /rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/i
+    );
+    if (!match) {
+      return null;
+    }
+    return {
+      r: Math.round(Number(match[1])),
+      g: Math.round(Number(match[2])),
+      b: Math.round(Number(match[3])),
+    };
+  }
+
+  function _resolveCssColorChannels(color) {
+    const key = String(color || "").trim().toLowerCase();
+    if (Object.prototype.hasOwnProperty.call(NAMED_CSS_COLORS, key)) {
+      return NAMED_CSS_COLORS[key];
+    }
+    if (typeof document === "undefined") {
+      return null;
+    }
+    try {
+      if (!_colorProbeEl) {
+        _colorProbeEl = document.createElement("div");
+        _colorProbeEl.setAttribute("aria-hidden", "true");
+        _colorProbeEl.style.cssText =
+          "position:absolute;left:-99999px;top:0;width:0;height:0;visibility:hidden;pointer-events:none;";
+        (document.documentElement || document.body).appendChild(_colorProbeEl);
+      }
+      _colorProbeEl.style.color = "";
+      _colorProbeEl.style.color = color;
+      const computed = getComputedStyle(_colorProbeEl).color;
+      const fromRgb = _parseRgbChannels(computed);
+      if (fromRgb) {
+        return fromRgb;
+      }
+      const computedKey = String(computed || "").trim().toLowerCase();
+      if (Object.prototype.hasOwnProperty.call(NAMED_CSS_COLORS, computedKey)) {
+        return NAMED_CSS_COLORS[computedKey];
+      }
+      return null;
+    } catch (_error) {
+      return null;
+    }
+  }
+
   function colorToRgba(color, opacityPercent) {
     const normalized = String(color || "").trim();
     const alpha = Math.max(0, Math.min(1, Number(opacityPercent || 0) / 100));
     if (!normalized || alpha <= 0) {
       return "transparent";
     }
-    const hex = normalized.replace("#", "");
-    if (/^[0-9a-fA-F]{3}$/.test(hex)) {
-      const r = Number.parseInt(`${hex[0]}${hex[0]}`, 16);
-      const g = Number.parseInt(`${hex[1]}${hex[1]}`, 16);
-      const b = Number.parseInt(`${hex[2]}${hex[2]}`, 16);
-      return `rgba(${r}, ${g}, ${b}, ${alpha.toFixed(2)})`;
+    // Accept "#rgb" / "#rrggbb" / "#rrggbbaa" and bare hex (legacy configs).
+    const hexMatch = normalized.match(/^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/);
+    if (hexMatch) {
+      const hex = hexMatch[1];
+      let r;
+      let g;
+      let b;
+      let hexAlpha = 1;
+      if (hex.length === 3) {
+        r = Number.parseInt(`${hex[0]}${hex[0]}`, 16);
+        g = Number.parseInt(`${hex[1]}${hex[1]}`, 16);
+        b = Number.parseInt(`${hex[2]}${hex[2]}`, 16);
+      } else {
+        r = Number.parseInt(hex.slice(0, 2), 16);
+        g = Number.parseInt(hex.slice(2, 4), 16);
+        b = Number.parseInt(hex.slice(4, 6), 16);
+        if (hex.length === 8) {
+          hexAlpha = Number.parseInt(hex.slice(6, 8), 16) / 255;
+        }
+      }
+      const combinedAlpha = Math.max(0, Math.min(1, hexAlpha * alpha));
+      if (combinedAlpha <= 0) {
+        return "transparent";
+      }
+      return `rgba(${r}, ${g}, ${b}, ${combinedAlpha.toFixed(2)})`;
     }
-    if (/^[0-9a-fA-F]{6}$/.test(hex)) {
-      const r = Number.parseInt(hex.slice(0, 2), 16);
-      const g = Number.parseInt(hex.slice(2, 4), 16);
-      const b = Number.parseInt(hex.slice(4, 6), 16);
-      return `rgba(${r}, ${g}, ${b}, ${alpha.toFixed(2)})`;
+
+    const rgbMatch = normalized.match(
+      /^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)(?:\s*,\s*([\d.]+))?\s*\)$/i
+    );
+    if (rgbMatch) {
+      const r = Math.round(Number(rgbMatch[1]));
+      const g = Math.round(Number(rgbMatch[2]));
+      const b = Math.round(Number(rgbMatch[3]));
+      const baseAlpha = rgbMatch[4] !== undefined ? Number(rgbMatch[4]) : 1;
+      const combinedAlpha = Math.max(0, Math.min(1, baseAlpha * alpha));
+      if (combinedAlpha <= 0) {
+        return "transparent";
+      }
+      return `rgba(${r}, ${g}, ${b}, ${combinedAlpha.toFixed(2)})`;
     }
-    return alpha >= 1 ? normalized : "transparent";
+
+    if (alpha >= 1) {
+      return normalized;
+    }
+    const channels = _resolveCssColorChannels(normalized);
+    if (!channels) {
+      return "transparent";
+    }
+    if (!Number.isFinite(channels.r) || !Number.isFinite(channels.g) || !Number.isFinite(channels.b)) {
+      return "transparent";
+    }
+    return `rgba(${channels.r}, ${channels.g}, ${channels.b}, ${alpha.toFixed(2)})`;
   }
 
   function inferStyleSlot(item, translationIndex) {
-    if (item?.style_slot) {
-      return item.style_slot;
+    const explicitSlot = String(item?.style_slot || item?.slot_id || "").trim();
+    if (explicitSlot) {
+      return explicitSlot;
     }
     if (item?.kind === "translation") {
       return `translation_${Math.max(1, Math.min(5, translationIndex + 1))}`;
@@ -284,7 +410,7 @@
 
   function composeRenderRows(payload) {
     const visibleItems = Array.isArray(payload?.visible_items)
-      ? payload.visible_items.filter((item) => item && item.text)
+      ? payload.visible_items.filter((item) => item && String(item.text || "").trim())
       : [];
     const activePartialText = String(payload?.active_partial_text || "");
     const allowSourcePartialPreview = payload?.show_source !== false;
@@ -368,25 +494,56 @@
     }));
   }
 
+  /**
+   * OBS/CEF-reliable text outline: multi-stop text-shadow ring.
+   * `-webkit-text-stroke` alone often reads near-invisible at common caption sizes.
+   */
+  function buildOutlineTextShadow(widthPx, color) {
+    const width = Math.max(0, Number(widthPx) || 0);
+    if (width <= 0) {
+      return "";
+    }
+    const strokeColor = String(color || "#000000").trim() || "#000000";
+    const steps = width <= 1 ? 8 : width <= 2.5 ? 12 : 16;
+    const parts = [];
+    for (let i = 0; i < steps; i += 1) {
+      const angle = (Math.PI * 2 * i) / steps;
+      const x = (Math.cos(angle) * width).toFixed(2);
+      const y = (Math.sin(angle) * width).toFixed(2);
+      parts.push(`${x}px ${y}px 0 ${strokeColor}`);
+    }
+    return parts.join(", ");
+  }
+
   function buildCssVariables(roleStyle, scale) {
     const styleScale = Number.isFinite(scale) ? scale : 1;
+    const rawStrokeWidth = Number(roleStyle.stroke_width_px);
     const scaledStrokeWidth = Number(
-      Math.max(0, Number(roleStyle.stroke_width_px || 0) * styleScale).toFixed(2)
+      Math.max(0, (Number.isFinite(rawStrokeWidth) ? rawStrokeWidth : 0) * styleScale).toFixed(2)
     );
-    const shadow = roleStyle.shadow_blur_px > 0
-      ? `${roleStyle.shadow_offset_x_px}px ${roleStyle.shadow_offset_y_px}px ${roleStyle.shadow_blur_px}px ${colorToRgba(
-          roleStyle.shadow_color,
-          100
-        )}`
-      : "none";
+    const shadowOffsetX = Number(roleStyle.shadow_offset_x_px);
+    const shadowOffsetY = Number(roleStyle.shadow_offset_y_px);
+    const shadowBlur = Number(roleStyle.shadow_blur_px);
+    const ox = Number.isFinite(shadowOffsetX) ? shadowOffsetX : 0;
+    const oy = Number.isFinite(shadowOffsetY) ? shadowOffsetY : 0;
+    const blur = Number.isFinite(shadowBlur) ? Math.max(0, shadowBlur) : 0;
+    // Hard drop shadows (blur 0 + offset) must still paint — blur-only gate hid them.
+    const dropShadow = blur > 0 || ox !== 0 || oy !== 0
+      ? `${ox}px ${oy}px ${blur}px ${colorToRgba(roleStyle.shadow_color, 100)}`
+      : "";
+    const outlineShadow = buildOutlineTextShadow(scaledStrokeWidth, roleStyle.stroke_color);
+    const shadowParts = [outlineShadow, dropShadow].filter(Boolean);
     return {
       "--subtitle-font-family": roleStyle.font_family,
       "--subtitle-font-size": `${Math.max(12, Math.round(roleStyle.font_size_px * styleScale))}px`,
       "--subtitle-font-weight": String(roleStyle.font_weight),
       "--subtitle-fill": roleStyle.fill_color,
-      "--subtitle-stroke": roleStyle.stroke_color,
-      "--subtitle-stroke-width": `${scaledStrokeWidth}px`,
-      "--subtitle-shadow": shadow,
+      // Keep webkit stroke as a light assist; visible outline comes from text-shadow ring.
+      "--subtitle-stroke": scaledStrokeWidth > 0 ? roleStyle.stroke_color : "transparent",
+      "--subtitle-stroke-width": scaledStrokeWidth > 0
+        ? `${Math.max(0.35, scaledStrokeWidth * 0.55).toFixed(2)}px`
+        : "0px",
+      "--subtitle-shadow": shadowParts.length ? shadowParts.join(", ") : "none",
       "--subtitle-background": colorToRgba(roleStyle.background_color, roleStyle.background_opacity),
       "--subtitle-radius": `${Math.max(0, Math.round(roleStyle.background_radius_px * styleScale))}px`,
       "--subtitle-padding-x": `${Math.max(0, Math.round(roleStyle.background_padding_x_px * styleScale))}px`,
@@ -429,12 +586,28 @@
   // growing partial subtitle into "already-shown static prefix" and "freshly
   // appended characters that should run the chosen effect" — the existing
   // prefix must remain visually static across partial frames.
+  // Advances by Unicode code points so surrogate pairs (emoji) are never split.
   function commonPrefixLength(current, previous) {
     const cur = String(current || "");
     const prev = String(previous || "");
     const limit = Math.min(cur.length, prev.length);
     let index = 0;
-    while (index < limit && cur.charCodeAt(index) === prev.charCodeAt(index)) {
+    while (index < limit) {
+      const c1 = cur.charCodeAt(index);
+      const c2 = prev.charCodeAt(index);
+      if (c1 !== c2) {
+        break;
+      }
+      if (c1 >= 0xd800 && c1 <= 0xdbff) {
+        if (index + 1 >= limit) {
+          break;
+        }
+        if (cur.charCodeAt(index + 1) !== prev.charCodeAt(index + 1)) {
+          break;
+        }
+        index += 2;
+        continue;
+      }
       index += 1;
     }
     return index;
@@ -471,7 +644,7 @@
   }
 
   function resolveFreshFragmentEffect(slotEffect, options, deltaLength, totalLength) {
-    const base = String(slotEffect || "none");
+    let base = String(slotEffect || "none");
     if (base === "none") {
       return "none";
     }
@@ -481,6 +654,11 @@
     void totalLength;
     if (deltaLength > OVERLAY_MAX_ANIMATED_DELTA_CHARS) {
       return "none";
+    }
+    // Filter-based effects are expensive in OBS CEF during rapid partials;
+    // keep the motion cue via a cheap opacity fade on the fresh fragment only.
+    if (base === "blur_in" || base === "glow") {
+      return "fade";
     }
     return base;
   }
@@ -956,6 +1134,29 @@
       : resolveEffectiveStyle(options?.styleConfig || null, presets);
     const rows = composeRenderRows(payload);
     const traceCallback = _resolveTraceCallback(options);
+    // Empty frames must not rebuild a stage shell; callers dispose state/DOM.
+    if (rows.length === 0) {
+      if (traceCallback) {
+        _safeEmit(traceCallback, {
+          type: "render_summary",
+          overlay: Boolean(options?.overlay),
+          rows: 0,
+          partial_entries: 0,
+          completed_entries: 0,
+          reused_partial_surfaces: 0,
+          finalized_in_place: 0,
+          state_carryover: Boolean(container.__subtitleStyleRenderState),
+          fast_path: false,
+          empty: true,
+        });
+      }
+      return {
+        empty: true,
+        rowCount: 0,
+        effectiveStyle,
+        rows,
+      };
+    }
     const renderStartedAt = (typeof performance !== "undefined" && performance && typeof performance.now === "function")
       ? performance.now()
       : Date.now();
@@ -1011,19 +1212,27 @@
       && rows.length > 0
     ) {
       const totalEntries = rows.reduce((sum, rowConfig) => sum + (rowConfig.entries || []).length, 0);
-      if (previousEntrySurfaces.length === totalEntries) {
+      // Pre-validate every surface before mutating. Aborting mid-loop after
+      // updateTransientSurfaceInPlace already extended a surface let the slow
+      // path re-append the same delta against stale previousPartialBySlot.
+      let allSurfacesReady = previousEntrySurfaces.length === totalEntries;
+      if (allSurfacesReady) {
+        for (let i = 0; i < totalEntries; i += 1) {
+          const surface = previousEntrySurfaces[i];
+          if (!surface || !surface.isConnected) {
+            allSurfacesReady = false;
+            break;
+          }
+        }
+      }
+      if (allSurfacesReady) {
         usedFastPath = true;
         let surfaceCursor = 0;
         rows.forEach((rowConfig) => {
           rowConfig.entries.forEach((entry) => {
-            const cursorIdx = surfaceCursor;
             const surface = previousEntrySurfaces[surfaceCursor];
             const prevDescriptor = previousEntryDescriptors ? previousEntryDescriptors[surfaceCursor] : null;
             surfaceCursor += 1;
-            if (!surface || !surface.isConnected) {
-              usedFastPath = false;
-              return;
-            }
             const lineStyle = effectiveStyle.line_slots?.[entry.style_slot] || effectiveStyle.base || {};
             const slotEffect = lineStyle.effect || effectiveStyle.effect || "none";
             _applyStyleMapIfChanged(surface, buildCssVariables(lineStyle, stageScale));
@@ -1118,7 +1327,6 @@
               transient: Boolean(entry.transient),
               text: String(entry.text || ""),
             });
-            void cursorIdx; // present for clarity in stack traces during debug.
           });
         });
       }
@@ -1413,8 +1621,14 @@
     if (cachedWrapper && !keepSurfaces.has(cachedWrapper) && cachedWrapper !== wrapper) {
       _scrubSurfaceMetadata(cachedWrapper);
     }
-    container.innerHTML = "";
-    container.appendChild(wrapper);
+    if (typeof container.replaceChildren === "function") {
+      container.replaceChildren(wrapper);
+    } else {
+      while (container.firstChild) {
+        container.removeChild(container.firstChild);
+      }
+      container.appendChild(wrapper);
+    }
     const renderFinishedAt = (typeof performance !== "undefined" && performance && typeof performance.now === "function")
       ? performance.now()
       : Date.now();
@@ -1486,11 +1700,16 @@
     LINE_SLOT_NAMES,
     OVERLAY_DENSE_PARTIAL_CHARS,
     OVERLAY_MAX_ANIMATED_DELTA_CHARS,
+    DEFAULT_BASE_STYLE,
     buildStyleFromPreset,
     normalizeStyleConfig,
+    normalizeBaseStyle,
     resolveEffectiveStyle,
+    buildOutlineTextShadow,
+    buildCssVariables,
     composeRenderRows,
     effectClassName,
+    colorToRgba,
     commonPrefixLength,
     classifyPartialTransition,
     mergeFreshIntoStatic,

@@ -1,11 +1,21 @@
 @import "../../src/lib/styles/global.css";
 
+html,
+body {
+  overflow: auto;
+}
+
+#app {
+  min-height: 100%;
+}
+
 /* TTS module window — aligned with dashboard M3 shell */
 .tts-module-shell {
   max-width: var(--content-max-width);
   margin: 0 auto;
   padding: var(--space-4) var(--space-5) var(--space-3);
   gap: var(--space-4);
+  overflow: visible;
 }
 
 .tts-module-footer {

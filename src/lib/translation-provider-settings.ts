@@ -36,29 +36,49 @@ export function defaultTranslationProviderSettings(): ProviderSettingsMap {
       base_url: "https://api.openai.com/v1",
       model: "",
       custom_prompt: "",
+      override_prompt: "false",
     },
     openrouter: {
       api_key: "",
       base_url: "https://openrouter.ai/api/v1",
       model: "",
       custom_prompt: "",
+      override_prompt: "false",
     },
     lm_studio: {
       api_key: "",
       base_url: "http://127.0.0.1:1234/v1",
       model: "",
       custom_prompt: "",
+      override_prompt: "false",
     },
     ollama: {
       api_key: "",
       base_url: "http://127.0.0.1:11434/v1",
       model: "",
       custom_prompt: "",
+      override_prompt: "false",
     },
     public_libretranslate_mirror: {
       api_url: "https://translate.fedilab.app/translate",
     },
     free_web_translate: {},
+    baidu_translate: {
+      app_id: "",
+      secret_key: "",
+    },
+    youdao_translate: {
+      app_key: "",
+      app_secret: "",
+    },
+    tencent_tmt: {
+      secret_id: "",
+      secret_key: "",
+      region: "ap-guangzhou",
+    },
+    caiyun_translator: {
+      token: "",
+    },
   };
 }
 
@@ -129,6 +149,9 @@ export function normalizeTranslationProviderSettings(
     if (providerName === "public_libretranslate_mirror") {
       next.api_url =
         str(current.api_url) || PROVIDERS.public_libretranslate_mirror.apiUrlPlaceholder;
+    }
+    if (providerName === "tencent_tmt") {
+      next.region = str(current.region) || "ap-guangzhou";
     }
 
     normalized[providerName] = next;

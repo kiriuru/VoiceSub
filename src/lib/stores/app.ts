@@ -37,8 +37,8 @@ export interface AppSnapshot {
 }
 
 const defaultConfig: ConfigPayload = {
-  config_version: 7,
-  ui: { theme: "dark", language: "", layout: "standard" },
+  config_version: 8,
+  ui: { theme: "dark", language: "", layout: "standard", font_family: "" },
   asr: { mode: "browser_google", browser: { recognition_language: "en-US" } },
   translation: { enabled: false, provider: "google_translate_v2", lines: [] },
 };
@@ -161,7 +161,7 @@ export function handleWsEvent(message: WsMessage) {
         ...s,
         diagnostics: {
           ...s.diagnostics,
-          asr: normalizeDiagnosticsPayload(payload),
+          asr: normalizeDiagnosticsPayload(payload, s.diagnostics.asr),
         },
       };
     }

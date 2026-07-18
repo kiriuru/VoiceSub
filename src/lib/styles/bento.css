@@ -66,6 +66,16 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.panel-bento-root[data-tab-panel="help"] .help-topics.bento-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 960px) {
+  .panel-bento-root[data-tab-panel="help"] .help-topics.bento-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 960px) {
   .panel-bento-root[data-tab-panel="tools"] .tools-bento.bento-grid {
     grid-template-columns: 1fr;

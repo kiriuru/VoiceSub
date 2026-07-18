@@ -49,6 +49,14 @@ pub struct RuntimeOrchestrator {
 }
 
 impl RuntimeOrchestrator {
+    pub async fn tracked_worker_pid(&self) -> Option<u32> {
+        self.inner.lock().await.worker_pid
+    }
+
+    pub async fn set_tracked_worker_pid(&self, pid: Option<u32>) {
+        self.inner.lock().await.worker_pid = pid;
+    }
+
     pub async fn start(&self, state: &HttpState, config_payload: Option<Value>) -> Value {
         state.pipeline_log.start_begin();
         state.runtime_broadcaster.broadcast_preflight(true).await;
@@ -79,7 +87,7 @@ impl RuntimeOrchestrator {
                 &state.paths.logs_dir,
                 read_full_logging_enabled(&snapshot_payload),
             );
-            state.translation.lock().await.apply_live_settings();
+            state.translation.lock().await.apply_live_settings().await;
             state.subtitle.republish_latest().await;
         }
 
@@ -145,10 +153,27 @@ impl RuntimeOrchestrator {
                 broadcast_runtime_update(state, &inner, true).await;
             }
 
+            // Local ASR does not use Chrome; reap any leftover browser worker first.
+            let previous_worker_pid = {
+                let inner = self.inner.lock().await;
+                inner.worker_pid
+            };
+            terminate_previous_browser_workers(&state.paths.user_data_dir, previous_worker_pid);
+            let browser_still_live = previous_worker_pid
+                .filter(|pid| voicesub_browser::is_live_worker_pid(*pid))
+                .or_else(|| {
+                    voicesub_browser::read_persisted_pid(&state.paths.user_data_dir)
+                        .filter(|pid| voicesub_browser::is_live_worker_pid(*pid))
+                });
+            if browser_still_live.is_none() {
+                voicesub_browser::clear_worker_pid(&state.paths.user_data_dir);
+            }
+
             match state.local_asr_speech.start().await {
                 Ok(()) => {
                     let mut inner = self.inner.lock().await;
-                    inner.worker_pid = None;
+                    // Keep PID only if Chrome survived taskkill (retry on next stop/start).
+                    inner.worker_pid = browser_still_live;
                     inner.running = true;
                     inner.phase = "listening";
                     inner.started_at_utc = Some(started_at);
@@ -206,16 +231,7 @@ impl RuntimeOrchestrator {
             let inner = self.inner.lock().await;
             inner.worker_pid
         };
-        if let Some(pid) = previous_worker_pid {
-            if BrowserWorkerLauncher::terminate_worker(pid) {
-                tracing::info!(pid, "terminated previous browser worker before relaunch");
-            } else {
-                tracing::warn!(
-                    pid,
-                    "failed to terminate previous browser worker before relaunch"
-                );
-            }
-        }
+        terminate_previous_browser_workers(&state.paths.user_data_dir, previous_worker_pid);
 
         let launch_result = launcher.launch_worker(&worker_target, &chrome_launch);
         let mut inner = self.inner.lock().await;
@@ -249,9 +265,29 @@ impl RuntimeOrchestrator {
                 inner.phase = "error";
                 inner.last_error = Some(err.to_string());
                 inner.running = false;
+                // Keep tracking only if a previous Chrome worker is still alive after the
+                // failed relaunch; otherwise clear a stale/dead pid file.
+                let still_live = previous_worker_pid
+                    .filter(|pid| voicesub_browser::is_live_worker_pid(*pid))
+                    .or_else(|| {
+                        voicesub_browser::read_persisted_pid(&state.paths.user_data_dir)
+                            .filter(|pid| voicesub_browser::is_live_worker_pid(*pid))
+                    });
+                inner.worker_pid = still_live;
+                if still_live.is_none() {
+                    voicesub_browser::clear_worker_pid(&state.paths.user_data_dir);
+                }
                 drop(inner);
+                state
+                    .runtime_running
+                    .store(false, std::sync::atomic::Ordering::Relaxed);
+                state.browser_speech.stop().await;
                 state.obs_captions.stop().await;
                 state.translation.lock().await.stop().await;
+                {
+                    let mut partial_emit = state.partial_emit.lock().await;
+                    partial_emit.reset();
+                }
                 let inner = self.inner.lock().await;
                 let response = runtime_action_response("start", &inner, state).await;
                 broadcast_runtime_update(state, &inner, true).await;
@@ -284,14 +320,39 @@ impl RuntimeOrchestrator {
             .send_control("stop", Some("runtime_stop"))
             .await;
 
-        if let Some(pid) = worker_pid
-            && BrowserWorkerLauncher::terminate_worker(pid)
-        {
-            tracing::info!(pid, "browser worker process terminated");
-        }
-        // Graceful stop: drop the persisted PID so startup reaping does not target a PID
-        // that may later be reused by another process (review §8).
-        voicesub_browser::clear_worker_pid(&state.paths.user_data_dir);
+        // Clear PID tracking when the worker is gone. Keep it only if Chrome is still live
+        // after a failed taskkill (so the next start / orphan reap can retry).
+        let worker_terminated = match worker_pid.or_else(|| {
+            voicesub_browser::read_persisted_pid(&state.paths.user_data_dir)
+        }) {
+            Some(pid) => {
+                let killed = BrowserWorkerLauncher::terminate_worker(pid);
+                let still_live = voicesub_browser::is_live_worker_pid(pid);
+                if killed {
+                    tracing::info!(pid, "browser worker process terminated");
+                } else if still_live {
+                    tracing::warn!(
+                        pid,
+                        "failed to terminate browser worker; keeping pid for orphan reap"
+                    );
+                } else {
+                    tracing::info!(
+                        pid,
+                        "browser worker pid no longer live; clearing pid tracking"
+                    );
+                }
+                if !still_live {
+                    voicesub_browser::clear_worker_pid(&state.paths.user_data_dir);
+                    true
+                } else {
+                    false
+                }
+            }
+            None => {
+                voicesub_browser::clear_worker_pid(&state.paths.user_data_dir);
+                true
+            }
+        };
 
         state.subtitle.reset().await;
         state.flush_overlay_presentations_to_clients().await;
@@ -315,7 +376,9 @@ impl RuntimeOrchestrator {
         let previous = (inner.phase.to_string(), inner.running);
         inner.running = false;
         inner.phase = "idle";
-        inner.worker_pid = None;
+        if worker_terminated {
+            inner.worker_pid = None;
+        }
         inner.started_at_utc = None;
         inner.status_message = None;
         state.pipeline_log.state_changed(
@@ -375,6 +438,29 @@ pub(crate) async fn resolve_base_url(state: &HttpState) -> String {
         return base_url_from_socket(addr);
     }
     state.app_config.http.base_url()
+}
+
+/// Terminate any previously tracked browser worker (orchestrator PID and/or pid file).
+pub(crate) fn terminate_previous_browser_workers(
+    user_data_dir: &std::path::Path,
+    orchestrator_pid: Option<u32>,
+) {
+    let mut pids = Vec::with_capacity(2);
+    if let Some(pid) = orchestrator_pid {
+        pids.push(pid);
+    }
+    if let Some(pid) = voicesub_browser::read_persisted_pid(user_data_dir)
+        && !pids.contains(&pid)
+    {
+        pids.push(pid);
+    }
+    for pid in pids {
+        if BrowserWorkerLauncher::terminate_worker(pid) {
+            tracing::info!(pid, "terminated previous browser worker");
+        } else {
+            tracing::warn!(pid, "failed to terminate previous browser worker");
+        }
+    }
 }
 
 async fn runtime_action_response(

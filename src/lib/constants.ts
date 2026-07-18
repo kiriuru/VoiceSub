@@ -3,6 +3,7 @@ export const PROVIDERS = {
     label: "Google Translate v2",
     group: "Stable / Recommended",
     fields: ["api_key"] as const,
+    setupUrl: "https://console.cloud.google.com/apis/credentials",
   },
   google_cloud_translation_v3: {
     label: "Google Cloud Translation v3",
@@ -11,12 +12,14 @@ export const PROVIDERS = {
     apiKeyPlaceholder: "OAuth access token",
     endpointPlaceholder: "my-gcp-project",
     regionPlaceholder: "global",
-    modelPlaceholder: "general/nmt or general/translation-llm",
+    modelPlaceholder: "general/nmt (expanded to projects/…/models/…)",
+    setupUrl: "https://console.cloud.google.com/apis/api/translate.googleapis.com",
   },
   google_gas_url: {
     label: "Google GAS URL",
     group: "Experimental / Emergency",
     fields: ["gas_url"] as const,
+    setupUrl: "https://script.google.com/",
   },
   google_web: {
     label: "Google Web",
@@ -28,30 +31,35 @@ export const PROVIDERS = {
     group: "Stable / Recommended",
     fields: ["api_key", "endpoint", "region"] as const,
     endpointPlaceholder: "https://api.cognitive.microsofttranslator.com",
+    setupUrl: "https://portal.azure.com/#view/Microsoft_Azure_ProjectOxford/CognitiveServicesHub/~/TextTranslation",
   },
   deepl: {
     label: "DeepL",
     group: "Classic MT",
     fields: ["api_key", "api_url"] as const,
     apiUrlPlaceholder: "https://api-free.deepl.com/v2/translate",
+    setupUrl: "https://www.deepl.com/pro-api",
   },
   libretranslate: {
     label: "LibreTranslate",
     group: "Classic MT",
     fields: ["api_key", "api_url"] as const,
     apiUrlPlaceholder: "https://libretranslate.com/translate",
+    setupUrl: "https://libretranslate.com",
   },
   openai: {
     label: "OpenAI",
     group: "Flexible LLM",
     fields: ["api_key", "base_url", "model", "custom_prompt"] as const,
     baseUrlPlaceholder: "https://api.openai.com/v1",
+    setupUrl: "https://platform.openai.com/api-keys",
   },
   openrouter: {
     label: "OpenRouter",
     group: "Flexible LLM",
     fields: ["api_key", "base_url", "model", "custom_prompt"] as const,
     baseUrlPlaceholder: "https://openrouter.ai/api/v1",
+    setupUrl: "https://openrouter.ai/keys",
   },
   lm_studio: {
     label: "LM Studio",
@@ -76,7 +84,51 @@ export const PROVIDERS = {
     group: "Experimental / Emergency",
     fields: [] as const,
   },
+  baidu_translate: {
+    label: "Baidu Translate",
+    group: "China / Free-tier",
+    fields: ["app_id", "secret_key"] as const,
+    setupUrl: "https://fanyi-api.baidu.com/",
+  },
+  youdao_translate: {
+    label: "Youdao Translate",
+    group: "China / Free-tier",
+    fields: ["app_key", "app_secret"] as const,
+    setupUrl: "https://ai.youdao.com/",
+  },
+  tencent_tmt: {
+    label: "Tencent Machine Translation",
+    group: "China / Free-tier",
+    fields: ["secret_id", "secret_key", "region"] as const,
+    regionPlaceholder: "ap-guangzhou",
+    setupUrl: "https://console.cloud.tencent.com/tmt",
+  },
+  caiyun_translator: {
+    label: "Caiyun Xiaoyi",
+    group: "China / Free-tier",
+    fields: ["token"] as const,
+    setupUrl: "https://fanyi.caiyunapp.com/",
+  },
 } as const;
+
+/** Official OpenAI chat IDs used when “Show all” is off (kept in sync with runtime catalog). */
+export const OPENAI_RECOMMENDED_CHAT_MODELS = [
+  "gpt-5.6-luna",
+  "gpt-5.6-terra",
+  "gpt-5.6-sol",
+  "gpt-5.6",
+  "gpt-5.4-nano",
+  "gpt-5.4-mini",
+  "gpt-5.4",
+  "gpt-5-nano",
+  "gpt-5-mini",
+  "gpt-5",
+  "gpt-4.1-nano",
+  "gpt-4.1-mini",
+  "gpt-4.1",
+  "gpt-4o-mini",
+  "gpt-4o",
+] as const;
 
 export type ProviderId = keyof typeof PROVIDERS;
 
@@ -86,6 +138,7 @@ export const PROVIDER_GROUP_I18N_KEYS: Record<string, string> = {
   "Classic MT": "translation.provider_group.classic_mt",
   "Flexible LLM": "translation.provider_group.flexible_llm",
   "Local LLM": "translation.provider_group.local_llm",
+  "China / Free-tier": "translation.provider_group.china_free_tier",
 };
 
 /** Top-20 localization targets for translation (Steam/Twitch 2025). */

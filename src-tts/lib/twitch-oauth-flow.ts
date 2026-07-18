@@ -31,7 +31,7 @@ export async function openTwitchOAuthInSystemBrowser(clientId?: string | null): 
 
   const popup = window.open(url, "_blank", "noopener,noreferrer");
   if (!popup) {
-    throw new Error("Could not open browser — allow popups or restart VoiceSub.");
+    throw new Error("tts.oauth.popup_blocked");
   }
 }
 

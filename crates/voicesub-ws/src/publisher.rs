@@ -66,6 +66,18 @@ impl WsEventPublisher {
         broadcast_now(&self.hub, message, self.event_bus.as_ref());
     }
 
+    /// Enriched envelope → [`RuntimeEventBus`] only (no `/ws/events` fanout).
+    ///
+    /// Used for high-volume desktop-shell events (Twitch chat) that OBS must not receive.
+    pub fn publish_event_bus_only(&self, channel: &str, enrich_as: &str, payload: Value) {
+        let enriched = self.enrich_payload(enrich_as, payload);
+        let message = json!({
+            "type": channel,
+            "payload": enriched,
+        });
+        self.publish_message(&message);
+    }
+
     /// Overlay/subtitle payloads are already shaped; enrich in-place for stale guards.
     pub async fn broadcast_overlay_body(&self, channel: &str, enrich_as: &str, mut body: Value) {
         let enriched = self.enrich_payload(enrich_as, body.take());
@@ -189,6 +201,32 @@ mod tests {
             bus.diagnostics().publish_count,
             1,
             "event_bus must be published exactly once"
+        );
+    }
+
+    #[test]
+    fn publish_event_bus_only_does_not_touch_ws_hub_last_message() {
+        let hub = EventsHub::new();
+        let bus = RuntimeEventBus::new();
+        let publisher = WsEventPublisher::with_event_bus(
+            hub.clone(),
+            Arc::new(EventSequencer::default()),
+            Some(bus.clone()),
+        );
+        publisher.publish_event_bus_only(
+            "twitch_chat_message",
+            "twitch_chat_message",
+            json!({ "text": "hi" }),
+        );
+        assert_eq!(bus.diagnostics().publish_count, 1);
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("test runtime");
+        let last = rt.block_on(hub.last_message("twitch_chat_message"));
+        assert!(
+            last.is_none(),
+            "bus-only publish must not store OBS/WS last_message"
         );
     }
 }

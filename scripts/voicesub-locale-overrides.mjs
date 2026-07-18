@@ -7,7 +7,7 @@ export const voicesubNewKeysEn = {
   "help.quick_start.5":
     "Press Start. Use Stop/Start after changing the Web Speech recognition language.",
   "overview.recognition.hint.browser_google.warning":
-    "Keep the worker window visible while listening. Minimized or fully hidden windows are throttled by the browser and Web Speech may stall or drop audio. Browser Speech opens `/google-asr` in Chrome or Edge with an isolated profile. Save settings, then reopen the worker if you changed recognition options.",
+    "Keep the worker window visible while listening. Minimized or fully hidden windows are throttled by the browser and Web Speech may stall or drop audio. Browser Speech opens `/google-asr` in Google Chrome with an isolated profile. Save settings, then reopen the worker if you changed recognition options.",
   "overview.recognition.mode.label": "Recognition engine",
   "overview.recognition.mode.local_asr": "Local ASR",
   "overview.recognition.mode.local_parakeet": "Local ASR",
@@ -242,14 +242,37 @@ export const voicesubNewKeysEn = {
   "local_asr.alert.ok": "OK",
   "local_asr.alert.probe_failed": "Provider probe failed.",
   "local_asr.alert.load_failed": "Model warm load did not complete.",
-  "tools.runtime.full_logging": "Enable full diagnostic logging (restart required)",
+  "tools.runtime.full_logging": "Enable full diagnostic logging",
   "tools.runtime.full_logging.hint":
-    "Compact logs are always written to logs/. Full logging adds verbose runtime events and JSONL traces (api, pipeline, ui, startup). Restart the app after saving.",
+    "Compact logs are always written to logs/. Full logging adds verbose runtime events and JSONL traces (api, pipeline, ui, startup). Applied after Save — no app restart required.",
   "tools.runtime.dispatcher.reason": "Last dispatcher reason",
   "tools.runtime.dispatcher.stale_dropped": "stale dropped",
   "tools.runtime.dispatcher.provider_skipped": "provider skipped",
   "tools.runtime.dispatcher.timeout": "last timeout",
   "tools.runtime.dispatcher.last_slot": "last slot/target",
+  "tools.runtime.local_asr.ready": "ready",
+  "tools.runtime.local_asr.not_ready": "not ready",
+  "tools.profiles.delete_confirm": "Delete profile \"{name}\"? This cannot be undone.",
+  "tools.profiles.load_confirm": "Load profile \"{name}\"? This replaces the current dashboard settings until you Save.",
+  "tools.profiles.default_load_confirm": "Load the default profile? This replaces the current dashboard settings with factory defaults until you Save.",
+  "tools.profiles.save_overwrite_confirm": "Overwrite existing profile \"{name}\"?",
+  "tools.profiles.invalid_name": "Invalid profile name. Avoid path separators, reserved Windows names (CON, NUL, …), and characters <>:\"|?*",
+  "tools.profiles.cannot_delete_default": "The default profile cannot be deleted.",
+  "tools.config.save_hint": "Import and Load Profile update the dashboard in memory only. Click Save in the toolbar to write config.toml.",
+  "tools.config.needs_save": "Click Save to persist.",
+  "tools.config.export_redacted_note": "Secrets are redacted — do not re-import this file as a live config.",
+  "tools.config.import_redacted_confirm": "This file contains [redacted] placeholders (likely from Export Config). Importing will overwrite API keys with the placeholder text. Continue anyway?",
+  "tools.result.title.success": "Done",
+  "tools.result.title.error": "Error",
+  "tools.result.ok": "OK",
+  "tools.result.export_diagnostics": "Diagnostics ZIP downloaded as {filename}.\nA copy is also kept in user-data/exports/ (newest 12 kept).\nIncludes redacted config, runtime status, and logs.",
+  "tools.result.export_config": "Redacted config downloaded as {filename} (usually your Downloads folder).\nAPI keys are replaced with [redacted].\nThis does not change user-data/config.toml.",
+  "tools.result.import_config": "Loaded {filename} into the dashboard.\nClick Save in the toolbar to write user-data/config.toml.",
+  "tools.result.profile_load": "Profile \"{name}\" loaded into the dashboard.\nClick Save in the toolbar to write user-data/config.toml.",
+  "tools.result.profile_save": "Profile \"{name}\" saved to:\n{path}\nThis does not change the live config.toml until you Save in the toolbar.",
+  "tools.result.profile_delete": "Profile \"{name}\" deleted from user-data/profiles/.",
+  "help.tools.config":
+    "Import/Export Config and Export Diagnostics work on the current session. Use the dashboard Save button to write settings to local user data.",
   "config.restart_reason.full_logging": "full diagnostic logging",
   "subtitles.keep_completed_during_partial":
     "Keep completed translations visible during an active source partial",
@@ -263,44 +286,85 @@ export const voicesubNewKeysEn = {
   "settings.fonts.title": "Font catalog",
   "style.custom_preset.delete": "Delete preset",
   "help.tools.body":
-    "Tools & Data contains runtime diagnostics, profile import/export, local config JSON, and diagnostics export. Word replacement is under More → Word Replace; advanced recognition timing is under Settings.",
+    "Tools & Data covers runtime diagnostics, profile import/export, config JSON, and diagnostics export. Word replacement is under More → Word Replace; TTS and Local ASR setup are under Modules; advanced recognition timing is under Settings.",
   "translation.provider_settings.selector": "Provider to edit",
   "translation.provider_group.stable_recommended": "Stable / Recommended",
   "translation.provider_group.experimental_emergency": "Experimental / Emergency",
   "translation.provider_group.classic_mt": "Classic MT",
   "translation.provider_group.flexible_llm": "Flexible LLM",
   "translation.provider_group.local_llm": "Local LLM",
+  "translation.provider_group.china_free_tier": "China / Free-tier",
+  "translation.app_id": "App ID",
+  "translation.app_key": "App key",
+  "translation.app_secret": "App secret",
+  "translation.secret_id": "SecretId",
+  "translation.secret_key": "Secret key",
+  "translation.token": "Token",
+  "provider.baidu_translate.hint":
+    "Baidu Translate open platform. Requires App ID and Secret Key. Free monthly character quota after registration.",
+  "provider.baidu_translate.status": "China MT provider with a free-tier quota.",
+  "provider.youdao_translate.hint":
+    "Youdao Zhiyun text translate API. Requires App Key and App Secret. Free trial quota after creating an app.",
+  "provider.youdao_translate.status": "China MT provider (Youdao Zhiyun).",
+  "provider.tencent_tmt.hint":
+    "Tencent Cloud Machine Translation (TextTranslate). Requires SecretId and SecretKey. Free monthly quota after activating TMT.",
+  "provider.tencent_tmt.status": "China cloud MT provider (Tencent TMT).",
+  "provider.caiyun_translator.hint":
+    "Caiyun Xiaoyi translator. Requires a token. Supports zh/en/ja only.",
+  "provider.caiyun_translator.status": "China MT provider limited to zh/en/ja.",
+  "translation.model.show_models": "Show models",
+  "translation.model.show_all": "Show all chat models",
+  "translation.models.loading": "Loading models…",
+  "translation.models.list_loaded": "Loaded {count} models.",
+  "translation.models.error": "Error: {message}",
+  "translation.lm_studio.test_connection": "Test connection",
+  "translation.custom_prompt.override": "Override default subtitle prompt",
+  "translation.provider.setup_link": "Open provider setup / API keys",
+  "translation.validation.duplicate_target":
+    "Duplicate enabled target languages: {langs}. Each line must use a unique language.",
+  "translation.validation.missing_provider_fields":
+    "Required provider settings are missing: {fields}. Open provider settings and fill them in.",
   "style.preset.custom_description": "User-created local subtitle style.",
   "style.preset.desc.clean_default":
-    "Neutral baseline: Inter on a transparent background with a minimal black outline.",
+    "Broadcast baseline: Inter + Noto Sans, crisp white, light outline and soft shadow — OBS-safe transparent plate.",
   "style.preset.desc.streamer_bold":
-    "Loud display look: Oswald with a cyan fill and a hot-magenta glow for live gameplay.",
+    "Gaming HUD: Oswald cyan with a restrained magenta halo; Montserrat covers Cyrillic without losing the neon punch.",
   "style.preset.desc.dual_tone":
-    "Lato body with distinct fill colors per slot so source and each translation read at a glance.",
+    "Slot-colored captions: Lato/Noto body with high-contrast fills per language so source and translations separate at a glance.",
   "style.preset.desc.compact_overlay":
-    "Source Sans 3 inside a tight semi-opaque black bar — small footprint, maximum legibility.",
+    "YouTube-style caption bar: Noto/Source Sans on a dense near-opaque plate — small footprint, maximum legibility.",
   "style.preset.desc.soft_shadow":
-    "Comfortaa with a wide diffused shadow and zero outline — feels airy, no edge crunch.",
+    "Airy Comfortaa with a wide diffused shadow and no outline — soft presence that still reads on busy gameplay.",
   "style.preset.desc.anime_stream":
-    "Mochiy Pop One for Latin/Japanese + Comfortaa Bold for Cyrillic — classic anime fansub caption.",
+    "Mochiy Pop One for Latin/Japanese + Comfortaa Bold for Cyrillic — classic anime fansub caption: white fill, crisp violet outline, soft dark drop shadow.",
   "style.preset.desc.accessibility_high_contrast":
-    "Pure white Montserrat Bold on a solid opaque black plate — WCAG AAA contrast in any environment.",
+    "WCAG AAA solid caption box: pure white Montserrat Bold on fully opaque black — the only solid ink plate in the set.",
   "style.preset.desc.dark_cinema":
-    "Playfair Display ivory on a solid warm sepia plate — letterboxed art-house aesthetic.",
+    "Letterboxed cinema look: Playfair ivory on a warm sepia plate; translation slot slightly smaller for hierarchy.",
   "style.preset.desc.meeting_soft":
-    "Roboto Regular in light grey with no stroke and no plate — minimal, talking-head friendly.",
+    "Warm parchment paper: Merriweather / Noto dark ink on a translucent cream plate — soft editorial podcast look, not a dark box.",
   "style.preset.desc.retro_terminal":
-    "VT323 amber phosphor on a dark CRT panel — DEC VT320 / Apple II vibe with PT Mono for Cyrillic.",
+    "Amber phosphor CRT: VT323 for Latin terminal texture, IBM Plex Serif for Cyrillic — dense near-black plate, restrained glow.",
   "style.preset.desc.fallout_pipboy":
-    "Share Tech Mono in Pip-Boy phosphor green with a strong scanline glow.",
+    "Pip-Boy phosphor green: Share Tech Mono for CRT Latin, Ubuntu Mono + IBM Plex Mono for Cyrillic — deep CRT plate, controlled bloom.",
   "style.preset.desc.comic_burst":
-    "Bangers in comic-yellow with a chunky black outline and a hot-red shadow — Marvel SFX panel energy.",
+    "Comic SFX energy: Bangers yellow with a chunky black outline; Comic Relief Bold covers Cyrillic.",
   "style.preset.desc.cyberpunk_neon":
-    "Orbitron Black in hot magenta with a cyan halo glow on a deep navy plate.",
+    "Sci-fi HUD: Orbitron magenta with a cyan halo on a deep navy plate; Exo 2 covers Cyrillic geometry.",
   "style.preset.desc.noir_typewriter":
-    "Special Elite typewriter on a deep ink plate — 1940s detective / typewritten dossier mood.",
+    "1940s dossier captions: Special Elite for Latin typewriter texture, IBM Plex Mono for Cyrillic — warm ivory on deep ink, wide tracking, soft fade-in.",
   "style.preset.desc.vlog_pastel":
-    "Poppins on a warm pastel pill — cozy lifestyle / vlog look, plays nicely with soft backgrounds.",
+    "Lifestyle pill: Poppins on a warm pastel plate with stronger contrast for bright vlog footage.",
+  "style.preset.desc.glass_frost":
+    "Frosted ice glass: pale translucent ice plate (~44% opacity) with airy Raleway — dark ice-ink text floats on milky glass, not a blue box.",
+  "style.preset.desc.twitch_lower_third":
+    "Streamer lower-third chrome: condensed Oswald / Exo on saturated Twitch purple (#9146FF), left-aligned with magenta edge glow.",
+  "style.preset.desc.warm_amber":
+    "Night-stream warmth: Open Sans/Noto cream fill with a soft brown shadow — cozy Just Chatting energy.",
+  "style.preset.desc.esports_hud":
+    "Competitive HUD: Exo 2 / Oswald white with a thin cyan outline — sharp, no heavy neon bloom.",
+  "style.preset.desc.dual_caption_modern":
+    "Calm dual-language plate: warm gold source + soft sky translation on a shared dark bar for bilingual streams.",
   "updates.banner.message": "VoiceSub {latest} is available — you are on {current}.",
   "updates.banner.close": "Close",
   "updates.banner.download": "Download",
@@ -400,6 +464,20 @@ export const voicesubNewKeysEn = {
   "nav.obs.section.overlay": "Browser overlay",
   "nav.obs.section.captions": "Closed captions",
   "nav.obs.section.status": "Connection status",
+  "settings.fonts.summary":
+    "Project: {project} · System: {system} · Fallback: {fallback} · Total: {total}",
+  "style.ui_theme.font": "UI font",
+  "style.ui_theme.font.default": "Default",
+  "credits.open": "About VoiceSub",
+  "credits.title": "About VoiceSub",
+  "credits.author.heading": "Author",
+  "credits.author.name": "Kiriuru",
+  "credits.author.role": "Creator & maintainer",
+  "credits.author.note": "Built VoiceSub as a local-first subtitle tool for streamers.",
+  "credits.product.heading": "Product",
+  "credits.product.tagline": "Live translated subtitles for streamers.",
+  "credits.product.stack": "Stack: Rust · Tauri · Svelte · OBS overlay.",
+  "credits.github": "Open GitHub",
 };
 
 const voicesubExtrasLocalized = {
@@ -421,7 +499,7 @@ const voicesubExtrasLocalized = {
     "settings.fonts.title": "Каталог шрифтов",
     "style.custom_preset.delete": "Удалить пресет",
     "help.tools.body":
-      "Инструменты и данные: диагностика runtime, импорт/экспорт профилей, экспорт config JSON и diagnostics. Замена слов — в Ещё → Замена слов; расширенные тайминги распознавания — в Настройках.",
+      "Инструменты и данные: диагностика runtime, импорт/экспорт профилей, config JSON и diagnostics. Замена слов — в Ещё → Замена слов; TTS и Local ASR — в Модули; расширенные тайминги — в Настройках.",
     "style.font_size.source": "Размер шрифта исходника (px)",
     "style.font_size.translation": "Размер шрифта перевода (px)",
     "tools.runtime.note":
@@ -433,7 +511,7 @@ const voicesubExtrasLocalized = {
     "translation.dispatcher.queue_max_size": "Максимум задач в очереди",
     "translation.dispatcher.max_concurrent_jobs": "Максимум параллельных задач",
     "translation.dispatcher.note":
-      "Увеличьте таймаут для медленных провайдеров. Больше параллелизма — больше расход API.",
+      "Увеличьте таймаут для медленных провайдеров. Для LM Studio / Ollama VoiceSub сам даёт не меньше 120 с (JIT-загрузка модели). Больше параллелизма — больше расход API.",
     "translation.provider_limits.eyebrow": "Лимиты провайдеров",
     "translation.provider_limits.title": "Лимиты диспетчера по провайдерам",
     "translation.provider_limits.max_concurrent_targets": "Макс. параллельных целей",
@@ -446,6 +524,37 @@ const voicesubExtrasLocalized = {
     "translation.provider_group.classic_mt": "Классический MT",
     "translation.provider_group.flexible_llm": "Гибкая LLM",
     "translation.provider_group.local_llm": "Локальная LLM",
+    "translation.provider_group.china_free_tier": "Китай / бесплатный тариф",
+    "translation.app_id": "App ID",
+    "translation.app_key": "App key",
+    "translation.app_secret": "App secret",
+    "translation.secret_id": "SecretId",
+    "translation.secret_key": "Secret key",
+    "translation.token": "Token",
+    "provider.baidu_translate.hint":
+      "Baidu Translate: нужны App ID и Secret Key. После регистрации есть бесплатная квота символов в месяц.",
+    "provider.baidu_translate.status": "Китайский MT-провайдер с бесплатной квотой.",
+    "provider.youdao_translate.hint":
+      "Youdao Zhiyun: нужны App Key и App Secret. После создания приложения доступен пробный лимит.",
+    "provider.youdao_translate.status": "Китайский MT-провайдер (Youdao Zhiyun).",
+    "provider.tencent_tmt.hint":
+      "Tencent Cloud TMT (TextTranslate): нужны SecretId и SecretKey. После активации сервиса есть бесплатная квота.",
+    "provider.tencent_tmt.status": "Китайский облачный MT (Tencent TMT).",
+    "provider.caiyun_translator.hint":
+      "Caiyun Xiaoyi: нужен token. Поддерживаются только zh/en/ja.",
+    "provider.caiyun_translator.status": "Китайский MT только для zh/en/ja.",
+    "translation.model.show_models": "Показать модели",
+    "translation.model.show_all": "Показать все chat-модели",
+    "translation.models.loading": "Загрузка моделей…",
+    "translation.models.list_loaded": "Загружено моделей: {count}.",
+    "translation.models.error": "Ошибка: {message}",
+    "translation.lm_studio.test_connection": "Проверить соединение",
+    "translation.custom_prompt.override": "Переопределить стандартный subtitle prompt",
+    "translation.provider.setup_link": "Открыть сайт провайдера / API-ключи",
+    "translation.validation.duplicate_target":
+      "Дублируются включённые языки перевода: {langs}. У каждой линии должен быть уникальный язык.",
+    "translation.validation.missing_provider_fields":
+      "Не заполнены обязательные настройки провайдера: {fields}. Откройте настройки провайдера и заполните поля.",
     "worker.force_finalization_timeout_ms": "Таймаут простоя перед принудительным final (мс)",
     "worker.force_finalization_timeout_ms.note":
       "Сколько ждать без обновлений partial перед отправкой текущего текста как final.",
@@ -689,15 +798,37 @@ const voicesubExtrasLocalized = {
     "local_asr.alert.ok": "OK",
     "local_asr.alert.probe_failed": "Проба провайдера не удалась.",
     "local_asr.alert.load_failed": "Прогрев модели не завершился.",
-    "tools.runtime.full_logging":
-      "Включить полное диагностическое логирование (нужен перезапуск)",
+    "tools.runtime.full_logging": "Включить полное диагностическое логирование",
     "tools.runtime.full_logging.hint":
-      "Сокращённые логи всегда пишутся в logs/. Полное логирование добавляет подробные runtime-события и JSONL-трейсы (api, pipeline, ui, startup). После сохранения перезапустите приложение.",
+      "Сокращённые логи всегда пишутся в logs/. Полное логирование добавляет подробные runtime-события и JSONL-трейсы (api, pipeline, ui, startup). Применяется после Save — перезапуск приложения не нужен.",
     "tools.runtime.dispatcher.reason": "Последняя причина диспетчера",
     "tools.runtime.dispatcher.stale_dropped": "stale dropped",
     "tools.runtime.dispatcher.provider_skipped": "provider skipped",
     "tools.runtime.dispatcher.timeout": "последний timeout",
     "tools.runtime.dispatcher.last_slot": "последний slot/target",
+    "tools.runtime.local_asr.ready": "готов",
+    "tools.runtime.local_asr.not_ready": "не готов",
+    "tools.profiles.delete_confirm": "Удалить профиль «{name}»? Это нельзя отменить.",
+    "tools.profiles.load_confirm": "Загрузить профиль «{name}»? Текущие настройки dashboard будут заменены до нажатия Save.",
+    "tools.profiles.default_load_confirm": "Загрузить профиль default? Текущие настройки будут заменены заводскими значениями до нажатия Save.",
+    "tools.profiles.save_overwrite_confirm": "Перезаписать существующий профиль «{name}»?",
+    "tools.profiles.invalid_name": "Недопустимое имя профиля. Нельзя использовать разделители путей, зарезервированные имена Windows (CON, NUL, …) и символы <>:\"|?*",
+    "tools.profiles.cannot_delete_default": "Профиль default нельзя удалить.",
+    "tools.config.save_hint": "Import и Load Profile обновляют dashboard только в памяти. Нажмите Save на панели, чтобы записать config.toml.",
+    "tools.config.needs_save": "Нажмите Save, чтобы сохранить.",
+    "tools.config.export_redacted_note": "Секреты замаскированы — не импортируйте этот файл как рабочий config.",
+    "tools.config.import_redacted_confirm": "В файле есть плейсхолдеры [redacted] (обычно после Export Config). Импорт перезапишет API-ключи этим текстом. Продолжить?",
+    "tools.result.title.success": "Готово",
+    "tools.result.title.error": "Ошибка",
+    "tools.result.ok": "OK",
+    "tools.result.export_diagnostics": "Diagnostics ZIP скачан как {filename}.\nКопия также лежит в user-data/exports/ (хранятся последние 12).\nВнутри: redacted config, runtime status и логи.",
+    "tools.result.export_config": "Redacted config скачан как {filename} (обычно папка «Загрузки»).\nAPI-ключи заменены на [redacted].\nФайл user-data/config.toml не меняется.",
+    "tools.result.import_config": "Файл {filename} загружен в dashboard.\nНажмите Save на панели, чтобы записать user-data/config.toml.",
+    "tools.result.profile_load": "Профиль «{name}» загружен в dashboard.\nНажмите Save на панели, чтобы записать user-data/config.toml.",
+    "tools.result.profile_save": "Профиль «{name}» сохранён в:\n{path}\nЖивой config.toml не меняется, пока не нажмёте Save на панели.",
+    "tools.result.profile_delete": "Профиль «{name}» удалён из user-data/profiles/.",
+    "help.tools.config":
+      "Импорт/экспорт config и Export Diagnostics работают с текущей сессией. Кнопка Save на панели записывает настройки в локальные user data.",
     "config.restart_reason.full_logging": "полное диагностическое логирование",
     "subtitles.keep_completed_during_partial":
       "Сохранять завершённые переводы при активном partial исходника",
@@ -802,35 +933,60 @@ const voicesubExtrasLocalized = {
     "nav.obs.section.status": "Статус подключения",
     "style.preset.custom_description": "Пользовательский локальный стиль субтитров.",
     "style.preset.desc.clean_default":
-      "Нейтральная база: Inter на прозрачном фоне с минимальной чёрной обводкой.",
+      "Эфирный базовый стиль: Inter + Noto Sans, белый текст, лёгкая обводка и мягкая тень — прозрачный фон для OBS.",
     "style.preset.desc.streamer_bold":
-      "Яркий стрим-лук: Oswald с cyan-заливкой и hot-magenta glow для live-геймплея.",
+      "Игровой HUD: Oswald cyan с умеренным magenta-glow; Montserrat закрывает кириллицу.",
     "style.preset.desc.dual_tone":
-      "Lato с разными цветами заливки по слотам — исходник и переводы читаются с первого взгляда.",
+      "Цвет по слотам: Lato/Noto и контрастные заливки, чтобы исходник и переводы читались сразу.",
     "style.preset.desc.compact_overlay":
-      "Source Sans 3 в компактной полупрозрачной чёрной плашке — минимальный размер, максимальная читаемость.",
+      "Полоска в духе YouTube: Noto/Source Sans на плотной почти непрозрачной плашке.",
     "style.preset.desc.soft_shadow":
-      "Comfortaa с широкой мягкой тенью без обводки — лёгкий, «воздушный» вид.",
+      "Воздушный Comfortaa с широкой мягкой тенью без обводки — читается поверх геймплея.",
     "style.preset.desc.anime_stream":
-      "Mochiy Pop One для Latin/Japanese + Comfortaa Bold для кириллицы — классическая anime fansub-плашка.",
+      "Mochiy Pop One для Latin/Japanese + Comfortaa Bold для кириллицы — классическая anime fansub-плашка: белая заливка, чёткая фиолетовая обводка, мягкая тёмная тень.",
     "style.preset.desc.accessibility_high_contrast":
-      "Белый Montserrat Bold на сплошной чёрной плашке — контраст WCAG AAA в любой среде.",
+      "WCAG AAA: чисто белый Montserrat Bold на полностью непрозрачном чёрном — единственная сплошная ink-плашка в наборе.",
     "style.preset.desc.dark_cinema":
-      "Playfair Display ivory на тёплой sepia-плашке — эстетика letterbox art-house.",
+      "Кинематографичная плашка: Playfair ivory на тёплом сепия-фоне; перевод чуть мельче.",
     "style.preset.desc.meeting_soft":
-      "Roboto Regular светло-серым без обводки и плашки — минимализм для talking-head.",
+      "Тёплый пергамент: Merriweather / Noto тёмными чернилами на полупрозрачной кремовой плашке — editorial podcast, не тёмная коробка.",
     "style.preset.desc.retro_terminal":
-      "VT323 amber phosphor на тёмной CRT-панели — DEC VT320 / Apple II с PT Mono для кириллицы.",
+      "Янтарный CRT: VT323 для латиницы, IBM Plex Serif для кириллицы — плотная плашка, сдержанный glow.",
     "style.preset.desc.fallout_pipboy":
-      "Share Tech Mono в phosphor green Pip-Boy со scanline glow.",
+      "Pip-Boy зелёный: Share Tech Mono + Ubuntu Mono / IBM Plex Mono для кириллицы — контролируемый bloom.",
     "style.preset.desc.comic_burst":
-      "Bangers comic-yellow с толстой чёрной обводкой и hot-red тенью — энергия Marvel SFX.",
+      "Comic SFX: Bangers yellow с жирной чёрной обводкой; Comic Relief Bold для кириллицы.",
     "style.preset.desc.cyberpunk_neon":
-      "Orbitron Black hot-magenta с cyan halo на deep navy plate.",
+      "Sci-fi HUD: Orbitron magenta с cyan-ореолом на navy-плашке; Exo 2 для кириллицы.",
     "style.preset.desc.noir_typewriter":
-      "Special Elite на deep ink plate — детективное кино / typewritten dossier.",
+      "Нуар-досье 1940-х: Special Elite для латиницы, IBM Plex Mono для кириллицы — слоновая кость на чернилах, широкий трекинг.",
     "style.preset.desc.vlog_pastel":
-      "Poppins на warm pastel pill — уютный lifestyle / vlog look.",
+      "Lifestyle-плашка: Poppins на тёплом пастельном фоне с усиленным контрастом.",
+    "style.preset.desc.glass_frost":
+      "Матовый лёд: бледная полупрозрачная ледяная плашка (~44%) и воздушный Raleway — тёмный ice-ink на молочном стекле, не синий баннер.",
+    "style.preset.desc.twitch_lower_third":
+      "Lower-third стрима: сжатый Oswald / Exo на насыщенном Twitch purple (#9146FF), слева, с magenta glow.",
+    "style.preset.desc.warm_amber":
+      "Тёплый night-stream: Open Sans/Noto кремовым с мягкой коричневой тенью.",
+    "style.preset.desc.esports_hud":
+      "Competitive HUD: Exo 2 / Oswald белым с тонкой cyan-обводкой без тяжёлого неона.",
+    "style.preset.desc.dual_caption_modern":
+      "Спокойный bilingual-бар: золотой source и sky translation на общей тёмной плашке.",
+    "settings.fonts.summary":
+      "Проект: {project} · Система: {system} · Запасные: {fallback} · Всего: {total}",
+    "style.ui_theme.font": "Шрифт UI",
+    "style.ui_theme.font.default": "По умолчанию",
+    "credits.open": "О VoiceSub",
+    "credits.title": "О VoiceSub",
+    "credits.author.heading": "Автор",
+    "credits.author.name": "Kiriuru",
+    "credits.author.role": "Автор и мейнтейнер",
+    "credits.author.note":
+      "VoiceSub создан как локальный инструмент субтитров для стримеров.",
+    "credits.product.heading": "Программа",
+    "credits.product.tagline": "Живые переведённые субтитры для стримеров.",
+    "credits.product.stack": "Стек: Rust · Tauri · Svelte · OBS overlay.",
+    "credits.github": "Открыть GitHub",
   },
   ja: {
     "save.status.default": "「保存」を押すと設定がディスクに書き込まれます。",
@@ -850,7 +1006,7 @@ const voicesubExtrasLocalized = {
     "settings.fonts.title": "フォントカタログ",
     "style.custom_preset.delete": "プリセットを削除",
     "help.tools.body":
-      "Tools & Data にはランタイム診断、プロファイルのインポート/エクスポート、ローカル config JSON、診断エクスポートが含まれます。単語置換は「その他 → 単語置換」、高度な認識タイミングは「設定」にあります。",
+      "ツールとデータではランタイム診断、プロファイルのインポート/エクスポート、config JSON、診断エクスポートを扱います。単語置換は「その他 → 単語置換」、TTS と Local ASR は「モジュール」、高度な認識タイミングは「設定」にあります。",
     "style.font_size.source": "原文フォントサイズ (px)",
     "style.font_size.translation": "翻訳フォントサイズ (px)",
     "tools.runtime.note":
@@ -875,6 +1031,37 @@ const voicesubExtrasLocalized = {
     "translation.provider_group.classic_mt": "クラシック MT",
     "translation.provider_group.flexible_llm": "柔軟な LLM",
     "translation.provider_group.local_llm": "ローカル LLM",
+    "translation.provider_group.china_free_tier": "中国 / 無料枠",
+    "translation.app_id": "App ID",
+    "translation.app_key": "App key",
+    "translation.app_secret": "App secret",
+    "translation.secret_id": "SecretId",
+    "translation.secret_key": "Secret key",
+    "translation.token": "Token",
+    "provider.baidu_translate.hint":
+      "Baidu Translate。App ID と Secret Key が必要です。登録後に無料の月間文字枠があります。",
+    "provider.baidu_translate.status": "無料枠のある中国向け MT プロバイダー。",
+    "provider.youdao_translate.hint":
+      "Youdao Zhiyun。App Key と App Secret が必要です。アプリ作成後に無料トライアル枠があります。",
+    "provider.youdao_translate.status": "中国向け MT（Youdao Zhiyun）。",
+    "provider.tencent_tmt.hint":
+      "Tencent Cloud TMT。SecretId と SecretKey が必要です。サービス有効化後に無料枠があります。",
+    "provider.tencent_tmt.status": "中国向けクラウド MT（Tencent TMT）。",
+    "provider.caiyun_translator.hint":
+      "Caiyun Xiaoyi。トークンが必要です。zh/en/ja のみ対応。",
+    "provider.caiyun_translator.status": "zh/en/ja 限定の中国向け MT。",
+    "translation.model.show_models": "モデルを表示",
+    "translation.model.show_all": "すべてのチャットモデルを表示",
+    "translation.models.loading": "モデルを読み込み中…",
+    "translation.models.list_loaded": "{count} 個のモデルを読み込みました。",
+    "translation.models.error": "エラー: {message}",
+    "translation.lm_studio.test_connection": "接続テスト",
+    "translation.custom_prompt.override": "デフォルトの字幕プロンプトを上書き",
+    "translation.provider.setup_link": "プロバイダー設定 / API キーを開く",
+    "translation.validation.duplicate_target":
+      "有効な翻訳先言語が重複しています: {langs}。各行は一意の言語にしてください。",
+    "translation.validation.missing_provider_fields":
+      "必須のプロバイダー設定が未入力です: {fields}。プロバイダー設定を開いて入力してください。",
     "worker.advanced.title": "詳細設定",
     "translation.latest.show": "翻訳結果を表示",
     "translation.latest.hidden":
@@ -978,14 +1165,37 @@ const voicesubExtrasLocalized = {
     "local_asr.test.start": "マイクテスト開始",
     "local_asr.test.stop": "停止",
     "local_asr.test.note": "既定マイクから約 5 秒録音し、loaded モデルで文字起こしします。",
-    "tools.runtime.full_logging": "フル診断ログを有効にする（再起動が必要）",
+    "tools.runtime.full_logging": "フル診断ログを有効にする",
     "tools.runtime.full_logging.hint":
-      "コンパクトログは常に logs/ に書き込まれます。フルログは詳細な runtime イベントと JSONL トレース（api、pipeline、ui、startup）を追加します。保存後にアプリを再起動してください。",
+      "コンパクトログは常に logs/ に書き込まれます。フルログは詳細な runtime イベントと JSONL トレース（api、pipeline、ui、startup）を追加します。Save 後に適用され、アプリの再起動は不要です。",
     "tools.runtime.dispatcher.reason": "ディスパッチャー最終理由",
     "tools.runtime.dispatcher.stale_dropped": "stale dropped",
     "tools.runtime.dispatcher.provider_skipped": "provider skipped",
     "tools.runtime.dispatcher.timeout": "最終 timeout",
     "tools.runtime.dispatcher.last_slot": "最終 slot/target",
+    "tools.runtime.local_asr.ready": "ready",
+    "tools.runtime.local_asr.not_ready": "not ready",
+    "tools.profiles.delete_confirm": "プロファイル「{name}」を削除しますか？元に戻せません。",
+    "tools.profiles.load_confirm": "プロファイル「{name}」を読み込みますか？Save するまで現在のダッシュボード設定が置き換わります。",
+    "tools.profiles.default_load_confirm": "default プロファイルを読み込みますか？Save するまで工場出荷時設定に置き換わります。",
+    "tools.profiles.save_overwrite_confirm": "既存のプロファイル「{name}」を上書きしますか？",
+    "tools.profiles.invalid_name": "無効なプロファイル名です。パス区切り、Windows 予約名（CON、NUL など）、文字 <>:\"|?* は使えません。",
+    "tools.profiles.cannot_delete_default": "default プロファイルは削除できません。",
+    "tools.config.save_hint": "Import と Load Profile はメモリ上のみ更新します。config.toml へ書くにはツールバーの Save を押してください。",
+    "tools.config.needs_save": "保存するには Save を押してください。",
+    "tools.config.export_redacted_note": "秘密情報はマスクされています — このファイルを本番 config として再インポートしないでください。",
+    "tools.config.import_redacted_confirm": "このファイルには [redacted] プレースホルダが含まれています（Export Config の可能性）。インポートすると API キーが上書きされます。続行しますか？",
+    "tools.result.title.success": "完了",
+    "tools.result.title.error": "エラー",
+    "tools.result.ok": "OK",
+    "tools.result.export_diagnostics": "診断 ZIP を {filename} としてダウンロードしました。\nコピーは user-data/exports/ にも保存されます（最新 12 件）。\n内容: redacted config、runtime status、ログ。",
+    "tools.result.export_config": "マスク済み config を {filename} としてダウンロードしました（通常はダウンロードフォルダ）。\nAPI キーは [redacted] に置換されます。\nuser-data/config.toml は変更されません。",
+    "tools.result.import_config": "{filename} をダッシュボードに読み込みました。\nツールバーの Save で user-data/config.toml に書き込みます。",
+    "tools.result.profile_load": "プロファイル「{name}」をダッシュボードに読み込みました。\nツールバーの Save で user-data/config.toml に書き込みます。",
+    "tools.result.profile_save": "プロファイル「{name}」を保存しました:\n{path}\nツールバーの Save まで live の config.toml は変わりません。",
+    "tools.result.profile_delete": "プロファイル「{name}」を user-data/profiles/ から削除しました。",
+    "help.tools.config":
+      "Import/Export Config と Export Diagnostics は現在のセッションに作用します。ローカルへの保存はダッシュボードの Save ボタンを使います。",
     "config.restart_reason.full_logging": "フル診断ログ",
     "subtitles.keep_completed_during_partial":
       "原文 partial 中も完了した翻訳を表示したままにする",
@@ -1092,35 +1302,60 @@ const voicesubExtrasLocalized = {
     "style.preset.editing_custom": "カスタムプリセット「{name}」を編集しています。",
     "style.preset.editing_builtin": "組み込みプリセット「{name}」を編集しています。",
     "style.preset.desc.clean_default":
-      "ニュートラルなベースライン: 透明背景の Inter と最小限の黒アウトライン。",
+      "Broadcast baseline: Inter + Noto Sans, crisp white, light outline and soft shadow — OBS-safe transparent plate.",
     "style.preset.desc.streamer_bold":
-      "派手な配信向けルック: Oswald にシアン塗りと hot-magenta のグロー。",
+      "Gaming HUD: Oswald cyan with a restrained magenta halo; Montserrat covers Cyrillic without losing the neon punch.",
     "style.preset.desc.dual_tone":
-      "スロットごとに異なる塗り色の Lato — 原文と各翻訳が一目で区別できます。",
+      "Slot-colored captions: Lato/Noto body with high-contrast fills per language so source and translations separate at a glance.",
     "style.preset.desc.compact_overlay":
-      "半透明の黒バー内 Source Sans 3 — 小さな footprint で最大の可読性。",
+      "YouTube-style caption bar: Noto/Source Sans on a dense near-opaque plate — small footprint, maximum legibility.",
     "style.preset.desc.soft_shadow":
-      "Comfortaa に広い拡散シャドウ、アウトラインなし — 軽やかでエッジが硬くない見た目。",
+      "Airy Comfortaa with a wide diffused shadow and no outline — soft presence that still reads on busy gameplay.",
     "style.preset.desc.anime_stream":
-      "Latin/Japanese 向け Mochiy Pop One + キリル向け Comfortaa Bold — 定番 anime fansub キャプション。",
+      "Mochiy Pop One for Latin/Japanese + Comfortaa Bold for Cyrillic — classic anime fansub caption: white fill, crisp violet outline, soft dark drop shadow.",
     "style.preset.desc.accessibility_high_contrast":
-      "不透明な黒板の上の白 Montserrat Bold — どんな環境でも WCAG AAA コントラスト。",
+      "WCAG AAA solid caption box: pure white Montserrat Bold on fully opaque black — the only solid ink plate in the set.",
     "style.preset.desc.dark_cinema":
-      "Playfair Display の ivory を warm sepia plate 上に — letterbox art-house 風。",
+      "Letterboxed cinema look: Playfair ivory on a warm sepia plate; translation slot slightly smaller for hierarchy.",
     "style.preset.desc.meeting_soft":
-      "Roboto Regular を light grey、stroke/plate なし — talking-head 向けミニマル。",
+      "Warm parchment paper: Merriweather / Noto dark ink on a translucent cream plate — soft editorial podcast look, not a dark box.",
     "style.preset.desc.retro_terminal":
-      "VT323 amber phosphor on dark CRT panel — DEC VT320 / Apple II 風、キリルは PT Mono。",
+      "Amber phosphor CRT: VT323 for Latin terminal texture, IBM Plex Serif for Cyrillic — dense near-black plate, restrained glow.",
     "style.preset.desc.fallout_pipboy":
-      "Share Tech Mono を Pip-Boy phosphor green + scanline glow で。",
+      "Pip-Boy phosphor green: Share Tech Mono for CRT Latin, Ubuntu Mono + IBM Plex Mono for Cyrillic — deep CRT plate, controlled bloom.",
     "style.preset.desc.comic_burst":
-      "Bangers comic-yellow、太い黒アウトライン、hot-red shadow — Marvel SFX パネル感。",
+      "Comic SFX energy: Bangers yellow with a chunky black outline; Comic Relief Bold covers Cyrillic.",
     "style.preset.desc.cyberpunk_neon":
-      "Orbitron Black hot-magenta + cyan halo on deep navy plate。",
+      "Sci-fi HUD: Orbitron magenta with a cyan halo on a deep navy plate; Exo 2 covers Cyrillic geometry.",
     "style.preset.desc.noir_typewriter":
-      "Special Elite typewriter on deep ink plate — film noir dossier 風。",
+      "1940s dossier captions: Special Elite for Latin typewriter texture, IBM Plex Mono for Cyrillic — warm ivory on deep ink, wide tracking, soft fade-in.",
     "style.preset.desc.vlog_pastel":
-      "Poppins on warm pastel pill — cozy lifestyle / vlog look。",
+      "Lifestyle pill: Poppins on a warm pastel plate with stronger contrast for bright vlog footage.",
+    "style.preset.desc.glass_frost":
+      "Frosted ice glass: pale translucent ice plate (~44% opacity) with airy Raleway — dark ice-ink text floats on milky glass, not a blue box.",
+    "style.preset.desc.twitch_lower_third":
+      "Streamer lower-third chrome: condensed Oswald / Exo on saturated Twitch purple (#9146FF), left-aligned with magenta edge glow.",
+    "style.preset.desc.warm_amber":
+      "Night-stream warmth: Open Sans/Noto cream fill with a soft brown shadow — cozy Just Chatting energy.",
+    "style.preset.desc.esports_hud":
+      "Competitive HUD: Exo 2 / Oswald white with a thin cyan outline — sharp, no heavy neon bloom.",
+    "style.preset.desc.dual_caption_modern":
+      "Calm dual-language plate: warm gold source + soft sky translation on a shared dark bar for bilingual streams.",
+    "settings.fonts.summary":
+      "プロジェクト: {project} · システム: {system} · フォールバック: {fallback} · 合計: {total}",
+    "style.ui_theme.font": "UIフォント",
+    "style.ui_theme.font.default": "デフォルト",
+    "credits.open": "VoiceSub について",
+    "credits.title": "VoiceSub について",
+    "credits.author.heading": "作者",
+    "credits.author.name": "Kiriuru",
+    "credits.author.role": "作者 / メンテナー",
+    "credits.author.note":
+      "ストリーマー向けのローカル字幕ツールとして VoiceSub を開発。",
+    "credits.product.heading": "製品",
+    "credits.product.tagline": "配信者向けリアルタイム翻訳字幕。",
+    "credits.product.stack": "構成: Rust · Tauri · Svelte · OBS overlay。",
+    "credits.github": "GitHub を開く",
   },
   ko: {
     "save.status.default": "저장을 누르면 설정이 디스크에 기록됩니다.",
@@ -1140,7 +1375,7 @@ const voicesubExtrasLocalized = {
     "settings.fonts.title": "글꼴 카탈로그",
     "style.custom_preset.delete": "프리셋 삭제",
     "help.tools.body":
-      "Tools & Data에는 런타임 진단, 프로필 가져오기/보내기, 로컬 config JSON, 진단보내기가 포함됩니다. 단어 치환은 더보기 → 단어 치환, 고급 인식 타이밍은 설정에 있습니다.",
+      "도구 및 데이터는 런타임 진단, 프로필 가져오기/보내기, config JSON, 진단 내보내기를 다룹니다. 단어 치환은 더보기 → 단어 치환, TTS와 Local ASR은 모듈, 고급 인식 타이밍은 설정에 있습니다.",
     "style.font_size.source": "원문 글꼴 크기 (px)",
     "style.font_size.translation": "번역 글꼴 크기 (px)",
     "tools.runtime.note":
@@ -1165,6 +1400,37 @@ const voicesubExtrasLocalized = {
     "translation.provider_group.classic_mt": "클래식 MT",
     "translation.provider_group.flexible_llm": "유연한 LLM",
     "translation.provider_group.local_llm": "로컬 LLM",
+    "translation.provider_group.china_free_tier": "중국 / 무료 티어",
+    "translation.app_id": "App ID",
+    "translation.app_key": "App key",
+    "translation.app_secret": "App secret",
+    "translation.secret_id": "SecretId",
+    "translation.secret_key": "Secret key",
+    "translation.token": "Token",
+    "provider.baidu_translate.hint":
+      "Baidu Translate. App ID와 Secret Key가 필요합니다. 등록 후 월간 무료 문자 할당량이 있습니다.",
+    "provider.baidu_translate.status": "무료 할당량이 있는 중국 MT 제공자.",
+    "provider.youdao_translate.hint":
+      "Youdao Zhiyun. App Key와 App Secret가 필요합니다. 앱 생성 후 무료 체험 할당량이 있습니다.",
+    "provider.youdao_translate.status": "중국 MT 제공자(Youdao Zhiyun).",
+    "provider.tencent_tmt.hint":
+      "Tencent Cloud TMT. SecretId와 SecretKey가 필요합니다. 서비스 활성화 후 무료 할당량이 있습니다.",
+    "provider.tencent_tmt.status": "중국 클라우드 MT(Tencent TMT).",
+    "provider.caiyun_translator.hint":
+      "Caiyun Xiaoyi. 토큰이 필요합니다. zh/en/ja만 지원합니다.",
+    "provider.caiyun_translator.status": "zh/en/ja 전용 중국 MT.",
+    "translation.model.show_models": "모델 표시",
+    "translation.model.show_all": "모든 채팅 모델 표시",
+    "translation.models.loading": "모델 로드 중…",
+    "translation.models.list_loaded": "모델 {count}개를 로드했습니다.",
+    "translation.models.error": "오류: {message}",
+    "translation.lm_studio.test_connection": "연결 테스트",
+    "translation.custom_prompt.override": "기본 자막 프롬프트 재정의",
+    "translation.provider.setup_link": "제공자 설정 / API 키 열기",
+    "translation.validation.duplicate_target":
+      "사용 중인 번역 대상 언어가 중복됩니다: {langs}. 각 라인은 고유한 언어여야 합니다.",
+    "translation.validation.missing_provider_fields":
+      "필수 제공자 설정이 비어 있습니다: {fields}. 제공자 설정을 열고 입력하세요.",
     "worker.advanced.title": "고급",
     "translation.latest.show": "번역 결과 표시",
     "translation.latest.hidden":
@@ -1268,14 +1534,37 @@ const voicesubExtrasLocalized = {
     "local_asr.test.start": "마이크 테스트 시작",
     "local_asr.test.stop": "중지",
     "local_asr.test.note": "기본 마이크에서 약 5초 녹음한 뒤 loaded 모델로 전사합니다.",
-    "tools.runtime.full_logging": "전체 진단 로깅 사용(재시작 필요)",
+    "tools.runtime.full_logging": "전체 진단 로깅 사용",
     "tools.runtime.full_logging.hint":
-      "컴팩트 로그는 항상 logs/에 기록됩니다. 전체 로깅은 상세 runtime 이벤트와 JSONL 트레이스(api, pipeline, ui, startup)를 추가합니다. 저장 후 앱을 재시작하세요.",
+      "컴팩트 로그는 항상 logs/에 기록됩니다. 전체 로깅은 상세 runtime 이벤트와 JSONL 트레이스(api, pipeline, ui, startup)를 추가합니다. Save 후 적용되며 앱 재시작은 필요 없습니다.",
     "tools.runtime.dispatcher.reason": "디스패처 마지막 사유",
     "tools.runtime.dispatcher.stale_dropped": "stale dropped",
     "tools.runtime.dispatcher.provider_skipped": "provider skipped",
     "tools.runtime.dispatcher.timeout": "마지막 timeout",
     "tools.runtime.dispatcher.last_slot": "마지막 slot/target",
+    "tools.runtime.local_asr.ready": "준비됨",
+    "tools.runtime.local_asr.not_ready": "준비 안 됨",
+    "tools.profiles.delete_confirm": "프로필 \"{name}\"을(를) 삭제할까요? 되돌릴 수 없습니다.",
+    "tools.profiles.load_confirm": "프로필 \"{name}\"을(를) 불러올까요? Save 전까지 현재 대시보드 설정이 바뀝니다.",
+    "tools.profiles.default_load_confirm": "default 프로필을 불러올까요? Save 전까지 공장 초기값으로 바뀝니다.",
+    "tools.profiles.save_overwrite_confirm": "기존 프로필 \"{name}\"을(를) 덮어쓸까요?",
+    "tools.profiles.invalid_name": "잘못된 프로필 이름입니다. 경로 구분자, Windows 예약 이름(CON, NUL 등), 문자 <>:\"|?* 는 사용할 수 없습니다.",
+    "tools.profiles.cannot_delete_default": "default 프로필은 삭제할 수 없습니다.",
+    "tools.config.save_hint": "Import와 Load Profile은 메모리만 갱신합니다. config.toml에 쓰려면 도구 모음의 Save를 누르세요.",
+    "tools.config.needs_save": "저장하려면 Save를 누르세요.",
+    "tools.config.export_redacted_note": "비밀 값은 마스킹됩니다 — 이 파일을 실제 config로 다시 가져오지 마세요.",
+    "tools.config.import_redacted_confirm": "이 파일에 [redacted] 자리 표시자가 있습니다(Export Config일 수 있음). 가져오면 API 키가 덮어씌워집니다. 계속할까요?",
+    "tools.result.title.success": "완료",
+    "tools.result.title.error": "오류",
+    "tools.result.ok": "OK",
+    "tools.result.export_diagnostics": "진단 ZIP을 {filename}(으)로 다운로드했습니다.\n복사본은 user-data/exports/에도 저장됩니다(최신 12개).\n내용: redacted config, runtime status, 로그.",
+    "tools.result.export_config": "마스킹된 config를 {filename}(으)로 다운로드했습니다(보통 다운로드 폴더).\nAPI 키는 [redacted]로 바뀝니다.\nuser-data/config.toml은 변경되지 않습니다.",
+    "tools.result.import_config": "{filename}을(를) 대시보드에 불러왔습니다.\n도구 모음의 Save로 user-data/config.toml에 저장하세요.",
+    "tools.result.profile_load": "프로필 \"{name}\"을(를) 대시보드에 불러왔습니다.\n도구 모음의 Save로 user-data/config.toml에 저장하세요.",
+    "tools.result.profile_save": "프로필 \"{name}\" 저장 위치:\n{path}\n도구 모음 Save 전까지 live config.toml은 바뀌지 않습니다.",
+    "tools.result.profile_delete": "프로필 \"{name}\"을(를) user-data/profiles/에서 삭제했습니다.",
+    "help.tools.config":
+      "Import/Export Config와 Export Diagnostics는 현재 세션에 적용됩니다. 로컬 저장은 대시보드 Save 버튼을 사용하세요.",
     "config.restart_reason.full_logging": "전체 진단 로깅",
     "subtitles.keep_completed_during_partial":
       "원문 partial 동안 완료된 번역을 계속 표시",
@@ -1381,35 +1670,60 @@ const voicesubExtrasLocalized = {
     "style.preset.custom_description": "사용자가 만든 로컬 자막 스타일.",
     "style.preset.editing_builtin": "내장 프리셋 \"{name}\" 편집 중.",
     "style.preset.desc.clean_default":
-      "중립 기본값: 투명 배경의 Inter와 최소한의 검은 윤곽선.",
+      "Broadcast baseline: Inter + Noto Sans, crisp white, light outline and soft shadow — OBS-safe transparent plate.",
     "style.preset.desc.streamer_bold":
-      "화려한 방송 룩: Oswald에 cyan 채우기와 hot-magenta glow.",
+      "Gaming HUD: Oswald cyan with a restrained magenta halo; Montserrat covers Cyrillic without losing the neon punch.",
     "style.preset.desc.dual_tone":
-      "슬롯별 다른 채우기 색의 Lato — 원문과 각 번역을 한눈에 구분.",
+      "Slot-colored captions: Lato/Noto body with high-contrast fills per language so source and translations separate at a glance.",
     "style.preset.desc.compact_overlay":
-      "반투명 검은 바 안 Source Sans 3 — 작은 footprint, 최대 가독성.",
+      "YouTube-style caption bar: Noto/Source Sans on a dense near-opaque plate — small footprint, maximum legibility.",
     "style.preset.desc.soft_shadow":
-      "Comfortaa에 넓은 확산 그림자, 윤곽선 없음 — 가볍고 부드러운 느낌.",
+      "Airy Comfortaa with a wide diffused shadow and no outline — soft presence that still reads on busy gameplay.",
     "style.preset.desc.anime_stream":
-      "Latin/Japanese용 Mochiy Pop One + 키릴용 Comfortaa Bold — 클래식 anime fansub 캡션.",
+      "Mochiy Pop One for Latin/Japanese + Comfortaa Bold for Cyrillic — classic anime fansub caption: white fill, crisp violet outline, soft dark drop shadow.",
     "style.preset.desc.accessibility_high_contrast":
-      "불투명 검은 판 위 흰 Montserrat Bold — 어떤 환경에서도 WCAG AAA 대비.",
+      "WCAG AAA solid caption box: pure white Montserrat Bold on fully opaque black — the only solid ink plate in the set.",
     "style.preset.desc.dark_cinema":
-      "Playfair Display ivory on warm sepia plate — letterbox art-house aesthetic.",
+      "Letterboxed cinema look: Playfair ivory on a warm sepia plate; translation slot slightly smaller for hierarchy.",
     "style.preset.desc.meeting_soft":
-      "Roboto Regular light grey, stroke/plate 없음 — talking-head friendly minimal.",
+      "Warm parchment paper: Merriweather / Noto dark ink on a translucent cream plate — soft editorial podcast look, not a dark box.",
     "style.preset.desc.retro_terminal":
-      "VT323 amber phosphor on dark CRT panel — DEC VT320 / Apple II vibe, PT Mono for Cyrillic.",
+      "Amber phosphor CRT: VT323 for Latin terminal texture, IBM Plex Serif for Cyrillic — dense near-black plate, restrained glow.",
     "style.preset.desc.fallout_pipboy":
-      "Share Tech Mono in Pip-Boy phosphor green with scanline glow.",
+      "Pip-Boy phosphor green: Share Tech Mono for CRT Latin, Ubuntu Mono + IBM Plex Mono for Cyrillic — deep CRT plate, controlled bloom.",
     "style.preset.desc.comic_burst":
-      "Bangers comic-yellow with chunky black outline and hot-red shadow.",
+      "Comic SFX energy: Bangers yellow with a chunky black outline; Comic Relief Bold covers Cyrillic.",
     "style.preset.desc.cyberpunk_neon":
-      "Orbitron Black hot-magenta with cyan halo on deep navy plate.",
+      "Sci-fi HUD: Orbitron magenta with a cyan halo on a deep navy plate; Exo 2 covers Cyrillic geometry.",
     "style.preset.desc.noir_typewriter":
-      "Special Elite typewriter on deep ink plate — film noir dossier mood.",
+      "1940s dossier captions: Special Elite for Latin typewriter texture, IBM Plex Mono for Cyrillic — warm ivory on deep ink, wide tracking, soft fade-in.",
     "style.preset.desc.vlog_pastel":
-      "Poppins on warm pastel pill — cozy lifestyle / vlog look.",
+      "Lifestyle pill: Poppins on a warm pastel plate with stronger contrast for bright vlog footage.",
+    "style.preset.desc.glass_frost":
+      "Frosted ice glass: pale translucent ice plate (~44% opacity) with airy Raleway — dark ice-ink text floats on milky glass, not a blue box.",
+    "style.preset.desc.twitch_lower_third":
+      "Streamer lower-third chrome: condensed Oswald / Exo on saturated Twitch purple (#9146FF), left-aligned with magenta edge glow.",
+    "style.preset.desc.warm_amber":
+      "Night-stream warmth: Open Sans/Noto cream fill with a soft brown shadow — cozy Just Chatting energy.",
+    "style.preset.desc.esports_hud":
+      "Competitive HUD: Exo 2 / Oswald white with a thin cyan outline — sharp, no heavy neon bloom.",
+    "style.preset.desc.dual_caption_modern":
+      "Calm dual-language plate: warm gold source + soft sky translation on a shared dark bar for bilingual streams.",
+    "settings.fonts.summary":
+      "프로젝트: {project} · 시스템: {system} · 대체: {fallback} · 전체: {total}",
+    "style.ui_theme.font": "UI 글꼴",
+    "style.ui_theme.font.default": "기본값",
+    "credits.open": "VoiceSub 정보",
+    "credits.title": "VoiceSub 정보",
+    "credits.author.heading": "제작자",
+    "credits.author.name": "Kiriuru",
+    "credits.author.role": "제작자 및 유지보수",
+    "credits.author.note":
+      "스트리머를 위한 로컬 자막 도구로 VoiceSub를 만들었습니다.",
+    "credits.product.heading": "제품",
+    "credits.product.tagline": "스트리머를 위한 실시간 번역 자막.",
+    "credits.product.stack": "스택: Rust · Tauri · Svelte · OBS overlay.",
+    "credits.github": "GitHub 열기",
   },
   zh: {
     "save.status.default": "按“保存”后，设置会写入磁盘。",
@@ -1429,7 +1743,7 @@ const voicesubExtrasLocalized = {
     "settings.fonts.title": "字体目录",
     "style.custom_preset.delete": "删除预设",
     "help.tools.body":
-      "Tools & Data 包含运行时诊断、配置文件导入/导出、本地 config JSON 和诊断导出。词语替换在「更多 → 词语替换」；高级识别时序在「设置」。",
+      "「工具和数据」涵盖运行时诊断、配置文件导入/导出、config JSON 与诊断导出。词语替换在「更多 → 词语替换」；TTS 与 Local ASR 在「模块」；高级识别时序在「设置」。",
     "style.font_size.source": "原文 font size (px)",
     "style.font_size.translation": "翻译 font size (px)",
     "tools.runtime.note": "运行时日志和诊断写入用户数据文件夹。",
@@ -1453,6 +1767,37 @@ const voicesubExtrasLocalized = {
     "translation.provider_group.classic_mt": "经典 MT",
     "translation.provider_group.flexible_llm": "灵活 LLM",
     "translation.provider_group.local_llm": "本地 LLM",
+    "translation.provider_group.china_free_tier": "中国 / 免费额度",
+    "translation.app_id": "App ID",
+    "translation.app_key": "App Key",
+    "translation.app_secret": "App Secret",
+    "translation.secret_id": "SecretId",
+    "translation.secret_key": "SecretKey",
+    "translation.token": "Token",
+    "provider.baidu_translate.hint":
+      "百度翻译开放平台。需要 App ID 和 Secret Key。注册后有免费月度字符额度。",
+    "provider.baidu_translate.status": "带免费额度的中国机器翻译提供商。",
+    "provider.youdao_translate.hint":
+      "有道智云文本翻译。需要 App Key 和 App Secret。创建应用后有免费试用额度。",
+    "provider.youdao_translate.status": "中国机器翻译提供商（有道智云）。",
+    "provider.tencent_tmt.hint":
+      "腾讯云机器翻译。需要 SecretId 和 SecretKey。开通服务后有免费额度。",
+    "provider.tencent_tmt.status": "中国云机器翻译（腾讯云 TMT）。",
+    "provider.caiyun_translator.hint":
+      "彩云小译。需要 token。仅支持 zh/en/ja。",
+    "provider.caiyun_translator.status": "仅支持 zh/en/ja 的中国机器翻译。",
+    "translation.model.show_models": "显示模型",
+    "translation.model.show_all": "显示全部聊天模型",
+    "translation.models.loading": "正在加载模型…",
+    "translation.models.list_loaded": "已加载 {count} 个模型。",
+    "translation.models.error": "错误：{message}",
+    "translation.lm_studio.test_connection": "测试连接",
+    "translation.custom_prompt.override": "覆盖默认字幕提示词",
+    "translation.provider.setup_link": "打开提供商设置 / API 密钥页面",
+    "translation.validation.duplicate_target":
+      "已启用的目标语言重复：{langs}。每条线路的语言必须唯一。",
+    "translation.validation.missing_provider_fields":
+      "缺少必需的提供商设置：{fields}。请打开提供商设置并填写。",
     "worker.advanced.title": "高级",
     "translation.latest.show": "显示翻译结果",
     "translation.latest.hidden": "翻译结果已隐藏。打开开关以查看实时输出。",
@@ -1554,14 +1899,37 @@ const voicesubExtrasLocalized = {
     "local_asr.test.start": "开始麦克风测试",
     "local_asr.test.stop": "停止",
     "local_asr.test.note": "从默认麦克风录制约 5 秒，然后用已加载模型转写。",
-    "tools.runtime.full_logging": "启用完整诊断日志（需要重启）",
+    "tools.runtime.full_logging": "启用完整诊断日志",
     "tools.runtime.full_logging.hint":
-      "精简日志始终写入 logs/。完整日志会添加详细的 runtime 事件和 JSONL 跟踪（api、pipeline、ui、startup）。保存后请重启应用。",
+      "精简日志始终写入 logs/。完整日志会添加详细的 runtime 事件和 JSONL 跟踪（api、pipeline、ui、startup）。保存后立即生效，无需重启应用。",
     "tools.runtime.dispatcher.reason": "调度器最近原因",
     "tools.runtime.dispatcher.stale_dropped": "stale dropped",
     "tools.runtime.dispatcher.provider_skipped": "provider skipped",
     "tools.runtime.dispatcher.timeout": "最近超时",
     "tools.runtime.dispatcher.last_slot": "最近 slot/target",
+    "tools.runtime.local_asr.ready": "就绪",
+    "tools.runtime.local_asr.not_ready": "未就绪",
+    "tools.profiles.delete_confirm": "删除配置文件「{name}」？此操作无法撤销。",
+    "tools.profiles.load_confirm": "加载配置文件「{name}」？在点击 Save 之前会替换当前仪表板设置。",
+    "tools.profiles.default_load_confirm": "加载 default 配置文件？在点击 Save 之前会替换为出厂默认设置。",
+    "tools.profiles.save_overwrite_confirm": "覆盖已有配置文件「{name}」？",
+    "tools.profiles.invalid_name": "无效的配置文件名。请避免路径分隔符、Windows 保留名（CON、NUL 等）以及字符 <>:\"|?*",
+    "tools.profiles.cannot_delete_default": "无法删除 default 配置文件。",
+    "tools.config.save_hint": "Import 与 Load Profile 仅更新内存。要写入 config.toml，请点击工具栏上的 Save。",
+    "tools.config.needs_save": "请点击 Save 以持久化。",
+    "tools.config.export_redacted_note": "密钥已脱敏 — 请勿将此文件重新导入为正式配置。",
+    "tools.config.import_redacted_confirm": "此文件包含 [redacted] 占位符（通常来自 Export Config）。导入会用占位符覆盖 API 密钥。仍要继续吗？",
+    "tools.result.title.success": "完成",
+    "tools.result.title.error": "错误",
+    "tools.result.ok": "确定",
+    "tools.result.export_diagnostics": "诊断 ZIP 已下载为 {filename}。\n同时保存在 user-data/exports/（保留最新 12 个）。\n内容：脱敏配置、runtime 状态与日志。",
+    "tools.result.export_config": "已下载脱敏配置 {filename}（通常在“下载”文件夹）。\nAPI 密钥已替换为 [redacted]。\n不会修改 user-data/config.toml。",
+    "tools.result.import_config": "已将 {filename} 加载到仪表板。\n请点击工具栏 Save 写入 user-data/config.toml。",
+    "tools.result.profile_load": "已将配置文件「{name}」加载到仪表板。\n请点击工具栏 Save 写入 user-data/config.toml。",
+    "tools.result.profile_save": "配置文件「{name}」已保存到：\n{path}\n在点击工具栏 Save 之前不会更改 live config.toml。",
+    "tools.result.profile_delete": "已从 user-data/profiles/ 删除配置文件「{name}」。",
+    "help.tools.config":
+      "Import/Export Config 与 Export Diagnostics 作用于当前会话。写入本地请使用仪表板上的 Save 按钮。",
     "config.restart_reason.full_logging": "完整诊断日志",
     "subtitles.keep_completed_during_partial": "原文 partial 期间保留已完成的翻译",
     "subtitles.keep_completed_during_partial.note":
@@ -1665,35 +2033,59 @@ const voicesubExtrasLocalized = {
     "nav.obs.section.status": "连接状态",
     "style.preset.custom_description": "用户创建的本地字幕样式。",
     "style.preset.desc.clean_default":
-      "中性基线：透明背景上的 Inter 与最小黑色描边。",
+      "Broadcast baseline: Inter + Noto Sans, crisp white, light outline and soft shadow — OBS-safe transparent plate.",
     "style.preset.desc.streamer_bold":
-      "醒目直播风格：Oswald 青色填充与 hot-magenta 光晕。",
+      "Gaming HUD: Oswald cyan with a restrained magenta halo; Montserrat covers Cyrillic without losing the neon punch.",
     "style.preset.desc.dual_tone":
-      "Lato 各 slot 不同填充色 — 原文与各翻译一目了然。",
+      "Slot-colored captions: Lato/Noto body with high-contrast fills per language so source and translations separate at a glance.",
     "style.preset.desc.compact_overlay":
-      "半透明黑条内的 Source Sans 3 — 小 footprint，高可读性。",
+      "YouTube-style caption bar: Noto/Source Sans on a dense near-opaque plate — small footprint, maximum legibility.",
     "style.preset.desc.soft_shadow":
-      "Comfortaa 宽扩散阴影、无描边 — 轻盈无硬边。",
+      "Airy Comfortaa with a wide diffused shadow and no outline — soft presence that still reads on busy gameplay.",
     "style.preset.desc.anime_stream":
-      "Latin/Japanese 用 Mochiy Pop One + 西里尔用 Comfortaa Bold — 经典 anime fansub 样式。",
+      "Mochiy Pop One for Latin/Japanese + Comfortaa Bold for Cyrillic — classic anime fansub caption: white fill, crisp violet outline, soft dark drop shadow.",
     "style.preset.desc.accessibility_high_contrast":
-      "不透明白 Montserrat Bold 于黑底 — 任何环境 WCAG AAA 对比度。",
+      "WCAG AAA solid caption box: pure white Montserrat Bold on fully opaque black — the only solid ink plate in the set.",
     "style.preset.desc.dark_cinema":
-      "Playfair Display ivory on warm sepia plate — letterbox art-house aesthetic.",
+      "Letterboxed cinema look: Playfair ivory on a warm sepia plate; translation slot slightly smaller for hierarchy.",
     "style.preset.desc.meeting_soft":
-      "Roboto Regular light grey, no stroke/plate — minimal talking-head friendly.",
+      "Warm parchment paper: Merriweather / Noto dark ink on a translucent cream plate — soft editorial podcast look, not a dark box.",
     "style.preset.desc.retro_terminal":
-      "VT323 amber phosphor on dark CRT panel — DEC VT320 / Apple II vibe.",
+      "Amber phosphor CRT: VT323 for Latin terminal texture, IBM Plex Serif for Cyrillic — dense near-black plate, restrained glow.",
     "style.preset.desc.fallout_pipboy":
-      "Share Tech Mono in Pip-Boy phosphor green with scanline glow.",
+      "Pip-Boy phosphor green: Share Tech Mono for CRT Latin, Ubuntu Mono + IBM Plex Mono for Cyrillic — deep CRT plate, controlled bloom.",
     "style.preset.desc.comic_burst":
-      "Bangers comic-yellow with chunky black outline and hot-red shadow.",
+      "Comic SFX energy: Bangers yellow with a chunky black outline; Comic Relief Bold covers Cyrillic.",
     "style.preset.desc.cyberpunk_neon":
-      "Orbitron Black hot-magenta with cyan halo on deep navy plate.",
+      "Sci-fi HUD: Orbitron magenta with a cyan halo on a deep navy plate; Exo 2 covers Cyrillic geometry.",
     "style.preset.desc.noir_typewriter":
-      "Special Elite typewriter on deep ink plate — film noir dossier mood.",
+      "1940s dossier captions: Special Elite for Latin typewriter texture, IBM Plex Mono for Cyrillic — warm ivory on deep ink, wide tracking, soft fade-in.",
     "style.preset.desc.vlog_pastel":
-      "Poppins on warm pastel pill — cozy lifestyle / vlog look.",
+      "Lifestyle pill: Poppins on a warm pastel plate with stronger contrast for bright vlog footage.",
+    "style.preset.desc.glass_frost":
+      "Frosted ice glass: pale translucent ice plate (~44% opacity) with airy Raleway — dark ice-ink text floats on milky glass, not a blue box.",
+    "style.preset.desc.twitch_lower_third":
+      "Streamer lower-third chrome: condensed Oswald / Exo on saturated Twitch purple (#9146FF), left-aligned with magenta edge glow.",
+    "style.preset.desc.warm_amber":
+      "Night-stream warmth: Open Sans/Noto cream fill with a soft brown shadow — cozy Just Chatting energy.",
+    "style.preset.desc.esports_hud":
+      "Competitive HUD: Exo 2 / Oswald white with a thin cyan outline — sharp, no heavy neon bloom.",
+    "style.preset.desc.dual_caption_modern":
+      "Calm dual-language plate: warm gold source + soft sky translation on a shared dark bar for bilingual streams.",
+    "settings.fonts.summary":
+      "项目: {project} · 系统: {system} · 回退: {fallback} · 总计: {total}",
+    "style.ui_theme.font": "界面字体",
+    "style.ui_theme.font.default": "默认",
+    "credits.open": "关于 VoiceSub",
+    "credits.title": "关于 VoiceSub",
+    "credits.author.heading": "作者",
+    "credits.author.name": "Kiriuru",
+    "credits.author.role": "作者与维护者",
+    "credits.author.note": "VoiceSub 是为主播打造的本地字幕工具。",
+    "credits.product.heading": "产品",
+    "credits.product.tagline": "面向主播的实时翻译字幕。",
+    "credits.product.stack": "技术栈：Rust · Tauri · Svelte · OBS overlay。",
+    "credits.github": "打开 GitHub",
   },
 };
 

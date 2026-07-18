@@ -1,178 +1,1146 @@
 [
-  {"source": "fuck", "target": "***"},
-  {"source": "fucking", "target": "***"},
-  {"source": "fucked", "target": "***"},
-  {"source": "fucker", "target": "***"},
-  {"source": "motherfucker", "target": "***"},
-  {"source": "motherfucking", "target": "***"},
-  {"source": "mofo", "target": "***"},
-  {"source": "shit", "target": "***"},
-  {"source": "shitty", "target": "***"},
-  {"source": "bullshit", "target": "***"},
-  {"source": "horseshit", "target": "***"},
-  {"source": "clusterfuck", "target": "***"},
-  {"source": "bitch", "target": "***"},
-  {"source": "bastard", "target": "***"},
-  {"source": "asshole", "target": "***"},
-  {"source": "dickhead", "target": "***"},
-  {"source": "jackass", "target": "***"},
-  {"source": "dumbass", "target": "***"},
-  {"source": "dipshit", "target": "***"},
-  {"source": "shithead", "target": "***"},
-  {"source": "cunt", "target": "***"},
-  {"source": "dick", "target": "***"},
-  {"source": "cock", "target": "***"},
-  {"source": "cocksucker", "target": "***"},
-  {"source": "prick", "target": "***"},
-  {"source": "twat", "target": "***"},
-  {"source": "wanker", "target": "***"},
-  {"source": "douche", "target": "***"},
-  {"source": "douchebag", "target": "***"},
-  {"source": "asshat", "target": "***"},
-  {"source": "bollocks", "target": "***"},
-  {"source": "piss", "target": "***"},
-  {"source": "pissed", "target": "***"},
-  {"source": "damn", "target": "***"},
-  {"source": "dammit", "target": "***"},
-  {"source": "goddamn", "target": "***"},
-  {"source": "slut", "target": "***"},
-  {"source": "whore", "target": "***"},
-  {"source": "son of a bitch", "target": "***"},
-  {"source": "piece of shit", "target": "***"},
-  {"source": "сука", "target": "***"},
-  {"source": "суки", "target": "***"},
-  {"source": "блядь", "target": "***"},
-  {"source": "бляди", "target": "***"},
-  {"source": "блять", "target": "***"},
-  {"source": "бля", "target": "***"},
-  {"source": "бляха", "target": "***"},
-  {"source": "хуй", "target": "***"},
-  {"source": "хуя", "target": "***"},
-  {"source": "хуе", "target": "***"},
-  {"source": "хуи", "target": "***"},
-  {"source": "хуё", "target": "***"},
-  {"source": "хуёво", "target": "***"},
-  {"source": "хуево", "target": "***"},
-  {"source": "хрен", "target": "***"},
-  {"source": "хрень", "target": "***"},
-  {"source": "нахуй", "target": "***"},
-  {"source": "похуй", "target": "***"},
-  {"source": "охуеть", "target": "***"},
-  {"source": "охуел", "target": "***"},
-  {"source": "дохуя", "target": "***"},
-  {"source": "пизда", "target": "***"},
-  {"source": "пизде", "target": "***"},
-  {"source": "пизду", "target": "***"},
-  {"source": "пизды", "target": "***"},
-  {"source": "пиздец", "target": "***"},
-  {"source": "пизд", "target": "***"},
-  {"source": "ебан", "target": "***"},
-  {"source": "ёбан", "target": "***"},
-  {"source": "уеб", "target": "***"},
-  {"source": "заеб", "target": "***"},
-  {"source": "заебал", "target": "***"},
-  {"source": "заебись", "target": "***"},
-  {"source": "отъебись", "target": "***"},
-  {"source": "выеб", "target": "***"},
-  {"source": "мудак", "target": "***"},
-  {"source": "мудаки", "target": "***"},
-  {"source": "мудила", "target": "***"},
-  {"source": "гнида", "target": "***"},
-  {"source": "сволочь", "target": "***"},
-  {"source": "подонок", "target": "***"},
-  {"source": "мразь", "target": "***"},
-  {"source": "скотина", "target": "***"},
-  {"source": "тварь", "target": "***"},
-  {"source": "чмо", "target": "***"},
-  {"source": "говно", "target": "***"},
-  {"source": "говён", "target": "***"},
-  {"source": "говен", "target": "***"},
-  {"source": "дерьмо", "target": "***"},
-  {"source": "жопа", "target": "***"},
-  {"source": "жопу", "target": "***"},
-  {"source": "жопе", "target": "***"},
-  {"source": "задница", "target": "***"},
-  {"source": "сраный", "target": "***"},
-  {"source": "срань", "target": "***"},
-  {"source": "срать", "target": "***"},
-  {"source": "насрать", "target": "***"},
-  {"source": "чёрт", "target": "***"},
-  {"source": "черт", "target": "***"},
-  {"source": "くそ", "target": "***"},
-  {"source": "クソ", "target": "***"},
-  {"source": "糞", "target": "***"},
-  {"source": "ばか", "target": "***"},
-  {"source": "馬鹿", "target": "***"},
-  {"source": "アホ", "target": "***"},
-  {"source": "死ね", "target": "***"},
-  {"source": "しね", "target": "***"},
-  {"source": "殺す", "target": "***"},
-  {"source": "畜生", "target": "***"},
-  {"source": "ちくしょう", "target": "***"},
-  {"source": "チクショウ", "target": "***"},
-  {"source": "うざい", "target": "***"},
-  {"source": "ウザイ", "target": "***"},
-  {"source": "キモい", "target": "***"},
-  {"source": "きもい", "target": "***"},
-  {"source": "ブス", "target": "***"},
-  {"source": "ブサイク", "target": "***"},
-  {"source": "デブ", "target": "***"},
-  {"source": "クズ", "target": "***"},
-  {"source": "カス", "target": "***"},
-  {"source": "ゴミ", "target": "***"},
-  {"source": "ファック", "target": "***"},
-  {"source": "ファッカー", "target": "***"},
-  {"source": "シット", "target": "***"},
-  {"source": "ビッチ", "target": "***"},
-  {"source": "クソ野郎", "target": "***"},
-  {"source": "くそ野郎", "target": "***"},
-  {"source": "씨발", "target": "***"},
-  {"source": "시발", "target": "***"},
-  {"source": "씨팔", "target": "***"},
-  {"source": "좆", "target": "***"},
-  {"source": "좃", "target": "***"},
-  {"source": "개새끼", "target": "***"},
-  {"source": "개새", "target": "***"},
-  {"source": "병신", "target": "***"},
-  {"source": "븅신", "target": "***"},
-  {"source": "지랄", "target": "***"},
-  {"source": "닥쳐", "target": "***"},
-  {"source": "꺼져", "target": "***"},
-  {"source": "미친", "target": "***"},
-  {"source": "미친놈", "target": "***"},
-  {"source": "미친년", "target": "***"},
-  {"source": "엿", "target": "***"},
-  {"source": "엿먹", "target": "***"},
-  {"source": "엿먹어", "target": "***"},
-  {"source": "보지", "target": "***"},
-  {"source": "자지", "target": "***"},
-  {"source": "섹스", "target": "***"},
-  {"source": "他妈", "target": "***"},
-  {"source": "他妈的", "target": "***"},
-  {"source": "妈的", "target": "***"},
-  {"source": "操", "target": "***"},
-  {"source": "操你", "target": "***"},
-  {"source": "草", "target": "***"},
-  {"source": "草泥马", "target": "***"},
-  {"source": "傻逼", "target": "***"},
-  {"source": "傻B", "target": "***"},
-  {"source": "煞笔", "target": "***"},
-  {"source": "沙比", "target": "***"},
-  {"source": "白痴", "target": "***"},
-  {"source": "混蛋", "target": "***"},
-  {"source": "王八蛋", "target": "***"},
-  {"source": "狗日的", "target": "***"},
-  {"source": "去死", "target": "***"},
-  {"source": "滚", "target": "***"},
-  {"source": "贱人", "target": "***"},
-  {"source": "婊子", "target": "***"},
-  {"source": "鸡巴", "target": "***"},
-  {"source": "屌", "target": "***"},
-  {"source": "屁", "target": "***"},
-  {"source": "卧槽", "target": "***"},
-  {"source": "我操", "target": "***"},
-  {"source": "尼玛", "target": "***"},
-  {"source": "你妹", "target": "***"},
-  {"source": "靠", "target": "***"},
-  {"source": "肏", "target": "***"}
+  {
+    "source": "fuck",
+    "target": "***"
+  },
+  {
+    "source": "fucking",
+    "target": "***"
+  },
+  {
+    "source": "fucked",
+    "target": "***"
+  },
+  {
+    "source": "fucker",
+    "target": "***"
+  },
+  {
+    "source": "fuk",
+    "target": "***"
+  },
+  {
+    "source": "fuking",
+    "target": "***"
+  },
+  {
+    "source": "fukin",
+    "target": "***"
+  },
+  {
+    "source": "fck",
+    "target": "***"
+  },
+  {
+    "source": "motherfucker",
+    "target": "***"
+  },
+  {
+    "source": "motherfucking",
+    "target": "***"
+  },
+  {
+    "source": "mofo",
+    "target": "***"
+  },
+  {
+    "source": "shit",
+    "target": "***"
+  },
+  {
+    "source": "shitty",
+    "target": "***"
+  },
+  {
+    "source": "bullshit",
+    "target": "***"
+  },
+  {
+    "source": "horseshit",
+    "target": "***"
+  },
+  {
+    "source": "clusterfuck",
+    "target": "***"
+  },
+  {
+    "source": "bitch",
+    "target": "***"
+  },
+  {
+    "source": "bastard",
+    "target": "***"
+  },
+  {
+    "source": "asshole",
+    "target": "***"
+  },
+  {
+    "source": "arsehole",
+    "target": "***"
+  },
+  {
+    "source": "dickhead",
+    "target": "***"
+  },
+  {
+    "source": "jackass",
+    "target": "***"
+  },
+  {
+    "source": "dumbass",
+    "target": "***"
+  },
+  {
+    "source": "dipshit",
+    "target": "***"
+  },
+  {
+    "source": "shithead",
+    "target": "***"
+  },
+  {
+    "source": "cunt",
+    "target": "***"
+  },
+  {
+    "source": "dick",
+    "target": "***"
+  },
+  {
+    "source": "cock",
+    "target": "***"
+  },
+  {
+    "source": "cocksucker",
+    "target": "***"
+  },
+  {
+    "source": "prick",
+    "target": "***"
+  },
+  {
+    "source": "twat",
+    "target": "***"
+  },
+  {
+    "source": "wanker",
+    "target": "***"
+  },
+  {
+    "source": "douche",
+    "target": "***"
+  },
+  {
+    "source": "douchebag",
+    "target": "***"
+  },
+  {
+    "source": "asshat",
+    "target": "***"
+  },
+  {
+    "source": "bollocks",
+    "target": "***"
+  },
+  {
+    "source": "piss",
+    "target": "***"
+  },
+  {
+    "source": "pissed",
+    "target": "***"
+  },
+  {
+    "source": "damn",
+    "target": "***"
+  },
+  {
+    "source": "dammit",
+    "target": "***"
+  },
+  {
+    "source": "goddamn",
+    "target": "***"
+  },
+  {
+    "source": "slut",
+    "target": "***"
+  },
+  {
+    "source": "whore",
+    "target": "***"
+  },
+  {
+    "source": "ass",
+    "target": "***"
+  },
+  {
+    "source": "arse",
+    "target": "***"
+  },
+  {
+    "source": "balls",
+    "target": "***"
+  },
+  {
+    "source": "ballsack",
+    "target": "***"
+  },
+  {
+    "source": "nutsack",
+    "target": "***"
+  },
+  {
+    "source": "penis",
+    "target": "***"
+  },
+  {
+    "source": "vagina",
+    "target": "***"
+  },
+  {
+    "source": "pussy",
+    "target": "***"
+  },
+  {
+    "source": "cum",
+    "target": "***"
+  },
+  {
+    "source": "jizz",
+    "target": "***"
+  },
+  {
+    "source": "jerkoff",
+    "target": "***"
+  },
+  {
+    "source": "jerk off",
+    "target": "***"
+  },
+  {
+    "source": "retard",
+    "target": "***"
+  },
+  {
+    "source": "retarded",
+    "target": "***"
+  },
+  {
+    "source": "moron",
+    "target": "***"
+  },
+  {
+    "source": "idiot",
+    "target": "***"
+  },
+  {
+    "source": "wtf",
+    "target": "***"
+  },
+  {
+    "source": "lmfao",
+    "target": "***"
+  },
+  {
+    "source": "son of a bitch",
+    "target": "***"
+  },
+  {
+    "source": "piece of shit",
+    "target": "***"
+  },
+  {
+    "source": "fuck off",
+    "target": "***"
+  },
+  {
+    "source": "eat shit",
+    "target": "***"
+  },
+  {
+    "source": "kiss my ass",
+    "target": "***"
+  },
+  {
+    "source": "go to hell",
+    "target": "***"
+  },
+  {
+    "source": "сука",
+    "target": "***"
+  },
+  {
+    "source": "суки",
+    "target": "***"
+  },
+  {
+    "source": "сучка",
+    "target": "***"
+  },
+  {
+    "source": "сучара",
+    "target": "***"
+  },
+  {
+    "source": "блядь",
+    "target": "***"
+  },
+  {
+    "source": "бляди",
+    "target": "***"
+  },
+  {
+    "source": "блять",
+    "target": "***"
+  },
+  {
+    "source": "бля",
+    "target": "***"
+  },
+  {
+    "source": "бляха",
+    "target": "***"
+  },
+  {
+    "source": "хуй",
+    "target": "***"
+  },
+  {
+    "source": "хуя",
+    "target": "***"
+  },
+  {
+    "source": "хуе",
+    "target": "***"
+  },
+  {
+    "source": "хуи",
+    "target": "***"
+  },
+  {
+    "source": "хуё",
+    "target": "***"
+  },
+  {
+    "source": "хуёво",
+    "target": "***"
+  },
+  {
+    "source": "хуево",
+    "target": "***"
+  },
+  {
+    "source": "хуйня",
+    "target": "***"
+  },
+  {
+    "source": "хуйло",
+    "target": "***"
+  },
+  {
+    "source": "хуесос",
+    "target": "***"
+  },
+  {
+    "source": "хуесоска",
+    "target": "***"
+  },
+  {
+    "source": "хуесосить",
+    "target": "***"
+  },
+  {
+    "source": "хуярить",
+    "target": "***"
+  },
+  {
+    "source": "хуярит",
+    "target": "***"
+  },
+  {
+    "source": "охуенный",
+    "target": "***"
+  },
+  {
+    "source": "охуенно",
+    "target": "***"
+  },
+  {
+    "source": "охуевший",
+    "target": "***"
+  },
+  {
+    "source": "охуительная",
+    "target": "***"
+  },
+  {
+    "source": "охренеть",
+    "target": "***"
+  },
+  {
+    "source": "нихуя",
+    "target": "***"
+  },
+  {
+    "source": "нихрена",
+    "target": "***"
+  },
+  {
+    "source": "хрен",
+    "target": "***"
+  },
+  {
+    "source": "хрень",
+    "target": "***"
+  },
+  {
+    "source": "нахуй",
+    "target": "***"
+  },
+  {
+    "source": "похуй",
+    "target": "***"
+  },
+  {
+    "source": "охуеть",
+    "target": "***"
+  },
+  {
+    "source": "охуел",
+    "target": "***"
+  },
+  {
+    "source": "дохуя",
+    "target": "***"
+  },
+  {
+    "source": "пизда",
+    "target": "***"
+  },
+  {
+    "source": "пизде",
+    "target": "***"
+  },
+  {
+    "source": "пизду",
+    "target": "***"
+  },
+  {
+    "source": "пизды",
+    "target": "***"
+  },
+  {
+    "source": "пиздец",
+    "target": "***"
+  },
+  {
+    "source": "пизд",
+    "target": "***"
+  },
+  {
+    "source": "пиздюк",
+    "target": "***"
+  },
+  {
+    "source": "пиздить",
+    "target": "***"
+  },
+  {
+    "source": "спиздил",
+    "target": "***"
+  },
+  {
+    "source": "спиздить",
+    "target": "***"
+  },
+  {
+    "source": "распиздяй",
+    "target": "***"
+  },
+  {
+    "source": "распиздяйство",
+    "target": "***"
+  },
+  {
+    "source": "ебан",
+    "target": "***"
+  },
+  {
+    "source": "ёбан",
+    "target": "***"
+  },
+  {
+    "source": "ебать",
+    "target": "***"
+  },
+  {
+    "source": "ебал",
+    "target": "***"
+  },
+  {
+    "source": "ебала",
+    "target": "***"
+  },
+  {
+    "source": "ебало",
+    "target": "***"
+  },
+  {
+    "source": "ебаный",
+    "target": "***"
+  },
+  {
+    "source": "ебану",
+    "target": "***"
+  },
+  {
+    "source": "ебанутый",
+    "target": "***"
+  },
+  {
+    "source": "ебанутая",
+    "target": "***"
+  },
+  {
+    "source": "ебануть",
+    "target": "***"
+  },
+  {
+    "source": "ебись",
+    "target": "***"
+  },
+  {
+    "source": "ебиська",
+    "target": "***"
+  },
+  {
+    "source": "ебучий",
+    "target": "***"
+  },
+  {
+    "source": "ебучая",
+    "target": "***"
+  },
+  {
+    "source": "ебучее",
+    "target": "***"
+  },
+  {
+    "source": "ебучка",
+    "target": "***"
+  },
+  {
+    "source": "ебошить",
+    "target": "***"
+  },
+  {
+    "source": "ебошит",
+    "target": "***"
+  },
+  {
+    "source": "уеб",
+    "target": "***"
+  },
+  {
+    "source": "заеб",
+    "target": "***"
+  },
+  {
+    "source": "заебал",
+    "target": "***"
+  },
+  {
+    "source": "заебись",
+    "target": "***"
+  },
+  {
+    "source": "отъебись",
+    "target": "***"
+  },
+  {
+    "source": "выеб",
+    "target": "***"
+  },
+  {
+    "source": "долбоеб",
+    "target": "***"
+  },
+  {
+    "source": "долбаеб",
+    "target": "***"
+  },
+  {
+    "source": "залупа",
+    "target": "***"
+  },
+  {
+    "source": "залупоглазый",
+    "target": "***"
+  },
+  {
+    "source": "манда",
+    "target": "***"
+  },
+  {
+    "source": "мандавошка",
+    "target": "***"
+  },
+  {
+    "source": "шлюха",
+    "target": "***"
+  },
+  {
+    "source": "проститутка",
+    "target": "***"
+  },
+  {
+    "source": "урод",
+    "target": "***"
+  },
+  {
+    "source": "ублюдок",
+    "target": "***"
+  },
+  {
+    "source": "дебил",
+    "target": "***"
+  },
+  {
+    "source": "идиот",
+    "target": "***"
+  },
+  {
+    "source": "мудак",
+    "target": "***"
+  },
+  {
+    "source": "мудаки",
+    "target": "***"
+  },
+  {
+    "source": "мудила",
+    "target": "***"
+  },
+  {
+    "source": "гнида",
+    "target": "***"
+  },
+  {
+    "source": "сволочь",
+    "target": "***"
+  },
+  {
+    "source": "подонок",
+    "target": "***"
+  },
+  {
+    "source": "мразь",
+    "target": "***"
+  },
+  {
+    "source": "скотина",
+    "target": "***"
+  },
+  {
+    "source": "тварь",
+    "target": "***"
+  },
+  {
+    "source": "чмо",
+    "target": "***"
+  },
+  {
+    "source": "говно",
+    "target": "***"
+  },
+  {
+    "source": "говён",
+    "target": "***"
+  },
+  {
+    "source": "говен",
+    "target": "***"
+  },
+  {
+    "source": "дерьмо",
+    "target": "***"
+  },
+  {
+    "source": "жопа",
+    "target": "***"
+  },
+  {
+    "source": "жопу",
+    "target": "***"
+  },
+  {
+    "source": "жопе",
+    "target": "***"
+  },
+  {
+    "source": "задница",
+    "target": "***"
+  },
+  {
+    "source": "сраный",
+    "target": "***"
+  },
+  {
+    "source": "срань",
+    "target": "***"
+  },
+  {
+    "source": "срать",
+    "target": "***"
+  },
+  {
+    "source": "насрать",
+    "target": "***"
+  },
+  {
+    "source": "чёрт",
+    "target": "***"
+  },
+  {
+    "source": "черт",
+    "target": "***"
+  },
+  {
+    "source": "くそ",
+    "target": "***"
+  },
+  {
+    "source": "クソ",
+    "target": "***"
+  },
+  {
+    "source": "クソが",
+    "target": "***"
+  },
+  {
+    "source": "クソくらえ",
+    "target": "***"
+  },
+  {
+    "source": "糞",
+    "target": "***"
+  },
+  {
+    "source": "ばか",
+    "target": "***"
+  },
+  {
+    "source": "馬鹿",
+    "target": "***"
+  },
+  {
+    "source": "アホ",
+    "target": "***"
+  },
+  {
+    "source": "アホンダラ",
+    "target": "***"
+  },
+  {
+    "source": "ボケ",
+    "target": "***"
+  },
+  {
+    "source": "ボケナス",
+    "target": "***"
+  },
+  {
+    "source": "ボケ野郎",
+    "target": "***"
+  },
+  {
+    "source": "ババア",
+    "target": "***"
+  },
+  {
+    "source": "ジジイ",
+    "target": "***"
+  },
+  {
+    "source": "死ね",
+    "target": "***"
+  },
+  {
+    "source": "死ねよ",
+    "target": "***"
+  },
+  {
+    "source": "死ねぇ",
+    "target": "***"
+  },
+  {
+    "source": "死ねや",
+    "target": "***"
+  },
+  {
+    "source": "しね",
+    "target": "***"
+  },
+  {
+    "source": "殺す",
+    "target": "***"
+  },
+  {
+    "source": "畜生",
+    "target": "***"
+  },
+  {
+    "source": "ちくしょう",
+    "target": "***"
+  },
+  {
+    "source": "チクショウ",
+    "target": "***"
+  },
+  {
+    "source": "うざい",
+    "target": "***"
+  },
+  {
+    "source": "ウザイ",
+    "target": "***"
+  },
+  {
+    "source": "キモい",
+    "target": "***"
+  },
+  {
+    "source": "きもい",
+    "target": "***"
+  },
+  {
+    "source": "ブス",
+    "target": "***"
+  },
+  {
+    "source": "ブサイク",
+    "target": "***"
+  },
+  {
+    "source": "デブ",
+    "target": "***"
+  },
+  {
+    "source": "クズ",
+    "target": "***"
+  },
+  {
+    "source": "カス",
+    "target": "***"
+  },
+  {
+    "source": "ゴミ",
+    "target": "***"
+  },
+  {
+    "source": "ファック",
+    "target": "***"
+  },
+  {
+    "source": "ファッカー",
+    "target": "***"
+  },
+  {
+    "source": "シット",
+    "target": "***"
+  },
+  {
+    "source": "ビッチ",
+    "target": "***"
+  },
+  {
+    "source": "クソ野郎",
+    "target": "***"
+  },
+  {
+    "source": "くそ野郎",
+    "target": "***"
+  },
+  {
+    "source": "씨발",
+    "target": "***"
+  },
+  {
+    "source": "시발",
+    "target": "***"
+  },
+  {
+    "source": "씨팔",
+    "target": "***"
+  },
+  {
+    "source": "씨발놈",
+    "target": "***"
+  },
+  {
+    "source": "씨발년",
+    "target": "***"
+  },
+  {
+    "source": "좆",
+    "target": "***"
+  },
+  {
+    "source": "좃",
+    "target": "***"
+  },
+  {
+    "source": "좆같다",
+    "target": "***"
+  },
+  {
+    "source": "좆같은",
+    "target": "***"
+  },
+  {
+    "source": "개새끼",
+    "target": "***"
+  },
+  {
+    "source": "개새",
+    "target": "***"
+  },
+  {
+    "source": "개놈",
+    "target": "***"
+  },
+  {
+    "source": "개년",
+    "target": "***"
+  },
+  {
+    "source": "새끼",
+    "target": "***"
+  },
+  {
+    "source": "병신",
+    "target": "***"
+  },
+  {
+    "source": "븅신",
+    "target": "***"
+  },
+  {
+    "source": "병맛",
+    "target": "***"
+  },
+  {
+    "source": "염병",
+    "target": "***"
+  },
+  {
+    "source": "지랄",
+    "target": "***"
+  },
+  {
+    "source": "닥쳐",
+    "target": "***"
+  },
+  {
+    "source": "꺼져",
+    "target": "***"
+  },
+  {
+    "source": "미친",
+    "target": "***"
+  },
+  {
+    "source": "미친놈",
+    "target": "***"
+  },
+  {
+    "source": "미친년",
+    "target": "***"
+  },
+  {
+    "source": "미친새끼",
+    "target": "***"
+  },
+  {
+    "source": "엿",
+    "target": "***"
+  },
+  {
+    "source": "엿먹",
+    "target": "***"
+  },
+  {
+    "source": "엿먹어",
+    "target": "***"
+  },
+  {
+    "source": "보지",
+    "target": "***"
+  },
+  {
+    "source": "자지",
+    "target": "***"
+  },
+  {
+    "source": "섹스",
+    "target": "***"
+  },
+  {
+    "source": "他妈",
+    "target": "***"
+  },
+  {
+    "source": "他妈的",
+    "target": "***"
+  },
+  {
+    "source": "妈的",
+    "target": "***"
+  },
+  {
+    "source": "妈逼",
+    "target": "***"
+  },
+  {
+    "source": "去你妈",
+    "target": "***"
+  },
+  {
+    "source": "日你妈",
+    "target": "***"
+  },
+  {
+    "source": "死妈",
+    "target": "***"
+  },
+  {
+    "source": "操",
+    "target": "***"
+  },
+  {
+    "source": "操你",
+    "target": "***"
+  },
+  {
+    "source": "操蛋",
+    "target": "***"
+  },
+  {
+    "source": "草",
+    "target": "***"
+  },
+  {
+    "source": "草泥马",
+    "target": "***"
+  },
+  {
+    "source": "傻逼",
+    "target": "***"
+  },
+  {
+    "source": "傻B",
+    "target": "***"
+  },
+  {
+    "source": "傻屄",
+    "target": "***"
+  },
+  {
+    "source": "傻X",
+    "target": "***"
+  },
+  {
+    "source": "二逼",
+    "target": "***"
+  },
+  {
+    "source": "牛逼",
+    "target": "***"
+  },
+  {
+    "source": "SB",
+    "target": "***"
+  },
+  {
+    "source": "煞笔",
+    "target": "***"
+  },
+  {
+    "source": "沙比",
+    "target": "***"
+  },
+  {
+    "source": "白痴",
+    "target": "***"
+  },
+  {
+    "source": "混蛋",
+    "target": "***"
+  },
+  {
+    "source": "王八蛋",
+    "target": "***"
+  },
+  {
+    "source": "狗日的",
+    "target": "***"
+  },
+  {
+    "source": "狗屁",
+    "target": "***"
+  },
+  {
+    "source": "去死",
+    "target": "***"
+  },
+  {
+    "source": "滚",
+    "target": "***"
+  },
+  {
+    "source": "贱人",
+    "target": "***"
+  },
+  {
+    "source": "婊子",
+    "target": "***"
+  },
+  {
+    "source": "鸡巴",
+    "target": "***"
+  },
+  {
+    "source": "屌",
+    "target": "***"
+  },
+  {
+    "source": "屁",
+    "target": "***"
+  },
+  {
+    "source": "卧槽",
+    "target": "***"
+  },
+  {
+    "source": "我操",
+    "target": "***"
+  },
+  {
+    "source": "尼玛",
+    "target": "***"
+  },
+  {
+    "source": "你妹",
+    "target": "***"
+  },
+  {
+    "source": "靠",
+    "target": "***"
+  },
+  {
+    "source": "肏",
+    "target": "***"
+  }
 ]

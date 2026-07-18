@@ -86,3 +86,37 @@ export function extractPrimaryFontFamily(chain: string): string {
   const bare = str.split(",")[0]?.trim();
   return bare || "";
 }
+
+function fontFamilyKey(token: string): string {
+  return extractPrimaryFontFamily(token).replace(/"/g, "").trim().toLowerCase();
+}
+
+/**
+ * Replace only the primary face in a CSS font-family stack, keeping the rest
+ * of the fallback chain (critical for Latin/JP + Cyrillic dual-script presets).
+ */
+export function replacePrimaryFontFamily(chain: string, newPrimaryFamily: string): string {
+  const incoming = String(newPrimaryFamily || "").trim();
+  if (!incoming) return String(chain || "");
+
+  const rest = String(chain || "")
+    .split(",")
+    .slice(1)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  const primaryToken = incoming.includes(",")
+    ? extractPrimaryFontFamily(incoming)
+    : incoming;
+  const normalizedPrimary = primaryToken.startsWith('"')
+    ? primaryToken
+    : `"${primaryToken.replace(/"/g, "")}"`;
+  const primaryKey = fontFamilyKey(normalizedPrimary);
+
+  const filteredRest = rest.filter((part) => {
+    const key = fontFamilyKey(part);
+    return Boolean(key) && key !== primaryKey;
+  });
+
+  return [normalizedPrimary, ...filteredRest].join(", ");
+}

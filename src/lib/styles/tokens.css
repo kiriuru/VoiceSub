@@ -1,4 +1,7 @@
 :root {
+  /* Match dark UI so <dialog> CanvasText / form controls are not black-on-dark. */
+  color-scheme: dark;
+
   /* Legacy SST aliases (kept for gradual migration) */
   --sst-bg: #080a12;
   --sst-panel: rgba(16, 18, 26, 0.62);

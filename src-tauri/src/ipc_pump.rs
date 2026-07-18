@@ -13,6 +13,7 @@ use tauri::{AppHandle, Emitter};
 use tokio::sync::broadcast;
 use tokio::time::{Instant, Sleep};
 use tracing::warn;
+use voicesub_asr_local::LOCAL_ASR_WINDOW_LABEL;
 use voicesub_runtime::RuntimeService;
 use voicesub_tts::{TTS_WINDOW_LABEL, TtsSpeechPipeline};
 use voicesub_twitch::TwitchChatMessage;
@@ -40,18 +41,45 @@ pub fn overlay_ipc_coalesce_event(event_type: &str) -> bool {
 }
 
 fn emit_to_main(app: &AppHandle, payload: &Value) {
-    let _ = app.emit_to(event_routing::MAIN_WINDOW_LABEL, "runtime-event", payload);
+    if let Err(err) = app.emit_to(event_routing::MAIN_WINDOW_LABEL, "runtime-event", payload) {
+        warn!(
+            target: "voicesub.ipc_pump",
+            error = %err,
+            "runtime-event emit_to(main) failed"
+        );
+    }
 }
 
 fn emit_to_tts_if_wanted(app: &AppHandle, event_type: &str, payload: &Value) {
-    if event_routing::tts_window_wants(event_type) {
-        let _ = app.emit_to(TTS_WINDOW_LABEL, "runtime-event", payload);
+    if event_routing::tts_window_wants(event_type)
+        && let Err(err) = app.emit_to(TTS_WINDOW_LABEL, "runtime-event", payload)
+    {
+        warn!(
+            target: "voicesub.ipc_pump",
+            error = %err,
+            event_type,
+            "runtime-event emit_to(tts) failed"
+        );
+    }
+}
+
+fn emit_to_local_asr_if_wanted(app: &AppHandle, event_type: &str, payload: &Value) {
+    if event_routing::local_asr_window_wants(event_type)
+        && let Err(err) = app.emit_to(LOCAL_ASR_WINDOW_LABEL, "runtime-event", payload)
+    {
+        warn!(
+            target: "voicesub.ipc_pump",
+            error = %err,
+            event_type,
+            "runtime-event emit_to(local-asr) failed"
+        );
     }
 }
 
 fn emit_runtime_event_immediate(app: &AppHandle, event_type: &str, payload: &Value) {
     emit_to_main(app, payload);
     emit_to_tts_if_wanted(app, event_type, payload);
+    emit_to_local_asr_if_wanted(app, event_type, payload);
 }
 
 struct IpcPumpState {
@@ -60,6 +88,7 @@ struct IpcPumpState {
     overlay_timer_active: bool,
     last_lag_resync: Option<Instant>,
     lag_resync_in_flight: Arc<AtomicBool>,
+    lag_resync_pending: Arc<AtomicBool>,
 }
 
 impl IpcPumpState {
@@ -74,6 +103,7 @@ impl IpcPumpState {
             overlay_timer_active: false,
             last_lag_resync: None,
             lag_resync_in_flight: Arc::new(AtomicBool::new(false)),
+            lag_resync_pending: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -91,6 +121,17 @@ impl IpcPumpState {
         if let Some(message) = self.overlay_pending.take() {
             emit_to_main(app, message.as_ref());
         }
+        self.deactivate_overlay_timer();
+    }
+
+    /// Drop a pending coalesced frame without emitting — used on bus lag so a
+    /// later timer cannot overwrite a fresher snapshot resync.
+    fn discard_overlay(&mut self) {
+        self.overlay_pending = None;
+        self.deactivate_overlay_timer();
+    }
+
+    fn deactivate_overlay_timer(&mut self) {
         self.overlay_timer
             .as_mut()
             .reset(Instant::now() + Duration::from_secs(3600));
@@ -122,53 +163,87 @@ fn apply_pipeline_side_effects(pipeline: &TtsSpeechPipeline, event_type: &str, m
     }
 }
 
-fn lag_resync_debounced(state: &IpcPumpState) -> bool {
-    if state.lag_resync_in_flight.load(Ordering::Acquire) {
-        return true;
-    }
-    let now = Instant::now();
-    let debounce = Duration::from_millis(LAG_RESYNC_DEBOUNCE_MS);
-    if state
-        .last_lag_resync
-        .is_some_and(|previous| now.duration_since(previous) < debounce)
-    {
-        return true;
-    }
-    false
-}
-
-fn mark_lag_resync_started(state: &mut IpcPumpState) {
-    state.last_lag_resync = Some(Instant::now());
-    state.lag_resync_in_flight.store(true, Ordering::Release);
-}
-
 fn spawn_lag_snapshot_resync(
     app: AppHandle,
     runtime: Arc<RuntimeService>,
     pipeline: Arc<TtsSpeechPipeline>,
     lag_resync_in_flight: Arc<AtomicBool>,
+    lag_resync_pending: Arc<AtomicBool>,
     skipped: u64,
 ) {
     tokio::spawn(async move {
-        warn!(skipped, "runtime event bus lagged; resyncing snapshot");
-        let snapshot = runtime.runtime_state_snapshot().await;
-        if let Some(running) = snapshot
-            .runtime
-            .get("running")
-            .or_else(|| snapshot.runtime.get("is_running"))
-            .and_then(|value| value.as_bool())
-        {
-            pipeline.set_runtime_active(running);
+        let mut skipped = skipped;
+        loop {
+            // Consume the demand we are about to serve.
+            lag_resync_pending.store(false, Ordering::Release);
+            warn!(skipped, "runtime event bus lagged; resyncing snapshot");
+            let snapshot = runtime.runtime_state_snapshot().await;
+            if let Some(running) = snapshot
+                .runtime
+                .get("running")
+                .or_else(|| snapshot.runtime.get("is_running"))
+                .and_then(|value| value.as_bool())
+            {
+                pipeline.set_runtime_active(running);
+            }
+            for envelope in event_routing::snapshot_to_envelopes(&snapshot) {
+                let event_type = envelope
+                    .get("type")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or("");
+                emit_runtime_event_immediate(&app, event_type, &envelope);
+            }
+            if lag_resync_pending.load(Ordering::Acquire) {
+                // Coalesce stampeding lags into one follow-up snapshot.
+                tokio::time::sleep(Duration::from_millis(LAG_RESYNC_DEBOUNCE_MS)).await;
+                skipped = 0;
+                continue;
+            }
+            lag_resync_in_flight.store(false, Ordering::Release);
+            // Recover the race where Lagged set pending after our load and before
+            // in_flight was cleared (or while CAS on the pump side failed).
+            if lag_resync_pending.load(Ordering::Acquire)
+                && lag_resync_in_flight
+                    .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+                    .is_ok()
+            {
+                skipped = 0;
+                continue;
+            }
+            break;
         }
-        for envelope in event_routing::snapshot_to_envelopes(&snapshot) {
-            let event_type = envelope
-                .get("type")
-                .and_then(|value| value.as_str())
-                .unwrap_or("");
-            emit_runtime_event_immediate(&app, event_type, &envelope);
-        }
-        lag_resync_in_flight.store(false, Ordering::Release);
     });
+}
+
+fn request_lag_resync(
+    state: &mut IpcPumpState,
+    app: &AppHandle,
+    runtime: &Arc<RuntimeService>,
+    pipeline: &Arc<TtsSpeechPipeline>,
+    skipped: u64,
+) {
+    // Always remember that a resync is required; never drop the last needed sync.
+    state.lag_resync_pending.store(true, Ordering::Release);
+    if state
+        .lag_resync_in_flight
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .is_err()
+    {
+        warn!(
+            skipped,
+            "runtime event bus lagged; resync queued (in flight)"
+        );
+        return;
+    }
+    state.last_lag_resync = Some(Instant::now());
+    spawn_lag_snapshot_resync(
+        app.clone(),
+        runtime.clone(),
+        pipeline.clone(),
+        state.lag_resync_in_flight.clone(),
+        state.lag_resync_pending.clone(),
+        skipped,
+    );
 }
 
 pub async fn run_runtime_event_ipc_pump(
@@ -208,22 +283,10 @@ pub async fn run_runtime_event_ipc_pump(
                     }
                     Err(broadcast::error::RecvError::Lagged(skipped)) => {
                         runtime.record_event_bus_consumer_lagged(skipped);
-                        if lag_resync_debounced(&state) {
-                            warn!(
-                                skipped,
-                                "runtime event bus lagged; resync skipped (debounced or in flight)"
-                            );
-                            continue;
-                        }
-                        state.flush_overlay(&app);
-                        mark_lag_resync_started(&mut state);
-                        spawn_lag_snapshot_resync(
-                            app.clone(),
-                            runtime.clone(),
-                            pipeline.clone(),
-                            state.lag_resync_in_flight.clone(),
-                            skipped,
-                        );
+                        // Never keep a coalesced frame across lag: its timer could fire
+                        // after snapshot resync and regress the dashboard overlay.
+                        state.discard_overlay();
+                        request_lag_resync(&mut state, &app, &runtime, &pipeline, skipped);
                     }
                     Err(broadcast::error::RecvError::Closed) => {
                         state.flush_overlay(&app);

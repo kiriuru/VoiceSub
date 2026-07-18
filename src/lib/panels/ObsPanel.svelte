@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy } from "svelte";
   import { openLocalUrl } from "../api";
   import { locale, t } from "../i18n";
   import { obsStatusMessage } from "../diagnostics";
@@ -11,10 +12,7 @@
   export let onChange: (next: ConfigPayload) => void;
 
   $: loc = $locale;
-  function tr(key: string, vars?: Record<string, string>) {
-    loc;
-    return t(key, vars);
-  }
+  $: tr = (key: string, vars?: Record<string, string>) => t(key, vars, loc);
 
   $: obs = (config.obs_closed_captions || {}) as {
     enabled?: boolean;
@@ -33,8 +31,16 @@
 
   let copied = false;
   let showPassword = false;
+  let copyFlashTimer: ReturnType<typeof setTimeout> | null = null;
 
   $: statusText = obsStatusMessage(obs.enabled === true, obsDiagnostics, tr);
+
+  onDestroy(() => {
+    if (copyFlashTimer !== null) {
+      clearTimeout(copyFlashTimer);
+      copyFlashTimer = null;
+    }
+  });
 
   const outputModes = [
     "disabled",
@@ -70,7 +76,11 @@
     try {
       await navigator.clipboard.writeText(overlayUrl);
       copied = true;
-      setTimeout(() => (copied = false), 1200);
+      if (copyFlashTimer !== null) clearTimeout(copyFlashTimer);
+      copyFlashTimer = setTimeout(() => {
+        copied = false;
+        copyFlashTimer = null;
+      }, 1200);
     } catch {
       // ignore
     }

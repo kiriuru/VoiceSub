@@ -86,7 +86,7 @@ const voicesubExtras = {
   "translation.dispatcher.queue_max_size": "Maximum queued jobs",
   "translation.dispatcher.max_concurrent_jobs": "Maximum parallel jobs",
   "translation.dispatcher.note":
-    "Increase timeout for slow providers. Higher parallelism uses more API quota.",
+    "Increase timeout for slow providers. LM Studio / Ollama automatically get at least 120s for JIT model load. Higher parallelism uses more API quota.",
   "translation.provider_limits.eyebrow": "Provider limits",
   "translation.provider_limits.title": "Per-provider dispatcher limits",
   "translation.provider_limits.max_concurrent_targets": "Max concurrent targets",

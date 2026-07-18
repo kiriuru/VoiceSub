@@ -3,6 +3,7 @@
   import SubtitleOutputPreview from "../components/SubtitleOutputPreview.svelte";
   import { locale, t } from "../i18n";
   import { fontOptions } from "../font-catalog";
+  import { CONTAINER_ONLY_STYLE_FIELDS } from "../style-field-utils";
   import {
     applyPresetToLineSlot,
     applyStylePreset,
@@ -167,7 +168,9 @@
       <h3>{tr("style.base.title")}</h3>
       <p class="muted">{tr("style.base.note")}</p>
     </div>
-    <StyleFieldGroup {tr} {fonts} read={readBase} write={patchBase} />
+    {#key activePreset}
+      <StyleFieldGroup {tr} {fonts} read={readBase} write={patchBase} />
+    {/key}
   </div>
 
   <div class="style-surface stack">
@@ -212,13 +215,16 @@
     </label>
 
     {#if slotEnabled}
-      <StyleFieldGroup
-        {tr}
-        {fonts}
-        allowInheritFont
-        read={readSlot}
-        write={patchSlotField}
-      />
+      {#key `${activeSlot}:${activePreset}:${slotPresetPick}`}
+        <StyleFieldGroup
+          {tr}
+          {fonts}
+          allowInheritFont
+          hiddenFields={[...CONTAINER_ONLY_STYLE_FIELDS]}
+          read={readSlot}
+          write={patchSlotField}
+        />
+      {/key}
     {/if}
   </div>
 </section>
@@ -231,10 +237,16 @@
   }
 
   .style-surface {
+    display: grid;
+    gap: var(--space-3);
     padding: var(--space-3);
     border-radius: var(--radius-md);
     border: 1px solid var(--line);
     background: rgb(255 255 255 / 0.02);
+  }
+
+  .style-surface :global(.style-field-group) {
+    margin-top: 0;
   }
 
   .slot-surface-header {

@@ -36,7 +36,7 @@ impl CacheState {
         Self {
             entries: HashMap::new(),
             order: VecDeque::new(),
-            max_entries: max_entries.max(1),
+            max_entries,
             enabled: true,
             persist: cache_file.is_some(),
             dirty: false,
@@ -141,6 +141,21 @@ impl CacheState {
         Ok(())
     }
 
+    fn flush_dirty(&mut self) {
+        if !self.persist || !self.dirty {
+            return;
+        }
+        let Some(path) = self.cache_file.clone() else {
+            return;
+        };
+        let snapshot = self.entries.clone();
+        self.dirty = false;
+        if let Err(err) = Self::write_atomic(&path, &snapshot) {
+            warn!(?err, "translation cache flush failed");
+            self.dirty = true;
+        }
+    }
+
     fn maybe_flush(&mut self) {
         if !self.persist || !self.dirty {
             return;
@@ -152,15 +167,7 @@ impl CacheState {
             return;
         }
         self.last_flush_scheduled = Some(now);
-        let Some(path) = self.cache_file.clone() else {
-            return;
-        };
-        let snapshot = self.entries.clone();
-        self.dirty = false;
-        if let Err(err) = Self::write_atomic(&path, &snapshot) {
-            warn!(?err, "translation cache flush failed");
-            self.dirty = true;
-        }
+        self.flush_dirty();
     }
 }
 
@@ -210,7 +217,7 @@ impl TranslationCache {
         }
         state.enabled = true;
         if let Some(max) = max_entries {
-            state.max_entries = max.max(1);
+            state.max_entries = max;
             state.evict_locked();
         }
         if !persist {
@@ -222,25 +229,32 @@ impl TranslationCache {
     }
 
     #[cfg(test)]
-    fn flush_now(&self) {
+    pub fn flush_now(&self) {
         let mut state = self.state.lock().expect("cache lock");
-        if !state.persist || !state.dirty {
-            return;
-        }
-        let Some(path) = state.cache_file.clone() else {
-            return;
-        };
-        let snapshot = state.entries.clone();
-        state.dirty = false;
-        if let Err(err) = CacheState::write_atomic(&path, &snapshot) {
-            warn!(?err, "translation cache flush_now failed");
-            state.dirty = true;
-        }
+        state.flush_dirty();
     }
 
     pub fn enabled(&self) -> bool {
         self.state.lock().expect("cache lock").enabled
     }
+}
+
+impl Drop for TranslationCache {
+    fn drop(&mut self) {
+        if let Ok(mut state) = self.state.lock() {
+            state.flush_dirty();
+        }
+    }
+}
+
+/// Stable FNV-1a 64-bit hash for cache key text (keeps keys short on disk).
+fn hash_text(text: &str) -> String {
+    let mut hash: u64 = 0xcbf29ce484222325;
+    for byte in text.as_bytes() {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    format!("{hash:016x}:{}", text.len())
 }
 
 pub fn cache_key(
@@ -249,7 +263,10 @@ pub fn cache_key(
     target_lang: &str,
     source_text: &str,
 ) -> String {
-    format!("{provider}::{source_lang}::{target_lang}::{source_text}")
+    format!(
+        "{provider}::{source_lang}::{target_lang}::{}",
+        hash_text(source_text)
+    )
 }
 
 #[cfg(test)]
@@ -302,5 +319,23 @@ mod tests {
             Some("bonjour".into())
         );
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn max_entries_zero_disables_inserts() {
+        let cache = TranslationCache::with_dir(None, 0);
+        cache.insert("a".into(), "1".into());
+        assert_eq!(cache.get("a"), None);
+    }
+
+    #[test]
+    fn cache_key_is_stable_and_compact() {
+        let key = cache_key("stub", "en", "fr", "hello world");
+        assert!(key.starts_with("stub::en::fr::"));
+        assert!(!key.contains("hello world"));
+        assert_eq!(
+            cache_key("stub", "en", "fr", "hello world"),
+            cache_key("stub", "en", "fr", "hello world")
+        );
     }
 }

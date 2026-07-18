@@ -12,15 +12,13 @@ const baseConfig = (): ConfigPayload => ({
 });
 
 describe("config restart reasons", () => {
-  it("detects full logging toggle", () => {
+  it("does not require restart for full logging toggle (applied live on save)", () => {
     const previous = baseConfig();
     const next = {
       ...baseConfig(),
       logging: { full_enabled: true },
     };
-    expect(getRestartRequiredReasons(previous, next)).toEqual([
-      "config.restart_reason.full_logging",
-    ]);
+    expect(getRestartRequiredReasons(previous, next)).toEqual([]);
   });
 
   it("detects web speech language change", () => {
@@ -37,11 +35,10 @@ describe("config restart reasons", () => {
   it("builds restart warning when runtime is running", () => {
     const message = buildSaveStatusMessage(
       true,
-      ["config.restart_reason.full_logging"],
+      ["config.restart_reason.web_speech_language"],
       { running: true },
       "en",
     );
-    expect(message).toContain("full diagnostic logging");
     expect(message).toContain("after Stop/Start");
   });
 });

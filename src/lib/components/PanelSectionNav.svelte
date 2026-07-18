@@ -62,10 +62,33 @@
     scrollToSection(section.id);
   }
 
+  function findScrollRoot(sectionId: string): Element | null {
+    const el = document.getElementById(sectionId);
+    if (!el) return null;
+    let node: HTMLElement | null = el.parentElement;
+    while (node && node !== document.documentElement) {
+      if (
+        node.classList.contains("standard-content") ||
+        node.classList.contains("compact-content-scroll")
+      ) {
+        return node;
+      }
+      const style = getComputedStyle(node);
+      const overflowY = style.overflowY;
+      if (overflowY === "auto" || overflowY === "scroll" || overflowY === "overlay") {
+        return node;
+      }
+      node = node.parentElement;
+    }
+    return null;
+  }
+
   function mountObserver(nodeSections: PanelSection[]) {
     observer?.disconnect();
     observer = null;
     if (navMode !== "scroll" || !nodeSections.length) return;
+
+    const scrollRoot = findScrollRoot(nodeSections[0].id);
 
     observer = new IntersectionObserver(
       (entries) => {
@@ -75,7 +98,11 @@
         const top = visible[0]?.target.id;
         if (top) setScrollActiveSection(top, true);
       },
-      { root: null, rootMargin: "-20% 0px -55% 0px", threshold: [0.12, 0.4, 0.7] },
+      {
+        root: scrollRoot,
+        rootMargin: "-20% 0px -55% 0px",
+        threshold: [0.12, 0.4, 0.7],
+      },
     );
 
     for (const section of nodeSections) {

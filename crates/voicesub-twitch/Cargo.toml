@@ -17,6 +17,7 @@ webpki-roots = "0.26"
 reqwest = { workspace = true }
 emojis = "0.8"
 regex = { version = "1", default-features = false, features = ["std", "unicode"] }
+aho-corasick = "1"
 whatlang = "0.16"
 lingua = { version = "1.8", default-features = false, features = [
     "english",

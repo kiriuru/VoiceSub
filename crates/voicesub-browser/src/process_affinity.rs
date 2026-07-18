@@ -32,6 +32,9 @@ fn parse_usize_env(name: &str) -> Option<usize> {
 }
 
 /// Resolve affinity mask for the browser worker process.
+///
+/// Opt-in: requires `VOICESUB_BROWSER_AFFINITY=1` (or truthy), or an explicit
+/// `VOICESUB_BROWSER_AFFINITY_MASK`. Disabled by default.
 pub fn resolve_browser_worker_affinity_mask() -> Option<usize> {
     if env_truthy(ENV_AFFINITY) == Some(false) {
         return None;
@@ -39,6 +42,11 @@ pub fn resolve_browser_worker_affinity_mask() -> Option<usize> {
 
     if let Some(mask) = parse_usize_env(ENV_AFFINITY_MASK) {
         return (mask > 0).then_some(mask);
+    }
+
+    // Default off unless explicitly enabled.
+    if env_truthy(ENV_AFFINITY) != Some(true) {
+        return None;
     }
 
     let exclude_low = parse_usize_env(ENV_EXCLUDE_LOW).unwrap_or(2);
@@ -117,19 +125,21 @@ mod tests {
             std::env::remove_var(ENV_AFFINITY);
             std::env::remove_var(ENV_AFFINITY_MASK);
             std::env::remove_var(ENV_EXCLUDE_LOW);
-
+        }
+        // Default: affinity disabled.
+        assert!(resolve_browser_worker_affinity_mask().is_none());
+        unsafe {
             std::env::set_var(ENV_AFFINITY, "0");
         }
         assert!(resolve_browser_worker_affinity_mask().is_none());
         unsafe {
             std::env::remove_var(ENV_AFFINITY);
-
             std::env::set_var(ENV_AFFINITY_MASK, "0xFC");
         }
         assert_eq!(resolve_browser_worker_affinity_mask(), Some(0xFC));
         unsafe {
             std::env::remove_var(ENV_AFFINITY_MASK);
-
+            std::env::set_var(ENV_AFFINITY, "1");
             std::env::set_var(ENV_EXCLUDE_LOW, "2");
         }
         let cores = std::thread::available_parallelism()
@@ -142,6 +152,7 @@ mod tests {
             assert_eq!(mask & 0b11, 0);
         }
         unsafe {
+            std::env::remove_var(ENV_AFFINITY);
             std::env::remove_var(ENV_EXCLUDE_LOW);
         }
     }

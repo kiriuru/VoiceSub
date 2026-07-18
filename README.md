@@ -15,7 +15,7 @@
   <a href="./docs/CHANGELOG.en.md">Changelog</a>
 </p>
 
-VoiceSub is a Windows desktop app that turns speech into real-time subtitles with optional translation. Recognition runs through **Chrome/Edge Web Speech** or optional offline **Local ASR** (Parakeet / ONNX). Everything stays on your machine — default bind `127.0.0.1:8765`, no cloud backend, no accounts.
+VoiceSub is a Windows desktop app that turns speech into real-time subtitles with optional translation. Recognition runs through **Google Chrome Web Speech** or optional offline **Local ASR** (Parakeet / ONNX). Everything stays on your machine — default bind `127.0.0.1:8765`, no cloud backend, no accounts.
 
 Successor to SST Desktop `0.4.4`. First VoiceSub release: **`0.5.0`**. Current line: **`0.6.0`**.
 
@@ -25,8 +25,8 @@ Successor to SST Desktop `0.4.4`. First VoiceSub release: **`0.5.0`**. Current l
 
 | Area | What you get |
 | --- | --- |
-| **Speech** | Chrome/Edge Web Speech worker, or offline Local ASR (Parakeet / ONNX, CPU or CUDA) |
-| **Translation** | 13 providers, up to 5 translation lines |
+| **Speech** | Google Chrome Web Speech worker, or offline Local ASR (Parakeet / ONNX, CPU or CUDA) |
+| **Translation** | 17 providers (incl. Baidu / Youdao / Tencent / Caiyun), up to 5 translation lines |
 | **OBS** | Browser Source overlay + optional Closed Captions (WebSocket) |
 | **Style** | Animated presets, per-slot styling, theme palette |
 | **TTS** | Native / Sonic playback; subtitle speech + Twitch chat TTS (up to 5 channels) |
@@ -41,7 +41,7 @@ Compact phone-style layout is available for secondary monitors.
 
 - Windows 10 or 11 (x64)
 - **Microsoft Edge WebView2 Runtime** (usually preinstalled on Windows 11; the NSIS installer can bootstrap it on Windows 10)
-- **Google Chrome** or Edge — only for the Web Speech worker (not needed for Local ASR alone)
+- **Google Chrome** — only for the Web Speech worker (not needed for Local ASR alone)
 - Microphone access
 - Internet — optional for cloud translation providers; also used for first-time Local ASR model / ORT downloads
 

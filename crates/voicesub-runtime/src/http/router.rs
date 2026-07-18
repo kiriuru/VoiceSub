@@ -118,7 +118,6 @@ pub fn build_router(state: Arc<HttpState>) -> Router {
         .route("/live", get(live))
         .route("/", get(dashboard_index))
         .route("/google-asr", get(google_asr_page))
-        .route("/google-asr-edge", get(google_asr_edge_page))
         .route("/tts", get(tts_page))
         .route("/local-asr", get(local_asr_page))
         .route("/overlay", get(overlay_page))
@@ -170,10 +169,6 @@ async fn dashboard_index(State(state): State<Arc<HttpState>>) -> impl IntoRespon
 }
 
 async fn google_asr_page(State(state): State<Arc<HttpState>>) -> impl IntoResponse {
-    serve_trusted_worker_page(&state.paths, &state.loopback_auth)
-}
-
-async fn google_asr_edge_page(State(state): State<Arc<HttpState>>) -> impl IntoResponse {
     serve_trusted_worker_page(&state.paths, &state.loopback_auth)
 }
 

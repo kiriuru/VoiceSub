@@ -208,6 +208,10 @@ impl AsrWorkerHub {
                 }
             }
 
+            WsMessageType::Hello => {
+                // Server→worker hello is also recognized if echoed; no special handling.
+            }
+
             _ => {
                 warn!(
                     transport_id,

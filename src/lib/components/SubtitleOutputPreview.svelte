@@ -43,7 +43,14 @@
       return;
     }
 
-    renderer.render(previewEl, previewPayload, { surface: "dashboard" });
+    const result = renderer.render(previewEl, previewPayload, {
+      surface: "dashboard",
+    }) as { empty?: boolean } | undefined;
+    // Match OBS overlay contract: empty render must tear down fast-path state
+    // or the last subtitle frame / min-height shell can stick in the preview.
+    if (result?.empty) {
+      renderer.disposeRenderContainer?.(previewEl);
+    }
   }
 
   $: previewPayload, previewEl, loc, config, renderPreview();
@@ -64,7 +71,6 @@
   {#if showHeading}
     <div class="section-heading">
       <div>
-        <p class="eyebrow">{tr("overview.snapshot.eyebrow")}</p>
         <h2>{tr("overview.preview.title")}</h2>
       </div>
     </div>

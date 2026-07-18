@@ -34,6 +34,18 @@ export function uiConfigFromWsPayload(raw: unknown): ConfigPayload | null {
   return { ui: ui as ConfigPayload["ui"] };
 }
 
+/** Stable signature of presentation-only UI fields (theme/locale/font/layout/palette). */
+export function uiPresentationSignature(config: ConfigPayload | null | undefined): string {
+  const ui = (config?.ui || {}) as Record<string, unknown>;
+  return JSON.stringify({
+    language: ui.language ?? "",
+    theme: ui.theme ?? "",
+    layout: ui.layout ?? "",
+    font_family: ui.font_family ?? "",
+    palette: ui.palette ?? null,
+  });
+}
+
 function publishUiConfigBroadcastChannel(payload: ConfigPayload): void {
   if (typeof BroadcastChannel === "undefined") return;
   try {

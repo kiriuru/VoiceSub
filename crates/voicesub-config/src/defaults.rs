@@ -18,6 +18,7 @@ pub fn default_config_payload() -> Value {
             "layout": "standard",
             "show_translation_results": true,
             "theme": "dark",
+            "font_family": "",
             "palette": {
                 "accent": "#6cc7ff",
                 "accent_secondary": "#ff6ce6",

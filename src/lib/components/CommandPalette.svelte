@@ -16,18 +16,23 @@
   let selectedIndex = 0;
   let actionError = "";
   let inputEl: HTMLInputElement | null = null;
+  let previouslyFocused: HTMLElement | null = null;
 
   $: loc = $locale;
   $: tr = (key: string) => t(key, undefined, loc);
   $: allItems = buildCommandPaletteItems(handlers);
   $: filtered = filterCommandItems(allItems, query, tr);
   $: selectedIndex = Math.min(selectedIndex, Math.max(0, filtered.length - 1));
+  $: activeOptionId = filtered[selectedIndex] ? `command-palette-option-${filtered[selectedIndex].id}` : undefined;
 
   function close() {
     open = false;
     query = "";
     selectedIndex = 0;
     actionError = "";
+    const restore = previouslyFocused;
+    previouslyFocused = null;
+    queueMicrotask(() => restore?.focus?.());
   }
 
   async function runItem(item: CommandPaletteItem) {
@@ -48,11 +53,13 @@
 
     if (mod && key === "k") {
       event.preventDefault();
-      open = !open;
       if (open) {
-        queueMicrotask(() => inputEl?.focus());
-      } else {
         close();
+      } else {
+        previouslyFocused =
+          document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        open = true;
+        queueMicrotask(() => inputEl?.focus());
       }
       return;
     }
@@ -95,6 +102,8 @@
 
   onMount(() => {
     const onOpen = () => {
+      previouslyFocused =
+        document.activeElement instanceof HTMLElement ? document.activeElement : null;
       open = true;
       queueMicrotask(() => inputEl?.focus());
     };
@@ -128,6 +137,8 @@
           class="command-palette__input"
           type="search"
           placeholder={tr("command_palette.placeholder")}
+          aria-controls="command-palette-listbox"
+          aria-activedescendant={activeOptionId}
           bind:value={query}
           on:keydown={(e) => {
             e.stopPropagation();
@@ -142,10 +153,11 @@
         <kbd class="command-palette__kbd">Esc</kbd>
       </div>
 
-      <div class="command-palette__results" role="listbox">
+      <div id="command-palette-listbox" class="command-palette__results" role="listbox">
         {#each filtered as item, index (item.id)}
           <button
             type="button"
+            id={`command-palette-option-${item.id}`}
             class="command-palette__item"
             class:is-selected={index === selectedIndex}
             role="option"

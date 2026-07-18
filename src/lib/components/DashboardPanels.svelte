@@ -53,7 +53,7 @@
     />
   {:else if activeTab === "theme"}
 
-    <ThemePanel {config} onChange={onChange} />
+    <ThemePanel {config} {fontCatalog} onChange={onChange} />
   {:else if activeTab === "obs"}
 
     <ObsPanel

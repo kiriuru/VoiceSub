@@ -10,7 +10,8 @@ use voicesub_asr_local::{DepDownloadKind, LocalAsrConfig, CUDA_TOOLKIT_URL, Tran
 use super::state::HttpState;
 
 pub async fn local_asr_status(State(state): State<Arc<HttpState>>) -> Json<Value> {
-    let status = state.local_asr.refresh_status();
+    // Use cached snapshot when warm; cold path still scans deps once via refresh_status.
+    let status = state.local_asr.status();
     let diagnostics = state.local_asr.diagnostics();
     Json(json!({ "ok": true, "status": status, "diagnostics": diagnostics }))
 }
@@ -233,8 +234,10 @@ fn default_test_duration_ms() -> u64 {
 }
 
 pub async fn local_asr_mics_list(State(state): State<Arc<HttpState>>) -> Response {
-    match state.local_asr.list_microphones() {
-        Ok(devices) => Json(json!({ "ok": true, "devices": devices })).into_response(),
+    let service = Arc::clone(&state.local_asr);
+    match tokio::task::spawn_blocking(move || service.list_microphones()).await {
+        Ok(Ok(devices)) => Json(json!({ "ok": true, "devices": devices })).into_response(),
+        Ok(Err(err)) => Json(json!({ "ok": false, "message": err.to_string() })).into_response(),
         Err(err) => Json(json!({ "ok": false, "message": err.to_string() })).into_response(),
     }
 }

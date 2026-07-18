@@ -64,6 +64,40 @@ impl SubtitlePresentation {
         out
     }
 
+    /// Enabled slot ids in `translation.lines` array order (stable; not HashMap iteration).
+    pub fn enabled_slot_ids_in_order(translation_config: &Value) -> Vec<String> {
+        let mut out = Vec::new();
+        let Some(lines) = translation_config.get("lines").and_then(|v| v.as_array()) else {
+            return out;
+        };
+        for line in lines {
+            let Some(obj) = line.as_object() else {
+                continue;
+            };
+            if !obj.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true) {
+                continue;
+            }
+            let slot_id = obj
+                .get("slot_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim()
+                .to_ascii_lowercase();
+            let target_lang = obj
+                .get("target_lang")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim();
+            if slot_id.is_empty() || target_lang.is_empty() {
+                continue;
+            }
+            if !out.iter().any(|existing| existing == &slot_id) {
+                out.push(slot_id);
+            }
+        }
+        out
+    }
+
     pub fn legacy_language_to_slot_map(translation_config: &Value) -> HashMap<String, String> {
         let mut out = HashMap::new();
         let Some(lines) = translation_config.get("lines").and_then(|v| v.as_array()) else {
@@ -99,10 +133,7 @@ impl SubtitlePresentation {
         translation_config: &Value,
         subtitle_output: &Value,
     ) -> Vec<String> {
-        let enabled_slots: Vec<String> = Self::translation_slot_map(translation_config)
-            .keys()
-            .cloned()
-            .collect();
+        let enabled_slots = Self::enabled_slot_ids_in_order(translation_config);
         let language_to_slot = Self::legacy_language_to_slot_map(translation_config);
         let raw = subtitle_output
             .get("display_order")
@@ -633,5 +664,45 @@ impl SubtitlePresentation {
             &payload,
         );
         payload
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn enabled_slot_ids_follow_lines_array_order() {
+        let translation = json!({
+            "lines": [
+                {"enabled": true, "slot_id": "translation_2", "target_lang": "ja"},
+                {"enabled": true, "slot_id": "translation_1", "target_lang": "en"},
+                {"enabled": false, "slot_id": "translation_3", "target_lang": "ko"},
+            ]
+        });
+        assert_eq!(
+            SubtitlePresentation::enabled_slot_ids_in_order(&translation),
+            vec!["translation_2".to_string(), "translation_1".to_string()]
+        );
+    }
+
+    #[test]
+    fn resolved_display_order_defaults_follow_lines_array_not_hashmap() {
+        let translation = json!({
+            "lines": [
+                {"enabled": true, "slot_id": "translation_2", "target_lang": "ja"},
+                {"enabled": true, "slot_id": "translation_1", "target_lang": "en"},
+            ]
+        });
+        let subtitle_output = json!({});
+        assert_eq!(
+            SubtitlePresentation::resolved_display_order(&translation, &subtitle_output),
+            vec![
+                "source".to_string(),
+                "translation_2".to_string(),
+                "translation_1".to_string()
+            ]
+        );
     }
 }

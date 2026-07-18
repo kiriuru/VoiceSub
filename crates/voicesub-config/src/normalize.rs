@@ -93,6 +93,13 @@ fn normalize_ui_config(root: &mut Map<String, Value>) {
     let ui = as_object_mut(ui_value);
     let lang = ui.get("language").and_then(|v| v.as_str()).unwrap_or("");
     ui.insert("language".into(), json!(normalize_ui_language(lang)));
+    let font_family = ui
+        .get("font_family")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    ui.insert("font_family".into(), json!(font_family));
 }
 
 fn normalize_overlay_config(root: &mut Map<String, Value>) {
@@ -808,6 +815,21 @@ mod tests {
             "ui": { "language": "de" }
         }));
         assert_eq!(invalid["ui"]["language"], "");
+    }
+
+    #[test]
+    fn ui_font_family_trims_and_defaults_empty() {
+        let trimmed = normalize_config_payload(json!({
+            "config_version": 7,
+            "ui": { "font_family": "  \"Segoe UI\", sans-serif  " }
+        }));
+        assert_eq!(trimmed["ui"]["font_family"], "\"Segoe UI\", sans-serif");
+
+        let missing = normalize_config_payload(json!({
+            "config_version": 7,
+            "ui": { "language": "en" }
+        }));
+        assert_eq!(missing["ui"]["font_family"], "");
     }
 
     #[test]

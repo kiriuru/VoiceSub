@@ -27,6 +27,9 @@ pub struct ExportsListResponse {
     pub files: Vec<ExportFileInfo>,
 }
 
+/// Keep at most this many `diagnostics-*.zip` bundles under `user-data/exports/`.
+const MAX_DIAGNOSTICS_EXPORTS: usize = 12;
+
 pub struct ExportService {
     export_dir: PathBuf,
     backbone: BackboneLogs,
@@ -146,7 +149,24 @@ impl ExportService {
         }
 
         zip.finish()?;
+        // Retention must not fail an otherwise successful export (ZIP already on disk).
+        let _ = self.prune_old_diagnostics_exports();
         Ok(bundle_path)
+    }
+
+    fn prune_old_diagnostics_exports(&self) -> io::Result<()> {
+        let list = self.list_exports()?;
+        let diagnostics: Vec<&ExportFileInfo> = list
+            .files
+            .iter()
+            .filter(|file| {
+                file.name.starts_with("diagnostics-") && file.name.ends_with(".zip")
+            })
+            .collect();
+        for file in diagnostics.into_iter().skip(MAX_DIAGNOSTICS_EXPORTS) {
+            let _ = fs::remove_file(self.export_dir.join(&file.name));
+        }
+        Ok(())
     }
 
     fn build_manifest(&self, include_deep_traces: bool) -> Value {
@@ -215,11 +235,10 @@ fn write_file_if_present<W: Write + io::Seek>(
 }
 
 fn utc_stamp() -> String {
-    let secs = SystemTime::now()
+    let dur = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-    format!("{secs}")
+        .unwrap_or_default();
+    format!("{}_{:03}", dur.as_secs(), dur.subsec_millis())
 }
 
 #[cfg(test)]
@@ -234,6 +253,37 @@ mod tests {
         let service = ExportService::new(dir.join("exports"), &dir, "0.5.1");
         let list = service.list_exports().unwrap();
         assert!(list.exports.is_empty());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn utc_stamp_includes_millis() {
+        let stamp = utc_stamp();
+        assert!(stamp.contains('_'), "stamp={stamp}");
+        let parts: Vec<_> = stamp.split('_').collect();
+        assert_eq!(parts.len(), 2);
+        assert_eq!(parts[1].len(), 3);
+    }
+
+    #[test]
+    fn prune_keeps_newest_diagnostics_zips() {
+        let dir = std::env::temp_dir().join(format!("vs-exports-prune-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let export_dir = dir.join("exports");
+        fs::create_dir_all(&export_dir).unwrap();
+        let service = ExportService::new(export_dir.clone(), &dir, "0.6.0");
+        for index in 0..(MAX_DIAGNOSTICS_EXPORTS + 3) {
+            let name = format!("diagnostics-{index}.zip");
+            fs::write(export_dir.join(&name), b"zip").unwrap();
+        }
+        service.prune_old_diagnostics_exports().unwrap();
+        let list = service.list_exports().unwrap();
+        let remaining = list
+            .files
+            .iter()
+            .filter(|f| f.name.starts_with("diagnostics-"))
+            .count();
+        assert_eq!(remaining, MAX_DIAGNOSTICS_EXPORTS);
         let _ = fs::remove_dir_all(dir);
     }
 }

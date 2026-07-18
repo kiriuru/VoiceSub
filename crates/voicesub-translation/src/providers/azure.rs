@@ -8,7 +8,9 @@ use std::sync::Arc;
 
 use super::{
     ProviderError, ProviderInfo, TranslateRequest, TranslationProvider, base_diagnostics, http,
-    http::SharedHttpClient, normalize_source_lang,
+    http::SharedHttpClient,
+    lang_codes::azure_lang,
+    normalize_source_lang,
 };
 
 pub struct AzureTranslatorProvider {
@@ -54,9 +56,15 @@ impl TranslationProvider for AzureTranslatorProvider {
 
         let region = http::setting(request.settings, "region");
         let source = normalize_source_lang(request.source_lang);
-        let mut query = vec![("api-version", "3.0"), ("to", request.target_lang)];
-        if source != "auto" {
-            query.push(("from", source.as_str()));
+        let target = azure_lang(request.target_lang);
+        let from = if source != "auto" {
+            Some(azure_lang(&source))
+        } else {
+            None
+        };
+        let mut query = vec![("api-version", "3.0"), ("to", target.as_str())];
+        if let Some(ref from_lang) = from {
+            query.push(("from", from_lang.as_str()));
         }
 
         let mut headers = vec![
@@ -77,6 +85,7 @@ impl TranslationProvider for AzureTranslatorProvider {
             None,
             Some(&headers),
             "Azure Translator request failed",
+            request.timeout_secs,
         )
         .await?;
 
@@ -101,6 +110,36 @@ impl TranslationProvider for AzureTranslatorProvider {
     }
 
     fn diagnostics(&self, settings: &HashMap<String, String>) -> Value {
-        base_diagnostics(&self.info(), settings)
+        let region = http::setting(settings, "region");
+        let endpoint = http::setting(settings, "endpoint");
+        let mut diag = base_diagnostics(&self.info(), settings);
+        if let Some(obj) = diag.as_object_mut() {
+            obj.insert(
+                "region_present".into(),
+                json!(!region.trim().is_empty()),
+            );
+            if region.trim().is_empty() {
+                obj.insert(
+                    "status_message".into(),
+                    json!(
+                        "Azure region is empty. Multi-service / regional keys usually require Ocp-Apim-Subscription-Region when using the global endpoint."
+                    ),
+                );
+                obj.insert("region_missing_warning".into(), json!(true));
+            } else {
+                obj.insert(
+                    "status_message".into(),
+                    json!(format!(
+                        "Azure Translator via {} (region={region}).",
+                        if endpoint.is_empty() {
+                            "https://api.cognitive.microsofttranslator.com"
+                        } else {
+                            endpoint.as_str()
+                        }
+                    )),
+                );
+            }
+        }
+        diag
     }
 }

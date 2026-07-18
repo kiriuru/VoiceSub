@@ -21,7 +21,24 @@ export type SubtitleStyleRenderer = {
     sharedLength: number,
   ) => string;
   commonPrefixLength: (a: string, b: string) => number;
+  colorToRgba: (color: string, opacityPercent: number) => string;
+  resolveFreshFragmentEffect: (
+    slotEffect: string,
+    options: Record<string, unknown> | undefined,
+    deltaLength: number,
+    totalLength: number,
+  ) => string;
   disposeRenderContainer: (container: HTMLElement) => void;
+  normalizeBaseStyle?: (raw: Record<string, unknown>) => Record<string, unknown>;
+  buildCssVariables?: (
+    roleStyle: Record<string, unknown>,
+    scale?: number,
+  ) => Record<string, string>;
+  buildOutlineTextShadow?: (widthPx: number, color: string) => string;
+  resolveEffectiveStyle?: (
+    rawStyle: Record<string, unknown>,
+    presets?: Record<string, unknown>,
+  ) => Record<string, unknown>;
   OVERLAY_DENSE_PARTIAL_CHARS?: number;
   OVERLAY_MAX_ANIMATED_DELTA_CHARS?: number;
 };

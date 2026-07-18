@@ -266,46 +266,68 @@ export function createWorkerController(ui: WorkerUiStore): WorkerController {
   };
 
   let destroyed = false;
-  const destroy = () => {
-    if (destroyed) {
-      return;
-    }
-    destroyed = true;
-    unsubscribeUiConfigSync();
-    sessionManager.destroy();
-    releaseMicrophoneMonitor(state);
-  };
+  let autostartTimer: ReturnType<typeof setTimeout> | null = null;
 
   const onLocaleChanged = () => {
     ui.onLocaleChanged();
     updateCounters();
   };
+  const onVisibilityChange = () => {
+    appendLog(`document visibility changed: ${document.hidden ? "hidden" : "visible"}`);
+    ui.updateVisibilityWarning();
+    sessionManager.handleVisibilityChange();
+  };
+  const onBlur = () => {
+    appendLog("window blur");
+    sessionManager.handleVisibilityChange();
+  };
+  const onFocus = () => {
+    appendLog("window focus");
+    sessionManager.handleVisibilityChange();
+  };
+
+  const destroy = () => {
+    if (destroyed) {
+      return;
+    }
+    destroyed = true;
+    if (autostartTimer !== null) {
+      window.clearTimeout(autostartTimer);
+      autostartTimer = null;
+    }
+    unsubscribeUiConfigSync();
+    window.removeEventListener("beforeunload", destroy);
+    window.removeEventListener("pagehide", destroy);
+    window.removeEventListener("sst:locale-changed", onLocaleChanged);
+    document.removeEventListener("visibilitychange", onVisibilityChange);
+    window.removeEventListener("blur", onBlur);
+    window.removeEventListener("focus", onFocus);
+    sessionManager.destroy();
+    releaseMicrophoneMonitor(state);
+  };
 
   window.addEventListener("beforeunload", destroy);
   window.addEventListener("pagehide", destroy);
   window.addEventListener("sst:locale-changed", onLocaleChanged);
-  document.addEventListener("visibilitychange", () => {
-    appendLog(`document visibility changed: ${document.hidden ? "hidden" : "visible"}`);
-    ui.updateVisibilityWarning();
-    sessionManager.handleVisibilityChange();
-  });
-  window.addEventListener("blur", () => {
-    appendLog("window blur");
-    sessionManager.handleVisibilityChange();
-  });
-  window.addEventListener("focus", () => {
-    appendLog("window focus");
-    sessionManager.handleVisibilityChange();
-  });
+  document.addEventListener("visibilitychange", onVisibilityChange);
+  window.addEventListener("blur", onBlur);
+  window.addEventListener("focus", onFocus);
 
   void loadSettings().finally(() => {
+    if (destroyed) {
+      return;
+    }
     sessionManager.ensureSocketConnected();
     updateCounters();
     ui.updateVisibilityWarning();
     const params = new URLSearchParams(location.search);
     appendLog(`worker ready; autostart=${params.get("autostart") === "1" ? "yes" : "no"}`);
     if (params.get("autostart") === "1") {
-      window.setTimeout(() => {
+      autostartTimer = window.setTimeout(() => {
+        autostartTimer = null;
+        if (destroyed) {
+          return;
+        }
         void sessionManager.start();
       }, 150);
     }

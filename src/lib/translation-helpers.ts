@@ -29,6 +29,10 @@ export const REQUIRED_PROVIDER_FIELDS: Partial<Record<ProviderId, readonly strin
   lm_studio: ["base_url", "model"],
   ollama: ["base_url", "model"],
   libretranslate: ["api_url"],
+  baidu_translate: ["app_id", "secret_key"],
+  youdao_translate: ["app_key", "app_secret"],
+  tencent_tmt: ["secret_id", "secret_key"],
+  caiyun_translator: ["token"],
 };
 
 export const PROVIDER_SETTING_LABEL_KEYS: Record<string, string> = {
@@ -40,6 +44,12 @@ export const PROVIDER_SETTING_LABEL_KEYS: Record<string, string> = {
   api_url: "translation.provider_url",
   model: "translation.model",
   custom_prompt: "translation.custom_prompt",
+  app_id: "translation.app_id",
+  secret_key: "translation.secret_key",
+  app_key: "translation.app_key",
+  app_secret: "translation.app_secret",
+  secret_id: "translation.secret_id",
+  token: "translation.token",
 };
 
 export function normalizeProviderName(name: string | undefined, fallback = "google_translate_v2"): ProviderId {
@@ -113,6 +123,26 @@ export function buildProviderOptionGroups(): ProviderOptionGroup[] {
 export function getProviderHintKey(provider: string): string {
   const id = normalizeProviderName(provider);
   return `provider.${id}.hint`;
+}
+
+export function isLlmProvider(provider: string): boolean {
+  return ["openai", "openrouter", "lm_studio", "ollama"].includes(normalizeProviderName(provider));
+}
+
+export function getProviderSetupUrl(provider: string): string | null {
+  const meta = PROVIDERS[normalizeProviderName(provider)] as ProviderMeta & { setupUrl?: string };
+  const url = String(meta.setupUrl || "").trim();
+  return url || null;
+}
+
+/** Checkbox state for LLM custom-prompt override (legacy: non-empty prompt ⇒ enabled). */
+export function isCustomPromptOverrideEnabled(settings: Record<string, unknown>): boolean {
+  const flag = String(settings.override_prompt ?? "")
+    .trim()
+    .toLowerCase();
+  if (flag === "true" || flag === "1" || flag === "yes" || flag === "on") return true;
+  if (flag === "false" || flag === "0" || flag === "no" || flag === "off") return false;
+  return Boolean(String(settings.custom_prompt || "").trim());
 }
 
 export function getProviderFieldLabel(

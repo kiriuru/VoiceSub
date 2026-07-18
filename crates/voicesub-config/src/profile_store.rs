@@ -1,9 +1,10 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use serde_json::{Value, json};
+use thiserror::Error;
 
 use crate::atomic_io::atomic_write;
-use thiserror::Error;
+use crate::defaults::default_config_payload;
 
 #[derive(Debug, Error)]
 pub enum ProfileError {
@@ -98,31 +99,79 @@ impl ProfileStore {
     pub fn ensure_default_profile(&self) -> Result<(), ProfileError> {
         let path = self.profiles_dir.join("default.json");
         if path.is_file() {
+            if self.is_sparse_default_profile(&path)? {
+                self.save_profile("default", &default_config_payload())?;
+            }
             return Ok(());
         }
-        self.save_profile(
-            "default",
-            &json!({
-                "source_lang": "auto",
-                "targets": ["en"]
-            }),
-        )?;
+        self.save_profile("default", &default_config_payload())?;
         Ok(())
+    }
+
+    fn is_sparse_default_profile(&self, path: &Path) -> Result<bool, ProfileError> {
+        let raw = std::fs::read_to_string(path)?;
+        let payload: Value = serde_json::from_str(&raw)?;
+        let Some(obj) = payload.as_object() else {
+            return Ok(true);
+        };
+        let has_asr = obj.contains_key("asr");
+        let has_translation = obj.contains_key("translation");
+        Ok(!has_asr && !has_translation)
     }
 
     fn profile_path(&self, name: &str) -> Result<PathBuf, ProfileError> {
         let raw = name.trim();
-        if raw.is_empty()
-            || raw == "."
-            || raw == ".."
-            || raw.contains("..")
-            || raw.contains('/')
-            || raw.contains('\\')
-        {
+        if !is_valid_profile_name(raw) {
             return Err(ProfileError::InvalidName);
         }
         Ok(self.profiles_dir.join(format!("{raw}.json")))
     }
+}
+
+fn is_valid_profile_name(raw: &str) -> bool {
+    if raw.is_empty() || raw == "." || raw == ".." {
+        return false;
+    }
+    if raw.contains("..") || raw.contains('/') || raw.contains('\\') {
+        return false;
+    }
+    if raw.ends_with('.') || raw.ends_with(' ') {
+        return false;
+    }
+    if raw.chars().any(|ch| {
+        matches!(
+            ch,
+            '<' | '>' | ':' | '"' | '|' | '?' | '*' | '\0'..='\u{001f}'
+        )
+    }) {
+        return false;
+    }
+    let lower = raw.to_ascii_lowercase();
+    !matches!(
+        lower.as_str(),
+        "con"
+            | "prn"
+            | "aux"
+            | "nul"
+            | "com1"
+            | "com2"
+            | "com3"
+            | "com4"
+            | "com5"
+            | "com6"
+            | "com7"
+            | "com8"
+            | "com9"
+            | "lpt1"
+            | "lpt2"
+            | "lpt3"
+            | "lpt4"
+            | "lpt5"
+            | "lpt6"
+            | "lpt7"
+            | "lpt8"
+            | "lpt9"
+    )
 }
 
 #[cfg(test)]
@@ -145,6 +194,9 @@ mod tests {
         store.ensure_default_profile().unwrap();
         let names = store.list_profiles().unwrap();
         assert!(names.contains(&"default".to_string()));
+        let default_payload = store.load_profile("default").unwrap();
+        assert!(default_payload.get("asr").is_some());
+        assert!(default_payload.get("translation").is_some());
 
         store
             .save_profile("stream", &json!({ "translation": { "enabled": true } }))
@@ -157,6 +209,42 @@ mod tests {
         assert!(store.load_profile("stream").is_err());
         assert!(store.delete_profile("default").is_err());
 
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn rejects_invalid_and_reserved_names() {
+        let dir = temp_profiles_dir();
+        let store = ProfileStore::new(&dir);
+        assert!(matches!(
+            store.save_profile("CON", &json!({})),
+            Err(ProfileError::InvalidName)
+        ));
+        assert!(matches!(
+            store.save_profile("bad:name", &json!({})),
+            Err(ProfileError::InvalidName)
+        ));
+        assert!(matches!(
+            store.save_profile("../x", &json!({})),
+            Err(ProfileError::InvalidName)
+        ));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn upgrades_sparse_default_profile() {
+        let dir = temp_profiles_dir();
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("default.json"),
+            r#"{"source_lang":"auto","targets":["en"]}"#,
+        )
+        .unwrap();
+        let store = ProfileStore::new(&dir);
+        store.ensure_default_profile().unwrap();
+        let loaded = store.load_profile("default").unwrap();
+        assert!(loaded.get("asr").is_some());
+        assert!(loaded.get("translation").is_some());
         let _ = std::fs::remove_dir_all(dir);
     }
 }

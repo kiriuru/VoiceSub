@@ -4,7 +4,7 @@
 //! The worker is launched detached in its own process group; if VoiceSub exits without a
 //! graceful stop, `taskkill /T /F` is never issued and the worker keeps consuming CPU.
 //! On the next launch we read the persisted PID and terminate it — but only after verifying
-//! the live process is still a Chromium-family image, to avoid killing an unrelated process
+//! the live process is still Google Chrome (`chrome.exe`), to avoid killing an unrelated process
 //! that happened to reuse the PID.
 
 use std::path::{Path, PathBuf};
@@ -51,11 +51,18 @@ fn parse_pid(raw: &str) -> Option<u32> {
     raw.trim().parse::<u32>().ok().filter(|pid| *pid != 0)
 }
 
-/// Image names that identify the Browser Speech worker process. PID-reuse guard: we only
-/// reap a leftover PID if the live process is one of these.
+/// Image name that identifies the Browser Speech worker process. PID-reuse guard: we only
+/// reap a leftover PID if the live process is Google Chrome.
 pub fn is_worker_image(image: &str) -> bool {
-    let lower = image.trim().to_ascii_lowercase();
-    matches!(lower.as_str(), "chrome.exe" | "msedge.exe")
+    image.trim().eq_ignore_ascii_case("chrome.exe")
+}
+
+/// True when `pid` is currently a live Google Chrome process (worker image guard).
+pub fn is_live_worker_pid(pid: u32) -> bool {
+    if pid == 0 {
+        return false;
+    }
+    live_process_image(pid).is_some_and(|image| is_worker_image(&image))
 }
 
 /// Parse the image name (first column) from a `tasklist /FO CSV /NH` line, e.g.
@@ -75,29 +82,37 @@ pub fn parse_tasklist_image_name(csv_line: &str) -> Option<String> {
 }
 
 /// Reap a leftover worker from a previous crashed session, if the PID file points at a live
-/// Chromium-family process. Always clears the PID file afterwards.
+/// Chrome process. Clears the PID file when the process is gone, successfully reaped, or the
+/// PID was reused by a non-Chrome image. Keeps the PID file when terminate fails so a later
+/// start can retry.
 pub fn reap_orphan_worker(runtime_root: &Path) {
     let Some(pid) = read_persisted_pid(runtime_root) else {
         return;
     };
-    if let Some(image) = live_process_image(pid) {
-        if is_worker_image(&image) {
-            if crate::BrowserWorkerLauncher::terminate_worker(pid) {
-                info!(
-                    pid,
-                    image, "reaped orphaned browser worker from previous session"
-                );
-            } else {
-                warn!(pid, image, "failed to reap orphaned browser worker");
-            }
-        } else {
-            debug!(
-                pid,
-                image, "persisted worker pid reused by unrelated process; not reaping"
-            );
-        }
+    let Some(image) = live_process_image(pid) else {
+        clear_worker_pid(runtime_root);
+        return;
+    };
+    if !is_worker_image(&image) {
+        debug!(
+            pid,
+            image, "persisted worker pid reused by unrelated process; not reaping"
+        );
+        clear_worker_pid(runtime_root);
+        return;
     }
-    clear_worker_pid(runtime_root);
+    if crate::BrowserWorkerLauncher::terminate_worker(pid) {
+        info!(
+            pid,
+            image, "reaped orphaned browser worker from previous session"
+        );
+        clear_worker_pid(runtime_root);
+    } else {
+        warn!(
+            pid,
+            image, "failed to reap orphaned browser worker; keeping pid file"
+        );
+    }
 }
 
 #[cfg(windows)]
@@ -136,12 +151,17 @@ mod tests {
     }
 
     #[test]
-    fn worker_image_matches_chromium_family_case_insensitive() {
+    fn worker_image_matches_chrome_case_insensitive() {
         assert!(is_worker_image("chrome.exe"));
         assert!(is_worker_image("CHROME.EXE"));
-        assert!(is_worker_image("msedge.exe"));
+        assert!(!is_worker_image("msedge.exe"));
         assert!(!is_worker_image("notepad.exe"));
         assert!(!is_worker_image(""));
+    }
+
+    #[test]
+    fn live_worker_pid_rejects_zero() {
+        assert!(!is_live_worker_pid(0));
     }
 
     #[test]

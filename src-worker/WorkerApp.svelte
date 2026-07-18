@@ -28,7 +28,11 @@
       </div>
     </header>
 
-    <section class="surface-card panel-padding worker-status-strip" aria-label={ui.tr("worker.status.title")}>
+    <section
+      class="surface-card panel-padding worker-status-strip"
+      aria-label={ui.tr("worker.status.title")}
+      aria-live="polite"
+    >
       <div class="status-chip">
         <span class="status-chip__label">{ui.tr("worker.status.label")}</span>
         <span class="status-chip__value">{ui.workerStatus}</span>

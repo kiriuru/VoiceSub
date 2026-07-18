@@ -15,7 +15,7 @@
   <a href="./docs/CHANGELOG.md">Changelog</a>
 </p>
 
-VoiceSub — Windows desktop-приложение, которое превращает речь в субтитры в реальном времени с опциональным переводом. Распознавание — через **Chrome/Edge Web Speech** или опциональный офлайн **Local ASR** (Parakeet / ONNX). Всё работает локально: bind по умолчанию `127.0.0.1:8765`, без cloud backend и аккаунтов.
+VoiceSub — Windows desktop-приложение, которое превращает речь в субтитры в реальном времени с опциональным переводом. Распознавание — через **Google Chrome Web Speech** или опциональный офлайн **Local ASR** (Parakeet / ONNX). Всё работает локально: bind по умолчанию `127.0.0.1:8765`, без cloud backend и аккаунтов.
 
 Преемник SST Desktop `0.4.4`. Первый релиз VoiceSub: **`0.5.0`**. Текущая линия: **`0.6.0`**.
 
@@ -25,7 +25,7 @@ VoiceSub — Windows desktop-приложение, которое превращ
 
 | Область | Что даёт |
 | --- | --- |
-| **Речь** | Chrome/Edge Web Speech worker или офлайн Local ASR (Parakeet / ONNX, CPU или CUDA) |
+| **Речь** | Google Chrome Web Speech worker или офлайн Local ASR (Parakeet / ONNX, CPU или CUDA) |
 | **Перевод** | 13 провайдеров, до 5 линий перевода |
 | **OBS** | Browser Source overlay + опциональные Closed Captions (WebSocket) |
 | **Стиль** | Анимированные пресеты, стили по слотам, палитра темы |
@@ -41,7 +41,7 @@ VoiceSub — Windows desktop-приложение, которое превращ
 
 - Windows 10 или 11 (x64)
 - **Microsoft Edge WebView2 Runtime** (на Windows 11 обычно уже есть; NSIS-установщик может запустить bootstrapper на Windows 10)
-- **Google Chrome** или Edge — только для Web Speech worker (не нужен, если используется только Local ASR)
+- **Google Chrome** — только для Web Speech worker (не нужен, если используется только Local ASR)
 - Доступ к микрофону
 - Интернет — опционально для облачных провайдеров перевода; также для первой загрузки модели / ORT Local ASR
 

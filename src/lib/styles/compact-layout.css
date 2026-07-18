@@ -291,8 +291,8 @@ body.voicesub-layout-compact .compact-bottom-tab-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
 }
 
 body.voicesub-layout-compact .compact-bottom-tab-label {
@@ -400,6 +400,14 @@ body.voicesub-layout-compact .tab-panel[data-tab-panel="style"] .badges .tab-btn
   min-width: 0;
 }
 
-body.voicesub-layout-compact .tab-panel[data-tab-panel="style"] .grid-2 {
+body.voicesub-layout-compact .tab-panel[data-tab-panel="style"] .style-metric-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+body.voicesub-layout-compact .tab-panel[data-tab-panel="style"] .style-select-row {
   grid-template-columns: 1fr;
+}
+
+body.voicesub-layout-compact .tab-panel[data-tab-panel="style"] .control-metric {
+  max-width: 7rem;
 }

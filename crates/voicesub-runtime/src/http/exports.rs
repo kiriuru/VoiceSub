@@ -36,7 +36,7 @@ pub async fn export_diagnostics(State(state): State<Arc<HttpState>>) -> Response
         &base,
         include_deep_traces,
     ) {
-        Ok(path) => serve_zip_file(path),
+        Ok(path) => serve_zip_file(path).await,
         Err(err) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({ "ok": false, "message": err.to_string() })),
@@ -45,13 +45,13 @@ pub async fn export_diagnostics(State(state): State<Arc<HttpState>>) -> Response
     }
 }
 
-fn serve_zip_file(path: std::path::PathBuf) -> Response {
+async fn serve_zip_file(path: std::path::PathBuf) -> Response {
     let filename = path
         .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or("diagnostics.zip")
         .to_string();
-    match std::fs::read(&path) {
+    match tokio::fs::read(&path).await {
         Ok(bytes) => Response::builder()
             .status(StatusCode::OK)
             .header(header::CONTENT_TYPE, "application/zip")

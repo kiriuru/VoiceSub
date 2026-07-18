@@ -71,6 +71,8 @@
   -webkit-text-fill-color: var(--subtitle-fill, #ffffff);
   -webkit-text-stroke-color: var(--subtitle-stroke, #000000);
   -webkit-text-stroke-width: var(--subtitle-stroke-width, 0px);
+  /* Draw outline behind fill so thin strokes stay visible (Chromium/OBS CEF). */
+  paint-order: stroke fill;
   text-shadow: var(--subtitle-shadow, none);
   background: var(--subtitle-background, transparent);
   border-radius: var(--subtitle-radius, 0px);
@@ -81,6 +83,8 @@
 }
 
 .is-overlay-shell .subtitle-line__surface.is-dense-partial {
+  /* Keep layout/style containment only — `paint` clips text-shadow/glow that
+     intentionally bleeds outside the surface box on dense long lines. */
   contain: layout style;
 }
 
@@ -108,6 +112,14 @@
   animation: subtitle-glow 320ms ease-out both;
 }
 
+.subtitle-line__surface.effect-pulse {
+  animation: subtitle-pulse 260ms cubic-bezier(0.2, 0.9, 0.2, 1) both;
+}
+
+.subtitle-line__surface.effect-reveal {
+  animation: subtitle-reveal 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 /*
  * Fragment-level animations for live (partial) source subtitles.
  *
@@ -120,6 +132,9 @@
  * Durations are deliberately shorter than the surface-level versions because
  * partials emit at ~5–15 Hz; we want the effect to feel like a typewriter
  * highlight, not a per-character bounce.
+ *
+ * Transforms/filters require a non-`inline` box — apply inline-block to every
+ * animated fresh fragment (not only zoom/blur).
  */
 .subtitle-line__surface .subtitle-fragment-static {
   /* Static prefix: no transform, no opacity dance — visual stillness here is
@@ -129,6 +144,11 @@
 
 .subtitle-line__surface .subtitle-fragment-fresh.effect-none {
   animation: none;
+}
+
+.subtitle-line__surface .subtitle-fragment-fresh:not(.effect-none) {
+  display: inline-block;
+  vertical-align: baseline;
 }
 
 .subtitle-line__surface .subtitle-fragment-fresh.effect-fade {
@@ -145,16 +165,29 @@
 
 .subtitle-line__surface .subtitle-fragment-fresh.effect-zoom-in {
   animation: subtitle-zoom-in 140ms ease-out both;
-  display: inline-block;
 }
 
 .subtitle-line__surface .subtitle-fragment-fresh.effect-blur-in {
   animation: subtitle-blur-in 160ms ease-out both;
-  display: inline-block;
 }
 
 .subtitle-line__surface .subtitle-fragment-fresh.effect-glow {
   animation: subtitle-glow 200ms ease-out both;
+}
+
+.subtitle-line__surface .subtitle-fragment-fresh.effect-pulse {
+  animation: subtitle-pulse 160ms cubic-bezier(0.2, 0.9, 0.2, 1) both;
+}
+
+.subtitle-line__surface .subtitle-fragment-fresh.effect-reveal {
+  animation: subtitle-reveal 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .subtitle-line__surface[class*="effect-"]:not(.effect-none),
+  .subtitle-line__surface .subtitle-fragment-fresh[class*="effect-"]:not(.effect-none) {
+    animation: none !important;
+  }
 }
 
 .subtitle-stage-note {
@@ -171,15 +204,14 @@
   letter-spacing: 0.08em;
 }
 
+/* Opacity-only: distinct from slide_up / subtle_pop motion. */
 @keyframes subtitle-fade-in {
   from {
     opacity: 0;
-    transform: translateY(12px);
   }
 
   to {
     opacity: 1;
-    transform: translateY(0);
   }
 }
 
@@ -233,16 +265,47 @@
   }
 }
 
+/* Uses the line fill color so neon presets match their palette (not hardcoded cyan). */
 @keyframes subtitle-glow {
   from {
     opacity: 0;
-    filter: drop-shadow(0 0 10px rgba(108, 199, 255, 0.55)) drop-shadow(0 0 22px rgba(255, 108, 230, 0.28));
-    transform: translateY(10px);
+    filter: drop-shadow(0 0 10px var(--subtitle-fill, #6cc7ff))
+      drop-shadow(0 0 20px color-mix(in srgb, var(--subtitle-fill, #6cc7ff) 45%, transparent));
+    transform: translateY(8px);
   }
 
   to {
     opacity: 1;
-    filter: none;
+    filter: drop-shadow(0 0 0 transparent);
     transform: translateY(0);
+  }
+}
+
+@keyframes subtitle-pulse {
+  0% {
+    opacity: 0.35;
+    transform: scale(0.96);
+  }
+
+  55% {
+    opacity: 1;
+    transform: scale(1.04);
+  }
+
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes subtitle-reveal {
+  from {
+    opacity: 0.85;
+    clip-path: inset(0 100% 0 0);
+  }
+
+  to {
+    opacity: 1;
+    clip-path: inset(0 0 0 0);
   }
 }

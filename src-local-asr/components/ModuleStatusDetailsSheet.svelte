@@ -15,22 +15,33 @@
   let { open, status, tr, mark, markClass, phaseLabel, onClose }: Props = $props();
 
   let dialogEl = $state<HTMLDialogElement | null>(null);
+  let syncing = false;
 
   $effect(() => {
-    if (!dialogEl) return;
-    if (open && !dialogEl.open) {
-      dialogEl.showModal();
-    } else if (!open && dialogEl.open) {
-      dialogEl.close();
+    const el = dialogEl;
+    const isOpen = open;
+    if (!el || syncing) return;
+    syncing = true;
+    try {
+      if (isOpen) {
+        if (!el.open) el.showModal();
+      } else if (el.open) {
+        el.close();
+      }
+    } finally {
+      queueMicrotask(() => {
+        syncing = false;
+      });
     }
   });
 
   function onDialogClose() {
+    if (syncing) return;
     onClose();
   }
 
   onDestroy(() => {
-    dialogEl?.close();
+    dialogEl = null;
   });
 </script>
 
@@ -43,7 +54,7 @@
     if (event.target === dialogEl) onClose();
   }}
 >
-  <div class="module-status-details-sheet__panel surface-card">
+  <div class="module-status-details-sheet__panel">
     <header class="module-status-details-sheet__header">
       <h2 id="local-asr-status-details-title">{tr("local_asr.status.details.title")}</h2>
       <button type="button" class="top-app-bar__icon-btn" aria-label={tr("common.close")} onclick={onClose}>

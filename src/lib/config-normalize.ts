@@ -96,7 +96,7 @@ export function normalizeConfigPayload(raw: ConfigPayload): ConfigPayload {
     translation.target_languages,
   );
   translation.target_languages = buildCompatTargetLanguages(translation.lines);
-  translation.timeout_ms = Math.max(1000, Math.min(60_000, intOr(translation.timeout_ms, 10_000)));
+  translation.timeout_ms = Math.max(1000, Math.min(300_000, intOr(translation.timeout_ms, 10_000)));
   translation.queue_max_size = Math.max(1, Math.min(64, intOr(translation.queue_max_size, 8)));
   translation.max_concurrent_jobs = Math.max(1, Math.min(8, intOr(translation.max_concurrent_jobs, 2)));
   if (!translation.cache || typeof translation.cache !== "object") {
@@ -364,6 +364,7 @@ export function normalizeConfigPayload(raw: ConfigPayload): ConfigPayload {
   } else {
     ui.show_translation_results = ui.show_translation_results === true;
   }
+  ui.font_family = String(ui.font_family || "").trim();
 
   return config;
 }

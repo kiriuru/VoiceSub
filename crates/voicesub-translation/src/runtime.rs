@@ -78,12 +78,13 @@ impl TranslationRuntimeController {
         }
     }
 
-    pub fn apply_live_settings(&mut self) {
+    pub async fn apply_live_settings(&mut self) {
         let translation = self.translation_config();
         if let Some(dispatcher) = &self.dispatcher {
-            if let Ok(mut engine) = dispatcher.engine_handle().try_lock() {
-                engine.apply_live_settings(&translation);
-            }
+            dispatcher.refresh_provider_throttles().await;
+            let engine_handle = dispatcher.engine_handle();
+            let mut engine = engine_handle.lock().await;
+            engine.apply_live_settings(&translation);
             return;
         }
         if let Some(engine) = self.engine.as_mut() {

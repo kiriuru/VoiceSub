@@ -107,6 +107,21 @@ fn overlay_disposes_renderer_when_payload_is_empty() {
 }
 
 #[test]
+fn overlay_presentation_forwards_style_slot_identity() {
+    let source = read_workspace_file("bin/overlay/overlay.js");
+    assert_contains(
+        &source,
+        "style_slot: item.style_slot || \"\"",
+        "buildPresentationPayload must forward style_slot",
+    );
+    assert_contains(
+        &source,
+        "slot_id: item.slot_id || \"\"",
+        "buildPresentationPayload must forward slot_id",
+    );
+}
+
+#[test]
 fn overlay_clears_dom_when_idle_arrives_after_state_already_cleared() {
     let source = read_workspace_file("bin/overlay/overlay.js");
     assert_contains(&source, "hasVisibleRenderedFrame", "rendered frame probe");
@@ -229,6 +244,25 @@ fn overlay_renderer_uses_append_only_partial_merge() {
         "animation budget policy",
     );
     assert_contains(&source, "is-dense-partial", "dense partial css hook");
+    assert_contains(
+        &source,
+        "base === \"blur_in\" || base === \"glow\"",
+        "OBS cheapens filter effects on partial fragments",
+    );
+}
+
+#[test]
+fn overlay_fragment_effects_css_supports_transforms_and_new_effects() {
+    let css = read_workspace_file("bin/overlay/shared/css/subtitle-style.css");
+    assert_contains(
+        &css,
+        ".subtitle-fragment-fresh:not(.effect-none)",
+        "animated fresh fragments need non-inline box for transforms",
+    );
+    assert_contains(&css, "display: inline-block", "inline-block for fragment transforms");
+    assert_contains(&css, "prefers-reduced-motion", "a11y motion preference");
+    assert_contains(&css, "subtitle-pulse", "pulse keyframes");
+    assert_contains(&css, "subtitle-reveal", "reveal keyframes");
 }
 
 #[test]

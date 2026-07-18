@@ -18,18 +18,94 @@
 
 ### Added
 
+- Шрифты в `bin/fonts/`: **IBM Plex Mono**, **IBM Plex Serif**, **Source Code Pro** — для dual-script пресетов и кириллицы.
+- Эффекты субтитров `pulse` и `reveal`.
+- Тема UI: выбор шрифта интерфейса (`ui.font_family`) — применяется к dashboard, Web ASR, TTS и Local ASR через `ui_config_sync`.
+- Диалог «О VoiceSub» (credits) из аватара в nav rail.
+- Встроенная **Помощь**: quick-start чеклист и тематические карточки (распознавание, перевод, субтитры, стиль, OBS, инструменты) вместо сплошного prose.
 - Модуль **Local ASR** (`/local-asr`) — офлайн Parakeet TDT через ONNX Runtime (CPU / опционально CUDA), wizard установки, карточка Modules с badge ready / CPU / CUDA.
 - Режим Live `local_parakeet` при `ready` модуля (in-process mic + VAD + decode; без Chrome Web Speech worker).
 - Protected HTTP API `/api/asr/local/*` — status, config, deps, загрузка модели, EP probe, список mic, test bench.
 - Настройки модуля в `user-data/modules/local-asr/`; `asr.mode` проекта — в `user-data/config.toml`.
 - Crate `voicesub-partial-emit` (политика partial `word_growth`) в существующий путь subtitle / translation / overlay.
 - Пресеты latency `low` / `balanced` / `quality`, hallucination filter, emit telemetry, checklist setup (deps → model → mic test → final).
+- Китайские провайдеры перевода с бесплатными квотами: `baidu_translate`, `youdao_translate`, `tencent_tmt` и `caiyun_translator` (zh/en/ja); всего **17** провайдеров, группа **China / Free-tier** в dashboard (i18n hints/status).
+- Кнопка «Открыть сайт провайдера / API-ключи» у облачных провайдеров (Google, Azure, DeepL, OpenAI, OpenRouter, LibreTranslate, Baidu, Youdao, Tencent, Caiyun и др.; локальные LLM без ссылки).
+- LLM: галочка **Override default subtitle prompt** (скрываемый custom prompt) для OpenAI / OpenRouter / LM Studio / Ollama.
+- OpenAI: кнопка **Show models** — живой список через `POST /api/openai/models` (официальный `/v1/models`, фильтр chat-моделей); curated list обновлён по каталогу OpenAI 2026 (`gpt-5.6-*`, `gpt-5.4-*`, …); галочка **Show all chat models**.
+- LM Studio: кнопка **Test connection** — проверка `base_url` и загрузка списка моделей.
 - Installer `VoiceSub_0.6.0_x64-setup.exe`.
+
+### Fixed
+
+- Local ASR / runtime idle CPU: heartbeat больше не гоняет полный `env_check` (скан CUDA/DLL) на каждом тике — `diagnostics()` и `GET /api/asr/local/status` используют кэш статуса; поиск DLL индексирует каталог один раз; перечисление микрофонов в `spawn_blocking`; окно Local ASR откладывает mic list до первой отрисовки; dialog open/close без re-entrancy spin.
+- Local ASR: утечка памяти/CPU WebView2 при открытии модуля — `setLocale` стал идемпотентным (иначе `sst:locale-changed` + BroadcastChannel зацикливались); модуль больше не подключается к `/ws/events` для UI sync (хватит Tauri IPC).
+- TTS: то же — отключён `/ws/events` для UI sync (IPC уже шлёт `ui_config_sync`); locale sync идёт через `applyDashboardLocale` / идемпотентный `setLocale` (утечки как у Local ASR не было за счёт guard, но WS зря принимал overlay/runtime).
+- Main dashboard: той же утечки нет (publisher UI sync, без subscribe/`sst:locale-changed` loop; `ui_config_sync` в store игнорируется); `applyUiFromConfig` пропускает повторное применение theme/locale/sync, если presentation signature не менялась.
+- Старт/выход: `env_check` больше не блокирует создание Local ASR service (CUDA Toolkit bin scan); DLL lookup снова сначала проверяет прямой путь; dashboard применяет settings/theme до ожидания runtime status; last-known theme из localStorage до HTTP.
+- Инструменты и данные: корректный сброс success/error; подтверждение load/overwrite профилей; запрет удаления `default`; валидация имён; предупреждение при импорте redacted config; disable import при busy; статус Local ASR; убран дубль stale-dropped; полное логирование применяется live после Save (без ложного «нужен перезапуск»); save/delete не показывают success, если не удалось обновить список профилей; `diagnostics_update` сохраняет `local_module` / `active_mode`; модальное окно success/error объясняет, куда сохранился файл (Downloads / `user-data/exports` / `user-data/profiles`).
+- Профили: seed/upgrade sparse `default.json` из полных factory defaults; отклонение зарезервированных имён Windows.
+- Экспорт diagnostics: уникальные имена `diagnostics-{secs}_{ms}.zip`; хранение последних 12 ZIP (prune best-effort, экспорт не падает из‑за очистки); понятные HTTP-ошибки delete/export.
+- Docs: профили — `{name}.json` (не `.toml`); retention diagnostics ZIP задокументирован.
+- Dashboard: смена чекбоксов/селектов больше не сбрасывает размер и позицию окна (resize+center только при смене `ui.layout`).
+- Смена языка UI сохраняет текущий in-memory конфиг (не затирает импорт/профиль через `lastSavedConfig`).
+- Web Speech advanced settings больше не форсят `asr.mode = browser_google`.
+- OBS overlay: stale-guard активируется после загрузки module-скрипта; таймеры runtime-gone не копятся.
+- Browser worker: autostart timer и lifecycle listeners очищаются в `destroy()`.
+- Scroll-spy секций использует scroll-контейнер shell; вкладка Subtitles сразу открывает панель с верхними вкладками Субтитры/Стиль (без промежуточного hub).
+- Иконки основных вкладок (nav rail / bottom nav) увеличены ~15%.
+- Скролл TTS / Local ASR / Web Speech worker: `overflow: hidden` только у dashboard standard shell (не глобально на `html/body`).
+- Local ASR: кнопки «Закрыть» (setup) и «Проверить снова» в стиле остального UI.
+- Диалоги на тёмной теме: читаемый контраст (runtime «Подробнее», credits, Local ASR status/alert/setup) — `color-scheme` + явный цвет текста вместо UA `CanvasText`.
+- Тема UI в Local ASR и TTS применяется сразу без «Сохранить» (IPC + WS fallback); i18n для `style.ui_theme.font` / `font.default`.
+- Browser Google ASR lifecycle:
+  - ошибка launch Chrome сбрасывает `runtime_running` и останавливает browser speech ingest (как у Local ASR);
+  - PID tracking / `browser-worker.pid` очищаются только если Chrome реально мёртв; живой процесс после failed `taskkill` сохраняется для orphan reap;
+  - IPC `launch_browser_worker` пишет PID в общий оркестратор и убивает предыдущий worker (без второго orphan Chrome);
+  - старт Local ASR сначала reap leftover Chrome;
+  - `generationId` бампается на каждом controlled start; отмена pending restart — через `stopEpoch` (user/control stop);
+  - при замене WS-транспорта outbound предыдущего соединения дропается **без** `stop` (не убивает recognition на reconnect).
+- **Замена слов (до перевода):** кэш Aho-Corasick/regex; CJK при дефолтном whole-words; корни; маска вида `fuck`→`f*ck` (не `***`); `f*ck` не разворачивается обратно. Субтитры/lifecycle без изменений.
+- IPC ACL: `get_loopback_api_token` снова allowlisted (fallback без HTML injection).
+- `runtime-event`: `listen` → buffer → snapshot → drain (live не затирается stale snapshot); dashboard snapshot предпочитает `overlay_update`; TTS snapshot только `runtime_update` + `twitch_connection_update`.
+- `tts-speech-activity` / `playback-finished` — только `emit_to(tts)` (не global emit в main/local-asr).
+- Twitch chat → `RuntimeEventBus` only (не флудит OBS `/ws/events`); connection updates по-прежнему в hub для replay.
+- Lag-resync: pending-очередь (последний sync не дропается); coalesced overlay discard на `Lagged`, чтобы таймер не откатил UI после snapshot.
+- Имя `Jet Brains Mono` выровнено с каталогом шрифтов; алиас `JetBrains Mono` при нормализации.
+- OBS overlay сохраняет `style_slot` / `slot_id`; dashboard preview вызывает `disposeRenderContainer` при `render().empty`.
+- Рендерер: `colorToRgba` (named/`rgb()`/`#rrggbbaa`); emoji по code-point; whitespace-only отфильтрованы; `inferStyleSlot` + `slot_id`; fast path не трогает disconnected surface.
+- LM Studio / Ollama: JIT-загрузка модели больше не обрывается дефолтными 10s (`Engine protocol startup was aborted` / `Model is unloaded`); для local providers floor таймаута **≥120s**, в запрос LM Studio добавлен `ttl`.
+- Кнопки setup-ссылок открывают системный браузер (allowlist `open_external_https_url` расширен хостами консолей провайдеров).
+- Baidu Translate: POST form-urlencoded вместо GET; маппинг `sv` → `swe`; Youdao корректно читает числовой `errorCode`.
+- Persistent-кэш перевода больше не затирается при каждом старте runtime; при неизменённых настройках переживает рестарт.
+- Диспетчер перевода не утекает по `active_jobs` при повторном submit того же sequence; overflow очереди не держит dispatcher lock через relevance-проверки.
+- Live apply настроек перевода ждёт engine lock (API keys / lines не пропускаются молча) и обновляет лимиты concurrency провайдеров.
+- HTTP-таймауты перевода уважают `timeout_ms` (per-request timeout проведён через все провайдеры).
+- Readiness-проба local LLM принимает hostname вроде `localhost` (DNS), а не только IP.
+- Preview supersession устойчив к edge-case со счётчиками generation; short-circuit empty/identical-lang больше не помечается ложным cache hit.
 
 ### Changed
 
+- Панель стилей: компактная сетка числовых полей; выравнивание и эффект в одной строке.
+- Каталог built-in стилей пересобран (**20** пресетов): тематические dual-script стеки (Film Noir, Retro Terminal, Fallout, Anime Stream и др.); однотипные тёмные плашки сведены к **4 материалам** — Max Contrast, Podcast Subtle (пергамент), Glass Frost (молочный лёд ~44%), Twitch Lower-Third (`#9146FF` + Oswald). Удалены `sakura_soft`, `minimal_mono`, `editorial_news` (миграция → `meeting_soft` / `glass_frost` / `dark_cinema`).
+- **Retro Terminal**: кириллица через **IBM Plex Serif Regular**.
+- Latin-only лица в `/project-fonts.css` объявляют `unicode-range`, чтобы кириллица шла в следующий face стека (Plex / Ubuntu / Noto / Comfortaa…).
+- Толщина обводки: шкала **ASS/Aegisub 0–4 px** (шаг 0.1).
+- Эффекты: `fade` только opacity; `glow` из цвета заливки; на OBS partials тяжёлые `blur_in`/`glow` упрощаются до `fade`; учёт `prefers-reduced-motion`.
+- Tauri IPC capabilities разделены по окнам: **main** (полный shell), **tts** (playback/Twitch/snapshot), **local-asr** (token + allowlisted URLs).
+- TTS: HTTP poll `/api/runtime/status` только при мёртвом `runtime-event`; speech-context poll реже при живом IPC (focus по-прежнему обновляет сразу).
+- Browser Speech worker — **только Google Chrome** (`/google-asr`): удалён маршрут `/google-asr-edge`; import `browser_google_edge` → `browser_google`; orphan reap только для `chrome.exe`.
+- CPU affinity browser worker — **opt-in** (`VOICESUB_BROWSER_AFFINITY` / `VOICESUB_BROWSER_AFFINITY_MASK`), по умолчанию выкл.
+- `runtime-event` routing: окно **local-asr** получает `ui_config_sync` (живая тема/локаль/шрифт); `/ws/events` реплеит последний `ui_config_sync` при подключении.
+- Тексты Помощи обновлены под Local ASR / Modules / замену слов; i18n HelpPanel реактивен к смене локали.
 - Документация и wiki: Local ASR отмечен как shipped; Technical Architecture §18 описывает модуль.
 - Импорт SST JSON сохраняет `local_parakeet`; legacy `local` / experimental по-прежнему → `browser_google`.
+- Потолок `timeout_ms` / HTTP client для перевода: **300s** (было 60s); UI Settings и config normalize синхронизированы.
+- Путь persistent-кэша перевода — `user-data/translation-cache/` (legacy `user-data/cache/translation_cache.json` копируется один раз при апгрейде).
+- Ключи кэша хешируют исходный текст; flush кэша при drop engine; `used_default_prompt` / `override_prompt` для LLM-провайдеров.
+- DeepL мапит UI-коды языков (`en`/`zh-cn`/`pt`, …) в API targets и выбирает Free vs Pro URL по ключу (`:fx` → free).
+- Google Cloud Translation v3 раскрывает короткие model id в full resource names; добавлены i18n-лейблы настроек Google v3.
+- Azure / LibreTranslate мапят китайские UI-коды (`zh-Hans`/`zh-Hant`, `zh`/`zt`); readiness показывает soft-warnings для пустого Azure region и публичного LibreTranslate.
 
 ## [0.5.5] - 2026-06-26
 

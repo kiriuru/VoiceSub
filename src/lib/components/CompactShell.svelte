@@ -10,10 +10,13 @@
   import ModulesPanel from "../panels/ModulesPanel.svelte";
   import PanelTopNavLayout from "./PanelTopNavLayout.svelte";
   import ScrollToTopFab from "./ScrollToTopFab.svelte";
-  import { TRANSLATION_PANEL_SECTIONS, SUBTITLES_PANEL_SECTIONS } from "../panel-sections";
+  import {
+    HELP_PANEL_SECTIONS,
+    TRANSLATION_PANEL_SECTIONS,
+    SUBTITLES_PANEL_SECTIONS,
+  } from "../panel-sections";
   import {
     isMoreTab,
-    isSubtitlesTab,
     navDestinationTitleKey,
     shouldShowMoreHub,
     shouldShowSubtitlesHub,
@@ -35,7 +38,7 @@
 
   export let compactNav: CompactPaneId = "live";
   export let moreHubOpen = true;
-  export let subtitlesHubOpen = true;
+  export let subtitlesHubOpen = false;
   export let activeTab: TabId;
   export let version: string;
   export let config: ConfigPayload;
@@ -55,7 +58,6 @@
   export let onSelectSubtitlesTab: (tab: TabId) => void;
   export let onActiveTabChange: (tab: TabId) => void = () => {};
   export let onOpenMoreHub: () => void;
-  export let onOpenSubtitlesHub: () => void;
   export let onStart: () => void;
   export let onStop: () => void;
   export let onSave: () => void;
@@ -75,25 +77,27 @@
       ? tr("nav.subtitles")
       : compactNav === "more" && isMoreTab(activeTab)
         ? tr(tabTitleKey(activeTab))
-        : compactNav === "subtitles" && isSubtitlesTab(activeTab)
-          ? tr(tabTitleKey(activeTab))
+        : compactNav === "subtitles"
+          ? tr(navDestinationTitleKey("subtitles"))
           : tr(navDestinationTitleKey(compactNav));
-  $: showBack =
-    (compactNav === "more" && !showMoreHub) ||
-    (compactNav === "subtitles" && !showSubtitlesHub);
+  $: showBack = compactNav === "more" && !showMoreHub;
 
   $: translationSections = TRANSLATION_PANEL_SECTIONS.filter(
     (section) => section.id !== "translation-section-results" || translationResults,
   );
   $: useTranslationTopNav = compactNav === "translation";
   $: useSubtitlesTopNav = compactNav === "subtitles" && !showSubtitlesHub;
+  $: useHelpTopNav = compactNav === "more" && !showMoreHub && activeTab === "help";
   $: topNavSections = useTranslationTopNav
     ? translationSections
     : useSubtitlesTopNav
       ? SUBTITLES_PANEL_SECTIONS
-      : [];
-  $: usePanelTopNav = useTranslationTopNav || useSubtitlesTopNav;
+      : useHelpTopNav
+        ? HELP_PANEL_SECTIONS
+        : [];
+  $: usePanelTopNav = useTranslationTopNav || useSubtitlesTopNav || useHelpTopNav;
   $: panelNavMode = (useSubtitlesTopNav ? "tabs" : "scroll") as "scroll" | "tabs";
+  $: panelNavAriaKey = useHelpTopNav ? "help.jump.aria" : "nav.section.jump";
 
   function handleSubtitlesTabChange(tab: TabId) {
     onActiveTabChange(tab);
@@ -101,8 +105,7 @@
   }
 
   function handleBack() {
-    if (compactNav === "subtitles") onOpenSubtitlesHub();
-    else onOpenMoreHub();
+    onOpenMoreHub();
   }
 
   let compactScrollEl: HTMLElement | null = null;
@@ -177,6 +180,7 @@
     {:else if usePanelTopNav}
       <PanelTopNavLayout
         sections={topNavSections}
+        ariaLabelKey={panelNavAriaKey}
         {activeTab}
         navMode={panelNavMode}
         onActiveTabChange={useSubtitlesTopNav ? handleSubtitlesTabChange : onActiveTabChange}

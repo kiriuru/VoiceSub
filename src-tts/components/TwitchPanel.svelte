@@ -318,7 +318,8 @@
       await openTwitchOAuthInSystemBrowser(twitch.oauth_client_id);
       startOAuthPoll();
     } catch (err) {
-      error = err instanceof Error ? err.message : String(err);
+      const message = err instanceof Error ? err.message : String(err);
+      error = message.startsWith("tts.") ? tr(message) : message;
     }
   }
 

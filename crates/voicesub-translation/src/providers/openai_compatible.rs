@@ -28,6 +28,23 @@ fn estimate_llm_max_tokens(text: &str) -> u32 {
     estimated.clamp(LLM_BASE_MAX_TOKENS, LLM_MAX_TOKENS_CAP)
 }
 
+/// When `override_prompt` is unset, a non-empty `custom_prompt` still wins (legacy configs).
+/// When explicitly false/0, the built-in subtitle prompt is used even if `custom_prompt` is stored.
+fn effective_custom_prompt(settings: &HashMap<String, String>) -> String {
+    let custom = http::setting(settings, "custom_prompt");
+    let flag = http::setting(settings, "override_prompt")
+        .trim()
+        .to_ascii_lowercase();
+    if flag.is_empty() {
+        return custom;
+    }
+    if matches!(flag.as_str(), "true" | "1" | "yes" | "on") {
+        custom
+    } else {
+        String::new()
+    }
+}
+
 pub struct OpenAICompatibleChatProvider {
     transport: Arc<SharedHttpClient>,
     name: &'static str,
@@ -110,7 +127,7 @@ impl TranslationProvider for OpenAICompatibleChatProvider {
         };
         let api_key = http::setting(request.settings, "api_key");
         let model = http::setting(request.settings, "model");
-        let custom_prompt = http::setting(request.settings, "custom_prompt");
+        let custom_prompt = effective_custom_prompt(request.settings);
 
         if self.requires_api_key && api_key.is_empty() {
             return Err(ProviderError::Message(format!(
@@ -138,15 +155,31 @@ impl TranslationProvider for OpenAICompatibleChatProvider {
             &custom_prompt,
         );
         let max_tokens = estimate_llm_max_tokens(request.text);
-        let body = json!({
-            "model": model,
-            "messages": messages,
-            "temperature": 0.2,
-            "max_tokens": max_tokens,
-        });
+        // LM Studio JIT: `ttl` keeps the model loaded after on-demand load (seconds).
+        let body = if self.name == "lm_studio" {
+            json!({
+                "model": model,
+                "messages": messages,
+                "temperature": 0.2,
+                "max_tokens": max_tokens,
+                "ttl": 600,
+            })
+        } else {
+            json!({
+                "model": model,
+                "messages": messages,
+                "temperature": 0.2,
+                "max_tokens": max_tokens,
+            })
+        };
 
         let auth_header = if api_key.is_empty() {
-            None
+            // LM Studio accepts an optional dummy key; some builds are happier with a Bearer.
+            if self.name == "lm_studio" {
+                Some("Bearer lm-studio".to_string())
+            } else {
+                None
+            }
         } else {
             Some(format!("Bearer {api_key}"))
         };
@@ -157,7 +190,7 @@ impl TranslationProvider for OpenAICompatibleChatProvider {
         }
 
         let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
-        let payload = http::request_json(
+        let payload = match http::request_json(
             &self.transport.client(),
             Method::POST,
             &url,
@@ -166,8 +199,15 @@ impl TranslationProvider for OpenAICompatibleChatProvider {
             None,
             Some(&header_pairs),
             &format!("{} request failed", self.name),
+            request.timeout_secs,
         )
-        .await?;
+        .await
+        {
+            Ok(payload) => payload,
+            Err(err) => {
+                return Err(enrich_local_llm_error(self.name, err));
+            }
+        };
 
         let translated = payload
             .get("choices")
@@ -188,7 +228,7 @@ impl TranslationProvider for OpenAICompatibleChatProvider {
     }
 
     fn diagnostics(&self, settings: &HashMap<String, String>) -> Value {
-        let custom_prompt = http::setting(settings, "custom_prompt");
+        let custom_prompt = effective_custom_prompt(settings);
         let base_url = http::setting(settings, "base_url");
         let base_url = if base_url.is_empty() {
             self.default_base_url.to_string()
@@ -212,9 +252,36 @@ impl TranslationProvider for OpenAICompatibleChatProvider {
                 "used_default_prompt".into(),
                 json!(custom_prompt.is_empty()),
             );
+            obj.insert(
+                "override_prompt".into(),
+                json!(!custom_prompt.is_empty()
+                    || matches!(
+                        http::setting(settings, "override_prompt")
+                            .trim()
+                            .to_ascii_lowercase()
+                            .as_str(),
+                        "true" | "1" | "yes" | "on"
+                    )),
+            );
         }
         diag
     }
+}
+
+fn enrich_local_llm_error(provider: &str, err: ProviderError) -> ProviderError {
+    let message = err.to_string();
+    let lower = message.to_ascii_lowercase();
+    let jit_abort = lower.contains("model is unloaded")
+        || lower.contains("channel error")
+        || lower.contains("startup was aborted");
+    if provider == "lm_studio" && jit_abort {
+        return ProviderError::retryable(format!(
+            "{message} (LM Studio started JIT load but the engine aborted — usually the HTTP \
+client disconnected too early, or the model failed to start. VoiceSub uses ≥120s for local LLM; \
+check LM Studio logs and that the model loads manually.)"
+        ));
+    }
+    err
 }
 
 fn extract_message_content(content: &Value) -> String {
@@ -253,5 +320,29 @@ mod tests {
             extract_message_content(&json!([{ "text": "hi" }, { "text": " there" }])),
             "hi there"
         );
+    }
+
+    #[test]
+    fn effective_custom_prompt_respects_override_flag() {
+        let mut settings = HashMap::new();
+        settings.insert("custom_prompt".into(), "Keep slang".into());
+        assert_eq!(effective_custom_prompt(&settings), "Keep slang");
+
+        settings.insert("override_prompt".into(), "false".into());
+        assert_eq!(effective_custom_prompt(&settings), "");
+
+        settings.insert("override_prompt".into(), "true".into());
+        assert_eq!(effective_custom_prompt(&settings), "Keep slang");
+    }
+
+    #[test]
+    fn enrich_local_llm_error_marks_jit_abort_retryable() {
+        let err = ProviderError::Message(
+            "lm_studio request failed: HTTP 400 Bad Request - {\"error\":\"Model is unloaded.\"}"
+                .into(),
+        );
+        let enriched = enrich_local_llm_error("lm_studio", err);
+        assert!(enriched.is_retryable());
+        assert!(enriched.to_string().contains("JIT"));
     }
 }

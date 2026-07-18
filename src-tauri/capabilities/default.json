@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2/capability",
   "identifier": "default",
-  "description": "Default VoiceSub capability",
-  "windows": ["main", "tts", "local-asr"],
+  "description": "Main dashboard shell — full VoiceSub IPC",
+  "windows": ["main"],
   "remote": {
     "urls": ["http://localhost:*", "http://127.0.0.1:*"]
   },

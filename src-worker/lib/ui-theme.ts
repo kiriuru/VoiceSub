@@ -1,5 +1,9 @@
 import { normalizeConfigPayload } from "../../src/lib/config-normalize";
-import { applyUiPaletteToDocument } from "../../src/lib/ui-theme-css";
+import {
+  applyUiColorSchemeToDocument,
+  applyUiFontToDocument,
+  applyUiPaletteToDocument,
+} from "../../src/lib/ui-theme-css";
 import { apiFetch } from "./loopback-api-client";
 
 export function applyUiThemeFromConfigPayload(
@@ -11,16 +15,11 @@ export function applyUiThemeFromConfigPayload(
   if (!root) return config.ui;
 
   const theme = config.ui?.theme === "light" ? "light" : "dark";
-  root.dataset.uiTheme = theme;
+  applyUiColorSchemeToDocument(theme, targetDocument);
   if (config.ui?.palette) {
     applyUiPaletteToDocument(config.ui.palette);
   }
-
-  try {
-    root.style.setProperty("color-scheme", theme);
-  } catch {
-    // ignore
-  }
+  applyUiFontToDocument(config.ui?.font_family, targetDocument);
 
   return config.ui;
 }

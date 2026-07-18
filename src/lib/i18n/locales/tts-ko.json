@@ -169,5 +169,7 @@
   "tts.twitch.irc": "IRC",
   "tts.twitch.chat_empty": "채팅 메시지가 없습니다.",
   "tts.twitch.clean": "정상",
-  "tts.twitch.filtered": "필터됨"
+  "tts.twitch.filtered": "필터됨",
+  "tts.oauth.popup_blocked": "브라우저를 열 수 없습니다. 팝업을 허용하거나 VoiceSub를 다시 시작하세요.",
+  "tts.oauth.client_id_required": "Twitch Client ID가 필요합니다"
 }

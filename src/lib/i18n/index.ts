@@ -44,6 +44,9 @@ export function getLocale(): LocaleCode {
 }
 
 export function setLocale(code: LocaleCode): void {
+  if (get(locale) === code) {
+    return;
+  }
   locale.set(code);
   publishUiLocaleSync(code);
   if (typeof window !== "undefined") {

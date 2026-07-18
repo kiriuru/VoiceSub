@@ -62,7 +62,7 @@ pub async fn settings_save(
     };
 
     apply_logging_preferences(&state.paths.logs_dir, read_full_logging_enabled(&payload));
-    state.translation.lock().await.apply_live_settings();
+    state.translation.lock().await.apply_live_settings().await;
     state.obs_captions.apply_live_settings().await;
     state.subtitle.republish_latest().await;
     let subtitle_style = payload.get("subtitle_style");

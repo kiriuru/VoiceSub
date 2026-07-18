@@ -6,6 +6,7 @@
 
   let open = false;
   let root: HTMLSpanElement | undefined;
+  const tipId = `field-help-${Math.random().toString(36).slice(2, 9)}`;
 
   function toggle(event: MouseEvent) {
     event.preventDefault();
@@ -20,9 +21,21 @@
     }
   }
 
+  function onDocumentKeydown(event: KeyboardEvent) {
+    if (!open) return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      open = false;
+    }
+  }
+
   onMount(() => {
     document.addEventListener("click", onDocumentClick);
-    return () => document.removeEventListener("click", onDocumentClick);
+    document.addEventListener("keydown", onDocumentKeydown);
+    return () => {
+      document.removeEventListener("click", onDocumentClick);
+      document.removeEventListener("keydown", onDocumentKeydown);
+    };
   });
 </script>
 
@@ -32,12 +45,14 @@
     class="field-help-trigger"
     aria-label={triggerLabel}
     aria-expanded={open}
+    aria-controls={tipId}
+    aria-describedby={open ? tipId : undefined}
     title={text}
     on:click={toggle}
   >
     !
   </button>
   {#if open}
-    <span class="field-help-popover" role="tooltip">{text}</span>
+    <span id={tipId} class="field-help-popover" role="tooltip">{text}</span>
   {/if}
 </span>

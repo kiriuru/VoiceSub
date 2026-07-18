@@ -748,6 +748,7 @@ export class BrowserAsrSessionManager implements AsrManagerHost {
     this.state.desiredRunning = false;
     this.state.pendingStart = false;
     this.state.generationId = Number(this.state.generationId || 0) + 1;
+    this.state.stopEpoch = Number(this.state.stopEpoch || 0) + 1;
     this.state.webSpeechPhraseHintsSuppressed = false;
     this.state.webSpeechLanguageSoftFallbackUsed = false;
     this.state.browserCyclePending = false;

@@ -26,34 +26,51 @@ fn is_loopback_host(host: &Host<&str>) -> bool {
     }
 }
 
-/// Allow HTTPS release / OAuth pages opened from the dashboard shell.
+/// HTTPS hosts the desktop shell may open in the system browser.
+/// Keep this explicit — the dashboard must not open arbitrary remote URLs.
+const ALLOWED_EXTERNAL_HTTPS_HOSTS: &[&str] = &[
+    // Updates / OAuth / GPU drivers
+    "github.com",
+    "www.github.com",
+    "id.twitch.tv",
+    "developer.nvidia.com",
+    "www.nvidia.com",
+    "nvidia.com",
+    // Translation provider consoles / API key pages
+    "console.cloud.google.com",
+    "script.google.com",
+    "portal.azure.com",
+    "www.deepl.com",
+    "deepl.com",
+    "libretranslate.com",
+    "www.libretranslate.com",
+    "platform.openai.com",
+    "openrouter.ai",
+    "www.openrouter.ai",
+    "fanyi-api.baidu.com",
+    "ai.youdao.com",
+    "console.cloud.tencent.com",
+    "fanyi.caiyunapp.com",
+];
+
+/// Allow HTTPS release / OAuth / provider-setup pages opened from the dashboard shell.
 pub fn validate_external_https_url(url: &str) -> Result<(), String> {
     let trimmed = url.trim();
     if trimmed.is_empty() {
         return Err("url is empty".into());
     }
-    if !trimmed.starts_with("https://") {
+    let parsed = url::Url::parse(trimmed).map_err(|err| err.to_string())?;
+    if parsed.scheme() != "https" {
         return Err("only https URLs are allowed".into());
     }
-    let host = trimmed
-        .strip_prefix("https://")
-        .and_then(|rest| rest.split('/').next())
-        .unwrap_or("")
-        .split(':')
-        .next()
-        .unwrap_or("")
-        .trim()
+    let host = parsed
+        .host_str()
+        .ok_or_else(|| "missing host".to_string())?
         .to_ascii_lowercase();
-    let allowed = matches!(
-        host.as_str(),
-        "github.com"
-            | "www.github.com"
-            | "id.twitch.tv"
-            | "developer.nvidia.com"
-            | "www.nvidia.com"
-            | "nvidia.com"
-    );
-    if !allowed {
+    if !ALLOWED_EXTERNAL_HTTPS_HOSTS
+        .iter()
+        .any(|allowed| host == *allowed)
+    {
         return Err(format!("host is not allowed: {host}"));
     }
     Ok(())
@@ -94,6 +111,24 @@ mod tests {
         )
         .is_ok());
         assert!(validate_external_https_url("https://www.nvidia.com/Download/index.aspx").is_ok());
+    }
+
+    #[test]
+    fn allows_translation_provider_setup_urls() {
+        assert!(
+            validate_external_https_url("https://platform.openai.com/api-keys").is_ok()
+        );
+        assert!(validate_external_https_url("https://console.cloud.google.com/apis/credentials").is_ok());
+        assert!(validate_external_https_url(
+            "https://portal.azure.com/#view/Microsoft_Azure_ProjectOxford/CognitiveServicesHub/~/TextTranslation"
+        )
+        .is_ok());
+        assert!(validate_external_https_url("https://fanyi-api.baidu.com/").is_ok());
+        assert!(validate_external_https_url("https://ai.youdao.com/").is_ok());
+        assert!(validate_external_https_url("https://console.cloud.tencent.com/tmt").is_ok());
+        assert!(validate_external_https_url("https://fanyi.caiyunapp.com/").is_ok());
+        assert!(validate_external_https_url("https://openrouter.ai/keys").is_ok());
+        assert!(validate_external_https_url("https://www.deepl.com/pro-api").is_ok());
     }
 
     #[test]

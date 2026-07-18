@@ -105,18 +105,29 @@ export async function saveProfile(
   });
 }
 
+async function throwHttpError(res: Response, label: string): Promise<never> {
+  let detail = "";
+  try {
+    const body = (await res.json()) as { message?: string };
+    if (body?.message) detail = `: ${body.message}`;
+  } catch {
+    // ignore non-json error bodies
+  }
+  throw new Error(`${label} -> ${res.status}${detail}`);
+}
+
 export async function deleteProfile(name: string): Promise<{ name: string; deleted: boolean }> {
   const res = await apiFetch(`/api/profiles/${encodeURIComponent(name)}`, { method: "DELETE" });
   if (!res.ok) {
-    throw new Error(`delete profile -> ${res.status}`);
+    await throwHttpError(res, "delete profile");
   }
   return res.json() as Promise<{ name: string; deleted: boolean }>;
 }
 
-export async function downloadDiagnostics(): Promise<void> {
+export async function downloadDiagnostics(): Promise<{ filename: string }> {
   const res = await apiFetch("/api/exports/diagnostics");
   if (!res.ok) {
-    throw new Error(`diagnostics export -> ${res.status}`);
+    await throwHttpError(res, "diagnostics export");
   }
   const blob = await res.blob();
   const disposition = res.headers.get("Content-Disposition") || "";
@@ -127,7 +138,8 @@ export async function downloadDiagnostics(): Promise<void> {
   anchor.href = url;
   anchor.download = filename;
   anchor.click();
-  URL.revokeObjectURL(url);
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  return { filename };
 }
 
 export async function postClientLog(channel: string, message: string, details?: Record<string, unknown>): Promise<void> {
@@ -156,8 +168,16 @@ export async function openExternalUrl(url: string): Promise<void> {
   try {
     const { invoke } = await import("@tauri-apps/api/core");
     await invoke("open_external_https_url", { url: trimmed });
-  } catch {
-    window.open(trimmed, "_blank", "noopener,noreferrer");
+    return;
+  } catch (err) {
+    // WebView window.open often does not open the system browser; prefer surfacing
+    // the Tauri/shell error when the IPC path was available but rejected the URL.
+    const opened = window.open(trimmed, "_blank", "noopener,noreferrer");
+    if (opened) {
+      return;
+    }
+    const reason = err instanceof Error ? err.message : String(err);
+    throw new Error(`Failed to open external URL: ${reason}`);
   }
 }
 
@@ -174,6 +194,46 @@ export async function openLocalUrl(url: string): Promise<void> {
   }
 }
 
-export async function listRecommendedOpenAiModels(): Promise<{ models: string[]; recommended?: boolean }> {
+export async function listRecommendedOpenAiModels(): Promise<{
+  models: string[];
+  recommended?: boolean;
+  source?: string;
+}> {
   return jsonFetch("/api/openai/recommended-models");
+}
+
+export type OpenAiCompatibleModelsResponse = {
+  ok?: boolean;
+  models?: string[];
+  recommended_models?: string[];
+  source?: string;
+  error?: string;
+  show_all?: boolean;
+  base_url?: string;
+};
+
+/** Live OpenAI / OpenAI-compatible `GET {base}/models` via local runtime proxy. */
+export async function listOpenAiCompatibleModels(options: {
+  apiKey?: string;
+  baseUrl?: string;
+  showAll?: boolean;
+}): Promise<OpenAiCompatibleModelsResponse> {
+  const res = await apiFetch("/api/openai/models", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      api_key: options.apiKey || "",
+      base_url: options.baseUrl || "",
+      show_all: options.showAll === true,
+    }),
+  });
+  const body = (await res.json().catch(() => ({}))) as OpenAiCompatibleModelsResponse;
+  if (!res.ok) {
+    return {
+      ok: false,
+      models: [],
+      error: body.error || `${res.status} ${res.statusText}`,
+    };
+  }
+  return body;
 }

@@ -9,11 +9,14 @@
   import ModulesPanel from "../panels/ModulesPanel.svelte";
   import PanelTopNavLayout from "./PanelTopNavLayout.svelte";
   import ScrollToTopFab from "./ScrollToTopFab.svelte";
-  import { TRANSLATION_PANEL_SECTIONS, SUBTITLES_PANEL_SECTIONS } from "../panel-sections";
+  import {
+    HELP_PANEL_SECTIONS,
+    TRANSLATION_PANEL_SECTIONS,
+    SUBTITLES_PANEL_SECTIONS,
+  } from "../panel-sections";
   import { locale, t } from "../i18n";
   import {
     isMoreTab,
-    isSubtitlesTab,
     navDestinationTitleKey,
     shouldShowMoreHub,
     shouldShowSubtitlesHub,
@@ -35,7 +38,7 @@
   export let version = "0.6.0";
   export let standardNav: NavDestinationId = "live";
   export let moreHubOpen = true;
-  export let subtitlesHubOpen = true;
+  export let subtitlesHubOpen = false;
   export let activeTab: TabId;
   export let config: ConfigPayload;
   export let runtime: RuntimeStatus;
@@ -55,7 +58,6 @@
   export let onSelectSubtitlesTab: (tab: TabId) => void;
   export let onActiveTabChange: (tab: TabId) => void = () => {};
   export let onOpenMoreHub: () => void;
-  export let onOpenSubtitlesHub: () => void;
   export let onStart: () => void;
   export let onStop: () => void;
   export let onSave: () => void;
@@ -75,24 +77,26 @@
       ? tr("nav.subtitles")
       : standardNav === "more" && isMoreTab(activeTab)
         ? tr(tabTitleKey(activeTab))
-        : standardNav === "subtitles" && isSubtitlesTab(activeTab)
-          ? tr(tabTitleKey(activeTab))
+        : standardNav === "subtitles"
+          ? tr(navDestinationTitleKey("subtitles"))
           : tr(navDestinationTitleKey(standardNav));
-  $: showBack =
-    (standardNav === "more" && !showMoreHub) ||
-    (standardNav === "subtitles" && !showSubtitlesHub);
+  $: showBack = standardNav === "more" && !showMoreHub;
   $: translationSections = TRANSLATION_PANEL_SECTIONS.filter(
     (section) => section.id !== "translation-section-results" || translationResults,
   );
   $: useTranslationTopNav = standardNav === "translation";
   $: useSubtitlesTopNav = standardNav === "subtitles" && !showSubtitlesHub;
+  $: useHelpTopNav = standardNav === "more" && !showMoreHub && activeTab === "help";
   $: topNavSections = useTranslationTopNav
     ? translationSections
     : useSubtitlesTopNav
       ? SUBTITLES_PANEL_SECTIONS
-      : [];
-  $: usePanelTopNav = useTranslationTopNav || useSubtitlesTopNav;
+      : useHelpTopNav
+        ? HELP_PANEL_SECTIONS
+        : [];
+  $: usePanelTopNav = useTranslationTopNav || useSubtitlesTopNav || useHelpTopNav;
   $: panelNavMode = (useSubtitlesTopNav ? "tabs" : "scroll") as "scroll" | "tabs";
+  $: panelNavAriaKey = useHelpTopNav ? "help.jump.aria" : "nav.section.jump";
 
   function handleSubtitlesTabChange(tab: TabId) {
     onActiveTabChange(tab);
@@ -100,15 +104,14 @@
   }
 
   function handleBack() {
-    if (standardNav === "subtitles") onOpenSubtitlesHub();
-    else onOpenMoreHub();
+    onOpenMoreHub();
   }
 
   let standardScrollEl: HTMLDivElement | null = null;
 </script>
 
 <div class="app-shell standard-shell">
-  <NavRail active={standardNav} onSelect={onSelectNav} />
+  <NavRail active={standardNav} {version} onSelect={onSelectNav} />
 
   <div class="standard-main">
     <TopAppBar
@@ -150,6 +153,7 @@
         {:else if usePanelTopNav}
           <PanelTopNavLayout
             sections={topNavSections}
+            ariaLabelKey={panelNavAriaKey}
             {activeTab}
             navMode={panelNavMode}
             onActiveTabChange={useSubtitlesTopNav ? handleSubtitlesTabChange : onActiveTabChange}

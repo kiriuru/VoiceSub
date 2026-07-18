@@ -76,7 +76,6 @@ Tauri dev: embedded HTTP на `http://127.0.0.1:8765`; main webview открыв
 | `http://127.0.0.1:8765/` | Svelte dashboard |
 | `http://127.0.0.1:8765/overlay` | OBS Browser Source |
 | `http://127.0.0.1:8765/google-asr?autostart=1` | Browser Speech worker |
-| `http://127.0.0.1:8765/google-asr-edge` | Тот же worker (Edge smoke) |
 | `http://127.0.0.1:8765/tts` | UI TTS-модуля |
 | `http://127.0.0.1:8765/local-asr` | UI модуля Local ASR |
 
@@ -89,7 +88,7 @@ Tauri dev: embedded HTTP на `http://127.0.0.1:8765`; main webview открыв
 | `GET /api/runtime/status` | Runtime snapshot + diagnostics (`asr.local_module`) |
 | `GET /api/settings/load` | Загрузка config + presets + fonts |
 | `POST /api/settings/save` | Нормализация + сохранение `config.toml` |
-| `POST /api/ui/sync` | UI theme/locale sync → `ui_config_sync` |
+| `POST /api/ui/sync` | UI theme/locale/font sync → `ui_config_sync` |
 | `GET /api/exports/diagnostics` | Redacted diagnostics ZIP |
 | `GET /api/obs/url` | `{ overlay_url }` для OBS |
 | `GET /api/asr/local/status` | Готовность модуля Local ASR / deps / model |
@@ -117,14 +116,14 @@ Tauri dev: embedded HTTP на `http://127.0.0.1:8765`; main webview открыв
 
 **VoiceSub** — локальное Windows-first desktop-приложение для субтитров в реальном времени:
 
-- захват речи через **Browser Speech worker** (отдельное окно Chrome/Edge с видимой адресной строкой, Web Speech API) **или** опциональный **Local ASR** (Parakeet ONNX, in-process mic);
+- захват речи через **Browser Speech worker** (отдельное окно Chrome с видимой адресной строкой, Web Speech API) **или** опциональный **Local ASR** (Parakeet ONNX, in-process mic);
 - опциональный перевод на 0..5 целевых языков с независимым выбором провайдера на слот;
 - единая маршрутизация subtitle payload в Svelte dashboard, vanilla OBS overlay и OBS Closed Captions;
 - опциональный **TTS-модуль** (озвучка субтитров, Twitch chat TTS);
 - опциональный **модуль Local ASR** (`/local-asr`, режим `local_parakeet` при `local_module.ready`);
 - экспорт diagnostics ZIP и client-side trace logs.
 
-**Режимы ASR:** `browser_google` (default Web Speech на `/google-asr` / `/google-asr-edge`) и опциональный `local_parakeet` (модуль Local ASR, gate `asr.local_module.ready`). Legacy SST `local` и experimental worker routes в core нет.
+**Режимы ASR:** `browser_google` (default Web Speech на `/google-asr`) и опциональный `local_parakeet` (модуль Local ASR, gate `asr.local_module.ready`). Legacy SST `local` и experimental worker routes в core нет.
 
 Жёсткие границы:
 
@@ -171,7 +170,7 @@ flowchart LR
   end
 
   subgraph Browser["Browser Speech"]
-    CHR["Chrome/Edge window<br/>/google-asr"]
+    CHR["Chrome window<br/>/google-asr"]
   end
 
   subgraph LocalAsr["Local ASR (optional)"]
@@ -274,7 +273,7 @@ src-tauri (Layer 4: IPC, window, bundle only)
 | `voicesub-types` | `PROJECT_VERSION`, WS envelope types, ASR event DTO |
 | `voicesub-config` | TOML store, defaults, legacy JSON import, paths, bind policy |
 | `voicesub-subtitle` | `SubtitleLifecycleCore`, `SubtitleRouter`, presentation, overlay contract |
-| `voicesub-translation` | `TranslationDispatcher`, `TranslationEngine`, 13 providers |
+| `voicesub-translation` | `TranslationDispatcher`, `TranslationEngine`, 17 providers |
 | `voicesub-browser` | Chrome supervisor, worker launch flags, operational FSM |
 | `voicesub-ws` | `/ws/events` hub, `/ws/asr_worker` hub, event sequence |
 | `voicesub-http` | Re-export `voicesub-runtime::http` (thin) |
@@ -299,7 +298,7 @@ src-tauri (Layer 4: IPC, window, bundle only)
 1. **Старт** (`POST /api/runtime/start`):
    - merge optional inline `config_payload`;
    - apply live settings (translation, OBS, subtitle, logging);
-   - if `asr.mode = browser_google` (или edge): launch Chrome worker → `{base}/google-asr?autostart=1[&locale=…]` и browser speech ingest;
+   - if `asr.mode = browser_google`: launch Chrome worker → `{base}/google-asr?autostart=1[&locale=…]` и browser speech ingest;
    - if `asr.mode = local_parakeet`: assert `asr.local_module.ready`, start `LocalAsrSpeechSource` (без Chrome worker);
    - start translation dispatcher, OBS captions;
    - broadcast `preflight_update`, `runtime_update`.
@@ -343,17 +342,16 @@ Embedded HTTP server: dedicated Tokio runtime в Tauri process; bind из `AppCo
 | `translation` | Provider, lines (до 5), cache, limits, `provider_settings` |
 | `subtitle_output` | Source/translation display order |
 | `subtitle_lifecycle` | TTL, sync flags; deprecated timing keys только normalize |
-| `source_text_replacement` | Find/replace pairs для ASR текста |
+| `source_text_replacement` | Find/replace для ASR текста (кастомные пары + builtin-корни/нормализация обходов; в `TranscriptController` до subtitle/translation) |
 | `logging` | `full_enabled` — master switch deep diagnostics |
 
 ### ASR mode (VoiceSub 0.6.0)
 
 | `asr.mode` | Статус |
 | --- | --- |
-| `browser_google` | **Active default** — Chrome/Edge Web Speech worker |
+| `browser_google` | **Active default** — Chrome Web Speech worker |
 | `local_parakeet` | Опциональный Local ASR; селектор на Эфире только при `asr.local_module.ready` |
-| `browser_google_edge` | Сохраняется при import; тот же worker, другой page URL |
-| `local`, `browser_google_experimental*` (import) | Mapped → `browser_google` + `import_hint` |
+| `local`, `browser_google_edge`, `browser_google_experimental*` (import) | Mapped → `browser_google` + `import_hint` |
 
 SST JSON import **сохраняет** `local_parakeet` (не мапит на `browser_google`). Ready — runtime gate, не remap при импорте.
 
@@ -369,7 +367,7 @@ SST JSON import **сохраняет** `local_parakeet` (не мапит на `b
 
 ### Profiles
 
-`user-data/profiles/{name}.toml` — named snapshots via `/api/profiles/*`.
+`user-data/profiles/{name}.json` — named snapshots via `/api/profiles/*`.
 
 ## 8. HTTP API (локальный)
 
@@ -397,7 +395,7 @@ Global middleware: CSP header, `Cache-Control: no-store`.
 | --- | --- | --- |
 | GET | `/api/devices/audio-inputs` | Empty list (browser ASR uses `getUserMedia`) |
 | GET | `/api/openai/recommended-models` | Static recommended models |
-| POST | `/api/openai/models` | Static list (key not used yet) |
+| POST | `/api/openai/models` | Live OpenAI-compatible `GET {base}/models` (chat filter for api.openai.com) |
 | POST | `/api/openai/usable-models` | Alias |
 
 ### Settings / Profiles
@@ -407,7 +405,7 @@ Global middleware: CSP header, `Cache-Control: no-store`.
 | GET | `/api/settings/load` | Config + subtitle presets + font catalog |
 | POST | `/api/settings/save` | Merge/save + live apply |
 | GET/POST/DELETE | `/api/profiles`, `/api/profiles/{name}` | Profile CRUD |
-| POST | `/api/ui/sync` | Debounced UI-only sync → `ui_config_sync` на EventBus (theme/locale между dashboard и TTS) |
+| POST | `/api/ui/sync` | Debounced UI-only sync → `ui_config_sync` на EventBus (theme/locale/`ui.font_family` между dashboard, Web ASR, TTS, Local ASR) |
 
 ### Runtime / OBS
 
@@ -455,7 +453,6 @@ Protected like other `/api/*`. Полная таблица в [§18 Модуль
 | GET | `/` | `bin/dashboard/index.html` |
 | GET | `/overlay` | `bin/overlay/overlay.html` |
 | GET | `/google-asr` | `bin/worker/index.html` |
-| GET | `/google-asr-edge` | Same worker bundle |
 | GET | `/tts` | `bin/tts/index.html` |
 | GET | `/local-asr` | `bin/local-asr/index.html` |
 | GET | `/project-fonts.css` | Generated `@font-face` from `bin/fonts/` |
@@ -503,7 +500,7 @@ Payload enrichment: `event_sequence`, `created_at_ms`, `event_type` (`WsEventPub
 | `translation_update` | Per-sequence translation results |
 | `twitch_chat_message` | Twitch chat for TTS |
 | `twitch_connection_update` | Twitch connection state |
-| `ui_config_sync` | `{ ui: … }` sync theme/locale (Tauri IPC; через `/api/ui/sync`) |
+| `ui_config_sync` | `{ ui: … }` sync theme/locale/`font_family` (Tauri IPC; через `/api/ui/sync`) |
 
 **Stale guard:** overlay (`overlay.js` + `ws-stale-guard-logic.js`) отбрасывает устаревшие события после stop/start (timestamp-first при reset sequence).
 
@@ -512,8 +509,8 @@ Payload enrichment: `event_sequence`, `created_at_ms`, `event_type` (`WsEventPub
 **Реализация:** `RuntimeEventBus` (`crates/voicesub-ws/src/event_bus.rs`) + Tauri emit `runtime-event` (`src-tauri/src/lib.rs`).
 
 - Main dashboard (`src/lib/runtime-events.ts`) и TTS module (`src-tts/App.svelte`) **не открывают** `ws://127.0.0.1:8765/ws/events` — получают те же envelope `{ type, payload }` через Tauri event channel.
-- On subscribe: IPC `get_runtime_state_snapshot` → replay runtime/subtitle/overlay/translation/diagnostics без WS race.
-- WS publisher (`WsEventPublisher`) **дублирует** broadcast в EventBus для shell clients; OBS overlay по-прежнему только WS.
+- On subscribe: сначала `listen(runtime-event)` (buffer live frames), затем IPC `get_runtime_state_snapshot`, затем drain buffer — чтобы stale snapshot не перезаписал более новый live event. Dashboard replay предпочитает `overlay_update` (fallback — `subtitle_payload_update`); TTS replay — только `runtime_update` + `twitch_connection_update`.
+- WS publisher (`WsEventPublisher`) дублирует большинство broadcast в EventBus; OBS overlay по-прежнему только WS. **Twitch chat** — `publish_event_bus_only` (без fanout на `/ws/events`); connection updates идут в hub для snapshot replay.
 
 **Legacy:** `src/lib/ws.ts` (`EventsSocket`) — dev/optional external browser clients; production Tauri shell использует `runtime-events.ts`.
 
@@ -541,6 +538,8 @@ Payload enrichment: `event_sequence`, `created_at_ms`, `event_type` (`WsEventPub
 
 **Регистрация:** `src-tauri/src/lib.rs` → `tauri::generate_handler!`
 
+**Capabilities (per window):** `src-tauri/capabilities/default.json` (main — полный `allow-voicesub-ipc`), `tts.json` (`allow-voicesub-tts-ipc`), `local-asr.json` (`allow-voicesub-local-asr-ipc`). `get_loopback_api_token` allowlisted на всех трёх.
+
 ### Shell commands
 
 | Command | Назначение |
@@ -549,7 +548,7 @@ Payload enrichment: `event_sequence`, `created_at_ms`, `event_type` (`WsEventPub
 | `get_loopback_api_token` | Per-session token для protected `/api/*` (fallback без HTML injection) |
 | `set_dashboard_layout` | Compact (390×844) vs standard (1280×900) window |
 | `launch_browser_worker` | Launch Chrome to worker URL without full runtime start |
-| `open_external_https_url` | Открыть validated HTTPS URL в system browser (update banner **Download**) |
+| `open_external_https_url` | Открыть allowlisted HTTPS URL в system browser (update banner, setup-ссылки провайдеров перевода) |
 | `open_local_http_url` | Открыть validated loopback HTTP URL в system browser |
 
 ### TTS commands (`src-tauri/src/tts.rs`)
@@ -589,9 +588,9 @@ Payload enrichment: `event_sequence`, `created_at_ms`, `event_type` (`WsEventPub
 | `event_routing.rs` | Per-window `runtime-event` type filters + snapshot replay envelopes |
 | `ipc_pump.rs` | Bus→IPC pump: overlay coalescing (dashboard only), lag-resync debounce |
 
-**Tauri events (shell clients):** `runtime-event` (WS-shaped envelopes), `tts-speech-activity` (planned speech queue items for TTS UI log).
+**Tauri events (shell clients):** `runtime-event` (WS-shaped envelopes), `tts-speech-activity` / `playback-finished` — только **`emit_to(tts)`** (не global `emit`).
 
-**`runtime-event` routing (per window):** bus→IPC pump (`src-tauri/src/ipc_pump.rs`, фильтры в `event_routing.rs`) эмитит через `emit_to(label, …)`, не global `emit`. **Main** dashboard получает все envelope; **tts** window — только `twitch_chat_message`, `twitch_connection_update`, `runtime_update`, `runtime_status`, `ui_config_sync`. Высокочастотный `transcript_update` / `overlay_update` не флудит IPC TTS webview. Payload по ссылке (без deep-clone). **`overlay_update` IPC на main dashboard коалесится** (trailing-edge, default 90 ms, env `VOICESUB_OVERLAY_IPC_MIN_INTERVAL_MS`); OBS `/ws/events` получает каждый кадр. `runtime_update` / `translation_update` сбрасывают pending overlay немедленно. При `RecvError::Lagged` — метрики `event_bus_consumer_lagged_*`, debounce resync 200 ms, затем `snapshot_to_envelopes`.
+**`runtime-event` routing (per window):** bus→IPC pump (`src-tauri/src/ipc_pump.rs`, фильтры в `event_routing.rs`) эмитит через `emit_to(label, …)`, не global `emit`. **Main** dashboard получает все envelope; **tts** window — только `twitch_chat_message`, `twitch_connection_update`, `runtime_update`, `runtime_status`, `ui_config_sync`; **local-asr** window — только `ui_config_sync` (живая тема/локаль/шрифт без Save). UI Local ASR и TTS **не** открывают `/ws/events` для UI sync (только BroadcastChannel + Tauri IPC) — иначе клиент всё равно получает overlay/runtime на полной частоте. `setLocale` идемпотентен, чтобы `sst:locale-changed` / BroadcastChannel не зацикливались. Высокочастотный `transcript_update` / `overlay_update` не флудит IPC модулей. Payload по ссылке (без deep-clone). **`overlay_update` IPC на main dashboard коалесится** (trailing-edge, default 90 ms, env `VOICESUB_OVERLAY_IPC_MIN_INTERVAL_MS`); OBS `/ws/events` получает каждый кадр. `runtime_update` / `translation_update` сбрасывают pending overlay немедленно. При `RecvError::Lagged` — метрики `event_bus_consumer_lagged_*`, pending snapshot resync (последний нужный sync не дропается; 200 ms coalesce между follow-up), затем `snapshot_to_envelopes` (overlay предпочтительнее raw subtitle).
 
 **Partial coalescing:** partial `transcript_update` — leading-edge throttle в `TranscriptController` (default 90 ms, env `VOICESUB_TRANSCRIPT_PARTIAL_MIN_INTERVAL_MS`; новая фраза/`sequence` и все final — без задержки). Subtitle lifecycle и WS `overlay_update` видят каждый partial; ingest сначала обновляет subtitle, затем async fanout transcript. Коалесится только избыточный transcript IPC/WS канал.
 
@@ -658,7 +657,9 @@ Verbose runtime-events: `VOICESUB_TRACE_RUNTIME_EVENTS_VERBOSE`.
 
 ### Diagnostics ZIP
 
-`GET /api/exports/diagnostics` bundles: `runtime_status.json`, `config_redacted.json`, `environment.txt`, `latest_session.jsonl`, `core.log`, `runtime-events.log`.
+`GET /api/exports/diagnostics` bundles: `runtime_status.json`, `config_redacted.json`, `environment.txt`, `latest_session.jsonl`, `core.log`, `runtime-events.log` (плюс deep JSONL traces при `logging.full_enabled`).
+
+ZIP пишутся в `user-data/exports/` как `diagnostics-{unix}_{ms}.zip`. Экспортёр хранит не больше **12** свежих diagnostics ZIP и удаляет более старые.
 
 ## 12. Browser Speech worker
 
@@ -667,21 +668,20 @@ Verbose runtime-events: `VOICESUB_TRACE_RUNTIME_EVENTS_VERBOSE`.
 | Constant | Value |
 | --- | --- |
 | `WORKER_PATH` | `/google-asr` |
-| Edge alias | `/google-asr-edge` |
 | Launch URL | `{base}/google-asr?autostart=1[&locale={ui.language}]` |
 
 `worker_launch_browser`: `auto` | `google_chrome` (unknown → `auto`).
 
 ### Chrome launch invariants
 
-- **Отдельное окно** Chrome/Edge с **видимой адресной строкой**
+- **Отдельное окно** Chrome с **видимой адресной строкой**
 - Isolated `--user-data-dir`: `{user-data}/browser-worker-profile-classic-{engine}/`
-- Edge: `--disable-sync`, `--allow-browser-signin=false`; **never** `--disable-extensions` / `--bwsi`
-- **No** `--app`, hidden windows, in-tab worker
+- **Never** `--disable-extensions` / `--bwsi` / `--app=`
+- **No** hidden windows или in-tab worker
 - Anti-throttling Chrome flags + Windows EcoQoS opt-out (`launch_config.rs`, `ecoqos.rs`)
 - Detached process at **`ABOVE_NORMAL_PRIORITY_CLASS`** when `use_high_priority` (default true): ASR отзывчив без `HIGH_PRIORITY_CLASS`, вытесняющего foreground apps. Fallback на normal при `ERROR_ACCESS_DENIED`. Stop via `taskkill /T /F` (только при реальном `pid > 0`)
-- **Orphan reaping (`orphan_guard.rs`):** live worker PID сохраняется в `user-data/browser-worker.pid` при launch и очищается при graceful stop. `RuntimeService::start` убивает осиротевший воркер прошлой *аварийной* сессии — только если PID всё ещё принадлежит Chromium (`chrome.exe` / `msedge.exe`), защита от PID reuse
-- **Launch stability (0.5.2+):** `launch_stability.rs`, `profile_bloat_guard.rs`, `process_affinity.rs`; contract tests in `crates/voicesub-browser/tests/chrome_launch_contract.rs`
+- **Orphan reaping (`orphan_guard.rs`):** live worker PID сохраняется в `user-data/browser-worker.pid` при launch и очищается после успешного kill. `RuntimeService::start` убивает осиротевший воркер прошлой *аварийной* сессии — только если PID всё ещё `chrome.exe`. При неудачном kill PID-файл сохраняется для retry.
+- **Launch stability (0.5.2+):** `launch_stability.rs`, `profile_bloat_guard.rs`, `process_affinity.rs` (opt-in через `VOICESUB_BROWSER_AFFINITY`); contract tests in `crates/voicesub-browser/tests/chrome_launch_contract.rs`
 
 ### Test harness (без spawn Chrome)
 
@@ -750,7 +750,7 @@ Verbose runtime-events: `VOICESUB_TRACE_RUNTIME_EVENTS_VERBOSE`.
 **Crate:** `voicesub-translation`  
 **Entry:** `TranslationDispatcher` (`dispatcher.rs`)
 
-### Providers (13)
+### Providers (17)
 
 `SUPPORTED_PROVIDERS` in `providers/mod.rs`:
 
@@ -758,8 +758,6 @@ Verbose runtime-events: `VOICESUB_TRACE_RUNTIME_EVENTS_VERBOSE`.
 | --- | --- |
 | `google_translate_v2` | API (default) |
 | `google_cloud_translation_v3` | API |
-| `google_gas_url` | API |
-| `google_web` | experimental |
 | `azure_translator` | API |
 | `deepl` | API |
 | `libretranslate` | API/self-hosted |
@@ -767,8 +765,16 @@ Verbose runtime-events: `VOICESUB_TRACE_RUNTIME_EVENTS_VERBOSE`.
 | `openrouter` | llm |
 | `lm_studio` | local_llm |
 | `ollama` | local_llm |
-| `public_libretranslate_mirror` | API |
+| `baidu_translate` | china (free-tier quota) |
+| `youdao_translate` | china (free-tier quota) |
+| `tencent_tmt` | china (free-tier quota) |
+| `caiyun_translator` | china (zh/en/ja) |
+| `google_gas_url` | experimental |
+| `google_web` | experimental |
+| `public_libretranslate_mirror` | experimental |
 | `free_web_translate` | experimental |
+
+Заметки: DeepL мапит UI-коды (`en`/`zh-cn`/`pt`) в API targets и выбирает Free vs Pro URL по ключу (`:fx` → free), если не задан custom `api_url`. Google v3 short model id раскрываются в full resource names. Azure предпочитает `zh-Hans`/`zh-Hant`; LibreTranslate — `zh`/`zt`. Китайские провайдеры: Baidu / Youdao / Tencent — бесплатные месячные квоты после регистрации; Caiyun — только zh/en/ja.
 
 До **5 translation lines** (`translation_1`…`translation_5`). Test stub `stub` — не в production registry.
 
@@ -778,6 +784,8 @@ Verbose runtime-events: `VOICESUB_TRACE_RUNTIME_EVENTS_VERBOSE`.
 - Late translations **разрешены** (не drop по wall-clock stale на browser path)
 - Preview supersession по `(segment_id, revision)`
 - Stale drop для устаревших **in-flight** jobs при новом segment/revision
+- Persistent cache в `user-data/translation-cache/` переживает рестарт при неизменённых настройках (первый `apply_live_settings` не затирает диск)
+- Per-request HTTP timeouts уважают `timeout_ms` (потолок клиента 300s); локальные LLM (`lm_studio` / `ollama`) получают floor ≥120s, чтобы JIT-загрузка модели не обрывалась; лимиты concurrency провайдеров обновляются при live apply настроек
 
 ## 14. Subtitle lifecycle и presentation
 
@@ -1230,7 +1238,7 @@ Config key: `ui.language` (empty = browser default).
 1. **Local-first:** default localhost bind; no cloud assumptions.
 2. **Browser worker visibility:** separate window, visible URL bar, no hidden/throttled-to-death modes.
 3. **Subtitle lifecycle:** completed block persists until new phrase finalized; late translations allowed on browser path.
-4. **Translation:** 13 providers, full dispatcher semantics (queue, stale drop, supersession).
+4. **Translation:** 17 providers, full dispatcher semantics (queue, stale drop, supersession).
 5. **Overlay separation:** vanilla HTML for OBS; not bundled in dashboard Vite chunk.
 6. **No Node in runtime:** only compile-time frontend toolchain.
 7. **Config import:** legacy SST `config.json` import preserves user intent except explicitly removed modes.
@@ -1240,7 +1248,7 @@ Config key: `ui.language` (empty = browser default).
 ### 27.1 Текущие ограничения
 
 - GitHub update **check + dashboard banner** реализованы; авто-скачивание installer — нет (только ссылка на release page)
-- `POST /api/openai/models` — static list; live OpenAI model fetch deferred
+- `POST /api/openai/models` — live OpenAI-compatible model list; official OpenAI host filters to chat models
 - Browser ASR: audio input enumeration empty in core devices API (mic в Chrome). Local ASR: `GET /api/asr/local/mics/list` (cpal).
 
 ### 27.2 Технический долг
@@ -1281,7 +1289,7 @@ Config key: `ui.language` (empty = browser default).
 | Term | Meaning |
 | --- | --- |
 | **ASR** | Automatic Speech Recognition |
-| **Browser worker** | Chrome/Edge window running Web Speech at `/google-asr` |
+| **Browser worker** | Chrome window running Web Speech at `/google-asr` |
 | **Completed block** | Finalized subtitle segment shown until next phrase finalizes |
 | **Golden test** | Fixture-based regression test |
 | **Overlay** | Vanilla OBS Browser Source page at `/overlay` |

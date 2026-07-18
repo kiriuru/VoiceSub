@@ -15,22 +15,34 @@
   let { open, tone, title, message, dismissLabel, onClose }: Props = $props();
 
   let dialogEl = $state<HTMLDialogElement | null>(null);
+  let syncing = false;
 
   $effect(() => {
-    if (!dialogEl) return;
-    if (open && !dialogEl.open) {
-      dialogEl.showModal();
-    } else if (!open && dialogEl.open) {
-      dialogEl.close();
+    const el = dialogEl;
+    const isOpen = open;
+    if (!el || syncing) return;
+    syncing = true;
+    try {
+      if (isOpen) {
+        if (!el.open) el.showModal();
+      } else if (el.open) {
+        el.close();
+      }
+    } finally {
+      // Defer clearing so a sync `close` event during el.close() still sees syncing=true.
+      queueMicrotask(() => {
+        syncing = false;
+      });
     }
   });
 
   function onDialogClose() {
+    if (syncing) return;
     onClose();
   }
 
   onDestroy(() => {
-    dialogEl?.close();
+    dialogEl = null;
   });
 </script>
 
@@ -46,7 +58,7 @@
     if (event.target === dialogEl) onClose();
   }}
 >
-  <div class="module-alert-dialog__panel surface-card">
+  <div class="module-alert-dialog__panel">
     <header class="module-alert-dialog__header">
       <h2 id="local-asr-alert-title">{title}</h2>
     </header>

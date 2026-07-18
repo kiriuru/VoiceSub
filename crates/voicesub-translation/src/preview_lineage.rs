@@ -28,3 +28,28 @@ impl TranslationPreviewLineage {
         self.generations.get(key).copied().unwrap_or(0)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn supersede_increments_generation_for_same_key() {
+        let mut lineage = TranslationPreviewLineage::default();
+        assert_eq!(lineage.supersede(Some("seg:1")), 1);
+        assert_eq!(lineage.supersede(Some("seg:1")), 2);
+        assert_eq!(lineage.generation("seg:1"), 2);
+    }
+
+    #[test]
+    fn generation_counters_are_never_reset() {
+        let mut lineage = TranslationPreviewLineage::default();
+        for index in 0..300 {
+            let key = format!("seg:{index}");
+            assert_eq!(lineage.supersede(Some(&key)), 1);
+        }
+        // Re-superseding an early key must continue from 1 → 2, not restart at 1.
+        assert_eq!(lineage.supersede(Some("seg:0")), 2);
+        assert_eq!(lineage.generation("seg:0"), 2);
+    }
+}

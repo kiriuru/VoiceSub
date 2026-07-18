@@ -178,6 +178,15 @@ impl BrowserAsrService {
 
     pub async fn register_connection(&self, outbound: mpsc::Sender<String>) -> u64 {
         let mut inner = self.inner.lock().await;
+        // Dropping the previous outbound closes the old server write loop (cmd_rx → None).
+        // Do NOT send `stop` here: on WS reconnect the old socket can still be the page's
+        // active listener briefly, and a stop would set desiredRunning=false permanently.
+        if inner.outbound.is_some() && inner.active_transport_id != 0 {
+            warn!(
+                previous_transport_id = inner.active_transport_id,
+                "browser ASR transport replaced; previous outbound dropped"
+            );
+        }
         inner.next_transport_id += 1;
         let transport_id = inner.next_transport_id;
         inner.active_transport_id = transport_id;

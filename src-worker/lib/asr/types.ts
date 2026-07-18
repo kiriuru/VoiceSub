@@ -42,6 +42,8 @@ export interface BrowserAsrState {
   desiredRunning: boolean;
   pendingStart: boolean;
   generationId: number;
+  /** Bumped only on user/control stop — cancels pending restart timers. */
+  stopEpoch: number;
   sessionId: string;
   providerName: string;
   browserMode: string;

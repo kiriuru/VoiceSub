@@ -30,7 +30,9 @@ pub use launcher::{
     BrowserLaunchError, BrowserWorkerLauncher, LaunchResult, browser_worker_launch_skipped,
 };
 pub use operational_fsm::{BrowserAsrOperationalFsm, BrowserOperationalPhase};
-pub use orphan_guard::{clear_worker_pid, reap_orphan_worker, record_worker_pid};
+pub use orphan_guard::{
+    clear_worker_pid, is_live_worker_pid, read_persisted_pid, reap_orphan_worker, record_worker_pid,
+};
 pub use process_affinity::{apply_browser_worker_affinity, resolve_browser_worker_affinity_mask};
 pub use service::{
     BrowserAsrDiagnostics, BrowserAsrService, IngestCallback, IngestedAsrUpdate, StatusCallback,

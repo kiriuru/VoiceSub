@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from "svelte";
   import { locale, t } from "../i18n";
   import WebSpeechAdvancedSettings from "../components/WebSpeechAdvancedSettings.svelte";
   import { fontOptions, refreshSystemFonts } from "../font-catalog";
@@ -10,26 +9,21 @@
   export let onChange: (next: ConfigPayload) => void;
   export let onFontCatalogChange: (catalog: FontCatalog) => void;
 
-  let systemFontCount = 0;
   let refreshingFonts = false;
 
   $: loc = $locale;
-  $: tr = (key: string) => t(key, undefined, loc);
+  $: tr = (key: string, vars?: Record<string, string | number>) => t(key, vars, loc);
   $: ui = config.ui || {};
   $: translation = config.translation || {};
   $: projectFontCount = fontCatalog?.project_local?.length || 0;
+  $: systemFontCount = fontCatalog?.system?.length || 0;
   $: fallbackFontCount = fontCatalog?.fallback?.length || 0;
   $: totalFonts = fontOptions(fontCatalog).length;
-
-  onMount(() => {
-    systemFontCount = fontCatalog?.system?.length || 0;
-  });
 
   async function handleRefreshSystemFonts() {
     refreshingFonts = true;
     try {
       const system = await refreshSystemFonts();
-      systemFontCount = system.length;
       if (fontCatalog) {
         onFontCatalogChange({ ...fontCatalog, system });
       }
@@ -78,8 +72,8 @@
         class="control"
         type="number"
         min="1000"
-        max="60000"
-        step="500"
+        max="300000"
+        step="1000"
         value={Number(translation.timeout_ms ?? 10000)}
         on:input={(e) =>
           patchTranslation({ timeout_ms: Number((e.currentTarget as HTMLInputElement).value) })}
@@ -126,7 +120,12 @@
   </p>
 
   <p class="muted">
-    Project: {projectFontCount} · System: {systemFontCount} · Fallback: {fallbackFontCount} · Total: {totalFonts}
+    {tr("settings.fonts.summary", {
+      project: projectFontCount,
+      system: systemFontCount,
+      fallback: fallbackFontCount,
+      total: totalFonts,
+    })}
   </p>
 
   <div class="url-row">

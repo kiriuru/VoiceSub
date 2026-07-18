@@ -145,8 +145,13 @@ impl EventsHub {
         let _ = self.send_direct(socket_id, WsMessage::hello_events()).await;
         // subtitle_payload_update is no longer broadcast on this hub (it lives only in the
         // Tauri IPC snapshot path). Only overlay_update carries live subtitle frames here.
+        // Replay ui_config_sync so module windows opened after a live theme change
+        // pick up presentation without requiring a settings Save.
         let _ = self
-            .replay_last(socket_id, &["runtime_update", "overlay_update"])
+            .replay_last(
+                socket_id,
+                &["runtime_update", "overlay_update", "ui_config_sync"],
+            )
             .await;
 
         while let Some(Ok(Message::Text(_))) = ws_rx.next().await {

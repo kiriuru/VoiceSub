@@ -20,6 +20,9 @@ use crate::preview_lineage::TranslationPreviewLineage;
 
 const DEFAULT_QUEUE_MAX: usize = 8;
 const DEFAULT_TIMEOUT_MS: u64 = 10_000;
+/// Local LLM (LM Studio / Ollama) JIT load often exceeds the global 10s default.
+const LOCAL_LLM_MIN_TIMEOUT_MS: u64 = 120_000;
+const MAX_TIMEOUT_MS: u64 = 300_000;
 const DEFAULT_MAX_CONCURRENT: usize = 2;
 
 pub type ConfigGetter = Arc<dyn Fn() -> Value + Send + Sync>;
@@ -52,6 +55,7 @@ struct ActiveTask {
     source_lang: String,
     source_text_len: usize,
     cancel: Arc<AtomicBool>,
+    cancel_notify: Arc<Notify>,
     handle: Mutex<Option<JoinHandle<()>>>,
 }
 
@@ -64,7 +68,7 @@ struct DispatcherInner {
     preview_lineage: TranslationPreviewLineage,
     worker: Option<JoinHandle<()>>,
     jobs_cancelled: u64,
-    provider_semaphores: HashMap<String, Arc<Semaphore>>,
+    provider_semaphores: HashMap<String, (usize, Arc<Semaphore>)>,
     provider_mutexes: HashMap<String, Arc<Mutex<()>>>,
     provider_next_allowed_at: HashMap<String, f64>,
     last_logged_queue_depth: usize,
@@ -90,6 +94,7 @@ struct LineResult {
     provider_latency_ms: f64,
     reason: Option<String>,
     status_message: Option<String>,
+    used_default_prompt: bool,
 }
 
 pub struct TranslationDispatcher {
@@ -179,6 +184,7 @@ impl TranslationDispatcher {
         let aborted = inner.active_tasks.len();
         for task in inner.active_tasks.drain(..) {
             task.cancel.store(true, Ordering::Release);
+            task.cancel_notify.notify_waiters();
             if let Some(handle) = task.handle.lock().await.take() {
                 handle.abort();
             }
@@ -280,6 +286,7 @@ impl TranslationDispatcher {
         inner.active_tasks = keep;
         for task in remove {
             task.cancel.store(true, Ordering::Release);
+            task.cancel_notify.notify_waiters();
             if let Some(handle) = task.handle.lock().await.take() {
                 handle.abort();
             }
@@ -342,29 +349,50 @@ impl TranslationDispatcher {
     async fn enqueue_job(self: &Arc<Self>, job: QueuedJob, translation: &Value) {
         let queue_max = Self::queue_max(translation);
         loop {
-            let dropped_job = {
+            {
                 let mut inner = self.inner.lock().await;
                 if inner.queue.len() < queue_max {
                     inner.queue.push_back(job);
                     self.emit_metrics_locked(&mut inner).await;
                     return;
                 }
-                let sequences: Vec<u64> = inner.queue.iter().map(|job| job.sequence).collect();
-                let mut dropped_index = None;
-                for (index, sequence) in sequences.iter().enumerate() {
-                    if !(self.is_relevant)(*sequence).await {
-                        dropped_index = Some(index);
-                        break;
-                    }
+            }
+
+            let sequences: Vec<u64> = {
+                let inner = self.inner.lock().await;
+                inner.queue.iter().map(|queued| queued.sequence).collect()
+            };
+            let mut irrelevant = HashSet::new();
+            for sequence in sequences {
+                if irrelevant.contains(&sequence) {
+                    continue;
                 }
-                let index = dropped_index.unwrap_or(0);
-                let dropped_job = inner
-                    .queue
-                    .remove(index)
-                    .expect("queue overflow drop requires a queued job");
-                inner.jobs_cancelled += 1;
-                inner.last_runtime_reason = Some("cancelled:queue_overflow".into());
-                dropped_job
+                if !(self.is_relevant)(sequence).await {
+                    irrelevant.insert(sequence);
+                }
+            }
+
+            let dropped_job = {
+                let mut inner = self.inner.lock().await;
+                if inner.queue.len() < queue_max {
+                    None
+                } else {
+                    let index = inner
+                        .queue
+                        .iter()
+                        .position(|queued| irrelevant.contains(&queued.sequence))
+                        .unwrap_or(0);
+                    let dropped_job = inner
+                        .queue
+                        .remove(index)
+                        .expect("queue overflow drop requires a queued job");
+                    inner.jobs_cancelled += 1;
+                    inner.last_runtime_reason = Some("cancelled:queue_overflow".into());
+                    Some(dropped_job)
+                }
+            };
+            let Some(dropped_job) = dropped_job else {
+                continue;
             };
             let is_relevant = (self.is_relevant)(dropped_job.sequence).await;
             self.log_event(
@@ -383,6 +411,13 @@ impl TranslationDispatcher {
             let mut inner = self.inner.lock().await;
             self.emit_metrics_locked(&mut inner).await;
         }
+    }
+
+    pub async fn refresh_provider_throttles(self: &Arc<Self>) {
+        let mut inner = self.inner.lock().await;
+        inner.provider_semaphores.clear();
+        inner.provider_mutexes.clear();
+        inner.provider_next_allowed_at.clear();
     }
 
     async fn ensure_worker_locked(self: &Arc<Self>, inner: &mut DispatcherInner) {
@@ -424,30 +459,31 @@ impl TranslationDispatcher {
             }
             let this = Arc::clone(&self);
             let job_id = job.job_id;
-            let sequence = job.sequence;
             let job_for_task = job.clone();
             let job_cancelled = Arc::new(AtomicBool::new(false));
+            let job_cancel_notify = Arc::new(Notify::new());
             {
                 let mut inner = self.inner.lock().await;
                 inner.active_tasks.push(ActiveTask {
                     job_id,
-                    sequence,
+                    sequence: job.sequence,
                     source_lang: job.source_lang.clone(),
                     source_text_len: job.source_text.len(),
                     cancel: job_cancelled.clone(),
+                    cancel_notify: job_cancel_notify.clone(),
                     handle: Mutex::new(None),
                 });
             }
             let job_cancelled_run = job_cancelled.clone();
+            let job_cancel_notify_run = job_cancel_notify.clone();
             let handle = tokio::spawn(async move {
-                this.run_job(&job_for_task, job_cancelled_run).await;
+                this.run_job(&job_for_task, job_cancelled_run, job_cancel_notify_run)
+                    .await;
                 let mut inner = this.inner.lock().await;
                 let still_active = inner.active_tasks.iter().any(|task| task.job_id == job_id);
                 if still_active {
                     inner.active_jobs = inner.active_jobs.saturating_sub(1);
-                    inner
-                        .active_tasks
-                        .retain(|task| task.job_id != job_id && task.sequence != sequence);
+                    inner.active_tasks.retain(|task| task.job_id != job_id);
                 }
                 this.emit_metrics_locked(&mut inner).await;
                 this.notify.notify_one();
@@ -487,7 +523,12 @@ impl TranslationDispatcher {
         }
     }
 
-    async fn run_job(self: &Arc<Self>, job: &QueuedJob, job_cancelled: Arc<AtomicBool>) {
+    async fn run_job(
+        self: &Arc<Self>,
+        job: &QueuedJob,
+        job_cancelled: Arc<AtomicBool>,
+        job_cancel_notify: Arc<Notify>,
+    ) {
         let translation = self.translation_config();
         if !translation
             .get("enabled")
@@ -622,11 +663,8 @@ impl TranslationDispatcher {
             return;
         }
 
-        let timeout = Duration::from_millis(Self::timeout_ms(&translation));
-        let timeout_ms = timeout.as_millis() as u64;
-        let timeout_secs = timeout.as_secs_f64();
-
         for line in &prepared.lines {
+            let timeout_ms = Self::line_timeout_ms(&translation, line.local_provider);
             self.log_event(
                 "translation_line_started",
                 json!({
@@ -640,6 +678,7 @@ impl TranslationDispatcher {
                     "target_languages": prepared.target_languages,
                     "provider": line.provider_name,
                     "timeout_ms": timeout_ms,
+                    "local_provider": line.local_provider,
                     "relevant": true,
                     "fresh": true,
                 }),
@@ -651,6 +690,8 @@ impl TranslationDispatcher {
         for line in prepared.lines.clone() {
             let this = Arc::clone(self);
             let job = job.clone();
+            let timeout_ms = Self::line_timeout_ms(&translation, line.local_provider);
+            let timeout_secs = timeout_ms as f64 / 1000.0;
             join_set.spawn(async move {
                 this.translate_one_line(&job, &line, timeout_secs, timeout_ms)
                     .await
@@ -659,11 +700,15 @@ impl TranslationDispatcher {
 
         let mut published: Vec<TranslationItem> = Vec::new();
         let mut final_status_message: Option<String> = None;
+        let mut used_default_prompt = false;
 
         loop {
             let joined = tokio::select! {
                 biased;
-                () = Self::wait_for_job_cancel(job_cancelled.clone()) => {
+                () = Self::wait_for_job_cancel(
+                    job_cancelled.clone(),
+                    job_cancel_notify.clone(),
+                ) => {
                     join_set.abort_all();
                     while join_set.join_next().await.is_some() {}
                     return;
@@ -697,12 +742,14 @@ impl TranslationDispatcher {
                 continue;
             }
 
+            let line_timeout_ms =
+                Self::line_timeout_ms(&translation, result.item.local_provider);
             {
                 let mut inner = self.inner.lock().await;
                 inner.last_provider = Some(result.item.provider.clone());
                 inner.last_slot_id = result.item.slot_id.clone();
                 inner.last_target_lang = Some(result.item.target_lang.clone());
-                inner.last_timeout_ms = Some(timeout_ms);
+                inner.last_timeout_ms = Some(line_timeout_ms);
                 inner.last_provider_latency_ms = Some(result.provider_latency_ms);
                 if matches!(result.outcome, LineOutcome::Timeout | LineOutcome::Error) {
                     inner.last_runtime_reason =
@@ -735,7 +782,7 @@ impl TranslationDispatcher {
                         .lock()
                         .await
                         .queue_latency_ms,
-                    "timeout_ms": timeout_ms,
+                    "timeout_ms": line_timeout_ms,
                     "relevant": (self.is_relevant)(job.sequence).await,
                     "fresh": (self.is_relevant)(job.sequence).await,
                     "reason": result.reason,
@@ -789,6 +836,7 @@ impl TranslationDispatcher {
                 continue;
             }
 
+            used_default_prompt |= result.used_default_prompt;
             let event = TranslationEvent {
                 sequence: job.sequence,
                 source_text: job.source_text.clone(),
@@ -798,7 +846,7 @@ impl TranslationDispatcher {
                 provider_group: result.item.provider_group.clone(),
                 experimental: result.item.experimental,
                 local_provider: result.item.local_provider,
-                used_default_prompt: false,
+                used_default_prompt: result.used_default_prompt,
                 status_message: result.status_message.clone(),
                 is_complete: false,
             };
@@ -869,7 +917,7 @@ impl TranslationDispatcher {
             provider_group: Some(prepared.provider_group.clone()),
             experimental: prepared.experimental,
             local_provider: prepared.local_provider,
-            used_default_prompt: false,
+            used_default_prompt,
             status_message: final_status_message.clone(),
             is_complete: true,
         };
@@ -902,6 +950,7 @@ impl TranslationDispatcher {
                 provider_latency_ms: 0.0,
                 reason: Some("sequence_not_relevant_before_provider".into()),
                 status_message: None,
+                used_default_prompt: false,
             };
         }
         if self.is_preview_superseded(job).await {
@@ -911,6 +960,7 @@ impl TranslationDispatcher {
                 provider_latency_ms: 0.0,
                 reason: Some("preview_superseded_before_provider".into()),
                 status_message: None,
+                used_default_prompt: false,
             };
         }
 
@@ -967,6 +1017,10 @@ impl TranslationDispatcher {
                     .get("status_message")
                     .and_then(|v| v.as_str())
                     .map(str::to_string);
+                let used_default_prompt = diagnostics
+                    .get("used_default_prompt")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
                 let outcome = if item.success {
                     LineOutcome::Done
                 } else {
@@ -983,6 +1037,7 @@ impl TranslationDispatcher {
                     provider_latency_ms: started_at.elapsed().as_secs_f64() * 1000.0,
                     reason,
                     status_message,
+                    used_default_prompt,
                 }
             }
             Err(_) => {
@@ -1000,6 +1055,7 @@ impl TranslationDispatcher {
                     provider_latency_ms: started_at.elapsed().as_secs_f64() * 1000.0,
                     reason: Some(format!("timeout_after_{timeout_ms}_ms")),
                     status_message: Some("Translation target timed out.".into()),
+                    used_default_prompt: false,
                 }
             }
         }
@@ -1029,13 +1085,16 @@ impl TranslationDispatcher {
             return None;
         }
         let mut inner = self.inner.lock().await;
-        Some(
-            inner
-                .provider_semaphores
-                .entry(provider_name.to_string())
-                .or_insert_with(|| Arc::new(Semaphore::new(max_concurrent)))
-                .clone(),
-        )
+        if let Some((capacity, semaphore)) = inner.provider_semaphores.get(provider_name)
+            && *capacity == max_concurrent
+        {
+            return Some(semaphore.clone());
+        }
+        let semaphore = Arc::new(Semaphore::new(max_concurrent));
+        inner
+            .provider_semaphores
+            .insert(provider_name.to_string(), (max_concurrent, semaphore.clone()));
+        Some(semaphore)
     }
 
     async fn provider_rate_wait(self: &Arc<Self>, provider_name: &str) {
@@ -1068,14 +1127,22 @@ impl TranslationDispatcher {
         let Some(ref key) = job.preview_lineage_key else {
             return false;
         };
+        if job.preview_generation == 0 {
+            return false;
+        }
         let inner = self.inner.lock().await;
-        inner.preview_lineage.generation(key) > job.preview_generation
+        // Any mismatch (newer generation, or missing/reset counter) means this job is stale.
+        inner.preview_lineage.generation(key) != job.preview_generation
     }
 
     /// SST parity: `_run_job` catches `CancelledError` and cancels line tasks.
-    async fn wait_for_job_cancel(job_cancelled: Arc<AtomicBool>) {
-        while !job_cancelled.load(Ordering::Acquire) {
-            tokio::time::sleep(Duration::from_millis(5)).await;
+    async fn wait_for_job_cancel(job_cancelled: Arc<AtomicBool>, notify: Arc<Notify>) {
+        loop {
+            let notified = notify.notified();
+            if job_cancelled.load(Ordering::Acquire) {
+                return;
+            }
+            notified.await;
         }
     }
 
@@ -1155,8 +1222,17 @@ impl TranslationDispatcher {
         translation
             .get("timeout_ms")
             .and_then(|v| v.as_u64())
-            .map(|v| v.clamp(1_000, 60_000))
+            .map(|v| v.clamp(1_000, MAX_TIMEOUT_MS))
             .unwrap_or(DEFAULT_TIMEOUT_MS)
+    }
+
+    fn line_timeout_ms(translation: &Value, local_provider: bool) -> u64 {
+        let configured = Self::timeout_ms(translation);
+        if local_provider {
+            configured.max(LOCAL_LLM_MIN_TIMEOUT_MS).min(MAX_TIMEOUT_MS)
+        } else {
+            configured
+        }
     }
 
     fn queue_max(translation: &Value) -> usize {

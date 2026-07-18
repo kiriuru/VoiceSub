@@ -23,10 +23,14 @@
   import StandardShell from "./lib/components/StandardShell.svelte";
   import { applyDashboardWindowSize } from "./lib/compact-window";
   import type { CommandPaletteHandlers } from "./lib/command-palette";
-  import { isMoreTab, tabToNavDestination } from "./lib/navigation";
+  import { isMoreTab, isSubtitlesTab, tabToNavDestination } from "./lib/navigation";
   import type { NavDestinationId, NavTarget } from "./lib/navigation";
-  import { applyUiPaletteToDocument } from "./lib/ui-theme-css";
-  import { publishUiConfigSync } from "./lib/ui-config-sync";
+  import {
+    applyUiColorSchemeToDocument,
+    applyUiFontToDocument,
+    applyUiPaletteToDocument,
+  } from "./lib/ui-theme-css";
+  import { publishUiConfigSync, uiPresentationSignature } from "./lib/ui-config-sync";
   import { isUpdateBannerDismissedForVersion, shouldShowUpdateBanner } from "./lib/update-banner-state";
   import { getRestartRequiredReasons } from "./lib/config-restart";
   import {
@@ -40,6 +44,12 @@
   import { initLoopbackApiToken } from "./lib/loopback-api";
   import { startRuntimeEventChannel } from "./lib/runtime-events";
   import { EventsSocket } from "./lib/ws";
+  import {
+    ASR_MODE_BROWSER,
+    ASR_MODE_LOCAL_PARAKEET,
+    localAsrReadyFromRuntime,
+    normalizeAsrMode,
+  } from "./lib/asr-mode";
   import type { ConfigPayload, LocaleCode, TabId, VersionInfo } from "./lib/types";
 
   const UPDATE_BANNER_DISMISS_KEY = "voicesub:update-banner-dismissed";
@@ -63,6 +73,10 @@
   let commandPaletteOpen = false;
   /** Last config persisted to disk — baseline for restart-required diff on save. */
   let lastSavedConfig: ConfigPayload | null = null;
+  /** Avoid resizing/centering the Tauri window on every checkbox/select edit. */
+  let lastAppliedWindowLayout: "compact" | "standard" | null = null;
+  /** Avoid /api/ui/sync fanout when only non-UI settings change. */
+  let lastPublishedUiSignature: string | null = null;
 
   const commandPaletteHandlers: CommandPaletteHandlers = {
     navigate: (target) => navigateTo(target),
@@ -88,24 +102,41 @@
     onError: (message) => patchApp({ saveStatus: { tone: "error", message } }),
   };
 
-  function applyUiFromConfig(config: ConfigPayload) {
-    const uiLang = config.ui?.language;
-    if (uiLang && UI_LOCALES.some((l) => l.code === uiLang)) {
-      setLocale(uiLang as (typeof UI_LOCALES)[number]["code"]);
+  function applyUiFromConfig(config: ConfigPayload, options?: { forceWindowLayout?: boolean }) {
+    // Dashboard is the UI sync *publisher* (publishUiConfigSync) — it must not
+    // subscribeUiConfigSync/WebSocket, or ui_config would echo forever.
+    const uiSig = uiPresentationSignature(config);
+    const presentationChanged = uiSig !== lastPublishedUiSignature;
+    if (!presentationChanged && !options?.forceWindowLayout) {
+      return;
     }
-    const theme = config.ui?.theme === "light" ? "light" : "dark";
-    document.documentElement.dataset.uiTheme = theme;
+
+    if (presentationChanged) {
+      const uiLang = config.ui?.language;
+      if (uiLang && UI_LOCALES.some((l) => l.code === uiLang)) {
+        setLocale(uiLang as (typeof UI_LOCALES)[number]["code"]);
+      }
+      const theme = config.ui?.theme === "light" ? "light" : "dark";
+      applyUiColorSchemeToDocument(theme);
+      const palette = config.ui?.palette;
+      if (palette) {
+        applyUiPaletteToDocument(palette);
+      }
+      applyUiFontToDocument(config.ui?.font_family);
+      lastPublishedUiSignature = uiSig;
+      publishUiConfigSync(config);
+    }
+
     const compact = config.ui?.layout === "compact";
     document.body.classList.toggle("voicesub-layout-compact", compact);
-    void applyDashboardWindowSize(compact);
+    const layoutKey: "compact" | "standard" = compact ? "compact" : "standard";
+    if (options?.forceWindowLayout || lastAppliedWindowLayout !== layoutKey) {
+      lastAppliedWindowLayout = layoutKey;
+      void applyDashboardWindowSize(compact);
+    }
     if (!compact) {
       document.body.classList.remove("compact-nav-expanded");
     }
-    const palette = config.ui?.palette;
-    if (palette) {
-      applyUiPaletteToDocument(palette);
-    }
-    publishUiConfigSync(config);
   }
 
   function readDismissedVersion(): string {
@@ -157,26 +188,31 @@
   async function bootstrap() {
     try {
       await initLoopbackApiToken();
-      const [settings, version, obs, runtime] = await Promise.all([
-        loadSettings(),
-        fetchVersion(),
-        fetchObsUrl(),
-        fetchRuntimeStatus(),
-      ]);
+      // Apply settings/theme first — do not wait on runtime status (can be slow while
+      // Local ASR env_check / ORT warm up). Otherwise the UI flashes default dark.
+      const settings = await loadSettings();
       const loadedConfig = normalizeConfigPayload(settings.payload);
       lastSavedConfig = structuredClone(loadedConfig);
-      applyVersionInfo(version);
       patchApp({
         config: loadedConfig,
-        overlayUrl: obs.overlay_url,
-        runtime,
         subtitleStylePresets: settings.subtitle_style_presets || {},
         fontCatalog: settings.font_catalog
           ? mergeFontCatalogPreservingSystem(settings.font_catalog, snapshot.fontCatalog)
           : snapshot.fontCatalog,
         saveStatus: { tone: "default" },
       });
-      applyUiFromConfig(loadedConfig);
+      applyUiFromConfig(loadedConfig, { forceWindowLayout: true });
+
+      const [version, obs, runtime] = await Promise.all([
+        fetchVersion(),
+        fetchObsUrl(),
+        fetchRuntimeStatus(),
+      ]);
+      applyVersionInfo(version);
+      patchApp({
+        overlayUrl: obs.overlay_url,
+        runtime,
+      });
       await refreshUpdateCheck();
     } catch (err) {
       patchApp({
@@ -197,17 +233,16 @@
     patchApp({ config: inMemoryConfig });
     applyUiFromConfig(inMemoryConfig);
 
-    const baseline = lastSavedConfig ?? inMemoryConfig;
-    const persistPayload = normalizeConfigPayload({
-      ...baseline,
-      ui: { ...(baseline.ui || {}), language: lang },
-    });
-
+    // Persist current in-memory config (not stale lastSavedConfig) so locale
+    // changes after profile/import do not wipe unsaved edits.
     try {
-      const res = await saveSettings(persistPayload);
+      const res = await saveSettings(inMemoryConfig);
       if (res.ok) {
-        const saved = res.payload ? normalizeConfigPayload(res.payload) : persistPayload;
+        const saved = res.payload ? normalizeConfigPayload(res.payload) : inMemoryConfig;
         lastSavedConfig = structuredClone(saved);
+        if (res.payload) {
+          patchApp({ config: saved });
+        }
       }
     } catch {
       // keep in-memory locale; user can retry via Save
@@ -276,7 +311,17 @@
   async function handleStart() {
     patchApp({ busy: true });
     try {
-      const res = await startRuntime(normalizeConfigPayload(snapshot.config));
+      let startConfig = normalizeConfigPayload(snapshot.config);
+      if (
+        normalizeAsrMode(startConfig.asr?.mode) === ASR_MODE_LOCAL_PARAKEET &&
+        !localAsrReadyFromRuntime(snapshot.runtime)
+      ) {
+        startConfig = {
+          ...startConfig,
+          asr: { ...(startConfig.asr || {}), mode: ASR_MODE_BROWSER },
+        };
+      }
+      const res = await startRuntime(startConfig);
       patchApp({ runtime: res.runtime, busy: false });
     } catch (err) {
       patchApp({
@@ -423,7 +468,9 @@
     if (dest === "subtitles") {
       moreHubOpen = false;
       subtitlesHubOpen = false;
-      patchActiveTab("subtitles");
+      if (!isSubtitlesTab(snapshot.activeTab)) {
+        patchActiveTab("subtitles");
+      }
       return;
     }
     if (dest === "modules") {
@@ -452,7 +499,9 @@
     if (dest === "subtitles") {
       moreHubOpen = false;
       subtitlesHubOpen = false;
-      patchActiveTab("subtitles");
+      if (!isSubtitlesTab(snapshot.activeTab)) {
+        patchActiveTab("subtitles");
+      }
       return;
     }
     if (dest === "modules") {
@@ -490,10 +539,6 @@
 
   function openMoreHub() {
     moreHubOpen = true;
-  }
-
-  function openSubtitlesHub() {
-    subtitlesHubOpen = true;
   }
 
   function dismissSaveSnackbar() {
@@ -580,8 +625,9 @@
   }}
 />
 
-{#key $locale}
-<main class="app-shell">
+<!-- Compact keeps .app-shell on this wrapper; standard uses display:contents so
+     StandardShell's .app-shell.standard-shell owns the viewport (nav fixed, content scrolls). -->
+<main class="app-frame" class:app-shell={isCompact}>
   {#if isCompact}
     <CompactShell
       compactNav={compactNav}
@@ -605,7 +651,6 @@
       onSelectSubtitlesTab={selectSubtitlesTab}
       onActiveTabChange={patchActiveTab}
       onOpenMoreHub={openMoreHub}
-      onOpenSubtitlesHub={openSubtitlesHub}
       onStart={handleStart}
       onStop={handleStop}
       onSave={handleSave}
@@ -640,7 +685,6 @@
       onSelectSubtitlesTab={selectSubtitlesTab}
       onActiveTabChange={patchActiveTab}
       onOpenMoreHub={openMoreHub}
-      onOpenSubtitlesHub={openSubtitlesHub}
       onStart={handleStart}
       onStop={handleStop}
       onSave={handleSave}
@@ -654,7 +698,6 @@
     />
   {/if}
 </main>
-{/key}
 
 <style>
   :global(body) {

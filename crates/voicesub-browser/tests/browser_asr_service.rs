@@ -116,3 +116,22 @@ async fn send_control_delivers_browser_asr_control_frame() {
     assert_eq!(value["reason"], "runtime_stop");
     assert_eq!(value["transport_id"], transport_id);
 }
+
+#[tokio::test]
+async fn register_connection_drops_previous_outbound_without_stop() {
+    let service = BrowserAsrService::new(Arc::new(|_| {}));
+    let (first_tx, mut first_rx) = mpsc::channel(4);
+    let first_id = service.register_connection(first_tx).await;
+
+    let (second_tx, mut second_rx) = mpsc::channel(4);
+    let second_id = service.register_connection(second_tx).await;
+    assert_ne!(first_id, second_id);
+
+    // Previous channel is closed (dropped) so the old write loop can exit; no stop frame.
+    assert!(first_rx.recv().await.is_none());
+
+    assert!(service.send_control("stop", Some("runtime_stop")).await);
+    let frame = second_rx.recv().await.expect("control on new transport");
+    let value: serde_json::Value = serde_json::from_str(&frame).expect("json");
+    assert_eq!(value["transport_id"], second_id);
+}

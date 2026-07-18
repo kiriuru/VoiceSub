@@ -375,7 +375,7 @@ mod tests {
             "what the fuck",
             None,
         );
-        assert_eq!(out.clean_text, "what the ***");
+        assert_eq!(out.clean_text, "what the f*ck");
     }
 
     #[test]

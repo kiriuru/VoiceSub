@@ -59,6 +59,7 @@ impl GoogleWebLikeProvider {
             None,
             None,
             self.error_prefix,
+            request.timeout_secs,
         )
         .await?;
 

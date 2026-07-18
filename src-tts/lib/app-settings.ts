@@ -3,7 +3,11 @@ import { apiFetch } from "./loopback-api-client";
 import { getLineCards } from "../../src/lib/translation-helpers";
 import { setLocale } from "../../src/lib/i18n";
 import type { ConfigPayload, LocaleCode } from "../../src/lib/types";
-import { applyUiPaletteToDocument } from "../../src/lib/ui-theme-css";
+import {
+  applyUiColorSchemeToDocument,
+  applyUiFontToDocument,
+  applyUiPaletteToDocument,
+} from "../../src/lib/ui-theme-css";
 import type { AppSpeechContext, AppTranslationLine } from "./translation-lines";
 
 function applyUiLocaleFromConfig(config: ConfigPayload): void {
@@ -77,10 +81,11 @@ export function buildSpeechContextFromConfig(raw: ConfigPayload): AppSpeechConte
 export function applyUiThemeFromConfig(config: ConfigPayload): void {
   const ui = config.ui || {};
   const theme = ui.theme === "light" ? "light" : "dark";
-  document.documentElement.dataset.uiTheme = theme;
+  applyUiColorSchemeToDocument(theme);
   if (ui.palette) {
     applyUiPaletteToDocument(ui.palette);
   }
+  applyUiFontToDocument(ui.font_family);
 }
 
 /** Live dashboard theme/locale sync without touching speech/translation settings. */

@@ -11,7 +11,7 @@ const LINE_SLOT_NAMES: [&str; 6] = [
     "translation_5",
 ];
 
-const EFFECT_IDS: [&str; 7] = [
+const EFFECT_IDS: [&str; 9] = [
     "none",
     "fade",
     "subtle_pop",
@@ -19,30 +19,46 @@ const EFFECT_IDS: [&str; 7] = [
     "zoom_in",
     "blur_in",
     "glow",
+    "pulse",
+    "reveal",
 ];
 
-fn clamp_i64(raw: &Value, default: i64, min: i64, max: i64) -> i64 {
-    let parsed = raw
-        .as_i64()
+fn parse_i64(raw: &Value) -> Option<i64> {
+    raw.as_i64()
         .or_else(|| raw.as_u64().map(|v| v as i64))
-        .or_else(|| raw.as_f64().map(|v| v as i64));
-    let value = parsed.unwrap_or(default);
-    value.clamp(min, max)
+        .or_else(|| raw.as_f64().map(|v| v as i64))
+        .or_else(|| {
+            raw.as_str()
+                .and_then(|s| s.trim().parse::<f64>().ok())
+                .map(|v| v as i64)
+        })
+}
+
+fn parse_f64(raw: &Value) -> Option<f64> {
+    raw.as_f64()
+        .or_else(|| raw.as_i64().map(|v| v as f64))
+        .or_else(|| raw.as_u64().map(|v| v as f64))
+        .or_else(|| raw.as_str().and_then(|s| s.trim().parse::<f64>().ok()))
+}
+
+fn clamp_i64(raw: &Value, default: i64, min: i64, max: i64) -> i64 {
+    parse_i64(raw).unwrap_or(default).clamp(min, max)
 }
 
 fn clamp_f64(raw: &Value, default: f64, min: f64, max: f64) -> f64 {
-    let parsed = raw.as_f64().or_else(|| {
-        raw.as_i64()
-            .map(|v| v as f64)
-            .or_else(|| raw.as_u64().map(|v| v as f64))
-    });
-    let value = parsed.unwrap_or(default);
-    value.clamp(min, max)
+    parse_f64(raw).unwrap_or(default).clamp(min, max)
 }
 
 fn normalize_str(raw: &Value, default: &str) -> String {
     let s = raw.as_str().unwrap_or(default).trim().to_string();
     if s.is_empty() { default.to_string() } else { s }
+}
+
+/// Align preset/config family tokens with `project_font_family_name` labels.
+fn canonicalize_font_family_stack(stack: &str) -> String {
+    stack
+        .replace("\"JetBrains Mono Regular\"", "\"Jet Brains Mono Regular\"")
+        .replace("\"JetBrains Mono Bold\"", "\"Jet Brains Mono Bold\"")
 }
 
 fn round_to(value: f64, decimals: u32) -> f64 {
@@ -124,10 +140,10 @@ fn normalize_base_style(raw_base: &Value) -> Value {
     let line_gap_px = get("line_gap_px");
     let effect = get("effect");
 
-    let font_family = normalize_str(
+    let font_family = canonicalize_font_family_stack(&normalize_str(
         font_family,
         defaults["font_family"].as_str().unwrap_or_default(),
-    );
+    ));
     let fill_color = normalize_str(
         fill_color,
         defaults["fill_color"].as_str().unwrap_or_default(),
@@ -158,21 +174,23 @@ fn normalize_base_style(raw_base: &Value) -> Value {
         900,
     );
 
+    // ASS/Aegisub outline: 0–4 px (step 0.1 in UI). Matches StyleFieldGroup + JS.
     let stroke_width_px = round_to(
         clamp_f64(
             stroke_width_px,
             defaults["stroke_width_px"].as_f64().unwrap_or(2.0),
             0.0,
-            8.0,
+            4.0,
         ),
-        2,
+        1,
     );
+    // Clamp ranges must stay aligned with StyleFieldGroup.svelte + subtitle-style.js.
     let shadow_blur_px = round_to(
         clamp_f64(
             shadow_blur_px,
             defaults["shadow_blur_px"].as_f64().unwrap_or(10.0),
             0.0,
-            32.0,
+            40.0,
         ),
         2,
     );
@@ -220,7 +238,7 @@ fn normalize_base_style(raw_base: &Value) -> Value {
             line_spacing_em,
             defaults["line_spacing_em"].as_f64().unwrap_or(1.15),
             0.8,
-            2.2,
+            2.5,
         ),
         2,
     );
@@ -228,8 +246,8 @@ fn normalize_base_style(raw_base: &Value) -> Value {
         clamp_f64(
             letter_spacing_em,
             defaults["letter_spacing_em"].as_f64().unwrap_or(0.0),
-            -0.08,
-            0.2,
+            -0.2,
+            0.5,
         ),
         3,
     );
@@ -309,7 +327,7 @@ fn merge_line_style(base: &Value, override_style: &Value) -> Value {
     Value::Object(merged)
 }
 
-const BUILT_IN_PRESETS_JSON: &str = r##"{"clean_default":{"preset":"clean_default","label":"Clean Default","description":"Neutral baseline: Inter on a transparent background with a minimal black outline.","built_in":true,"recommended_max_visible_lines":null,"base":{"font_family":"\"Inter Regular\", \"Segoe UI\", Tahoma, sans-serif","font_size_px":30,"font_weight":500,"fill_color":"#ffffff","stroke_color":"#1c1f25","stroke_width_px":1.5,"shadow_color":"#000000","shadow_blur_px":8,"shadow_offset_x_px":0,"shadow_offset_y_px":2,"background_color":"#000000","background_opacity":0,"background_padding_x_px":12,"background_padding_y_px":4,"background_radius_px":10,"line_spacing_em":1.15,"letter_spacing_em":0,"text_align":"center","line_gap_px":8,"effect":"none"},"line_slots":{"source":{"enabled":false},"translation_1":{"enabled":false},"translation_2":{"enabled":false},"translation_3":{"enabled":false},"translation_4":{"enabled":false},"translation_5":{"enabled":false}}},"streamer_bold":{"preset":"streamer_bold","label":"Streamer Neon","description":"Loud display look: Oswald with a cyan fill and a hot-magenta glow for live gameplay.","built_in":true,"recommended_max_visible_lines":null,"base":{"font_family":"\"Oswald Bold\", \"Impact\", \"Arial Narrow Bold\", sans-serif","font_size_px":38,"font_weight":800,"fill_color":"#00f0ff","stroke_color":"#0a0612","stroke_width_px":3.5,"shadow_color":"#ff2bd6","shadow_blur_px":24,"shadow_offset_x_px":0,"shadow_offset_y_px":0,"background_color":"#000000","background_opacity":0,"background_padding_x_px":12,"background_padding_y_px":4,"background_radius_px":10,"line_spacing_em":1.15,"letter_spacing_em":0.02,"text_align":"center","line_gap_px":10,"effect":"glow"},"line_slots":{"source":{"enabled":false},"translation_1":{"enabled":false},"translation_2":{"enabled":false},"translation_3":{"enabled":false},"translation_4":{"enabled":false},"translation_5":{"enabled":false}}},"dual_tone":{"preset":"dual_tone","label":"Dual Color","description":"Lato body with distinct fill colors per slot so source and each translation read at a glance.","built_in":true,"recommended_max_visible_lines":null,"base":{"font_family":"\"Lato Regular\", \"Verdana\", \"Segoe UI\", sans-serif","font_size_px":30,"font_weight":700,"fill_color":"#ffffff","stroke_color":"#13151a","stroke_width_px":2,"shadow_color":"#000000","shadow_blur_px":6,"shadow_offset_x_px":0,"shadow_offset_y_px":2,"background_color":"#000000","background_opacity":0,"background_padding_x_px":12,"background_padding_y_px":4,"background_radius_px":10,"line_spacing_em":1.15,"letter_spacing_em":0.0,"text_align":"center","line_gap_px":8,"effect":"fade"},"line_slots":{"source":{"enabled":true,"fill_color":"#ffd60a","stroke_color":"#4a3000"},"translation_1":{"enabled":true,"fill_color":"#7be2ff","stroke_color":"#0b2c3a"},"translation_2":{"enabled":true,"fill_color":"#a8ffb8","stroke_color":"#0b3a18"},"translation_3":{"enabled":true,"fill_color":"#ff9fc5","stroke_color":"#3a0b22"},"translation_4":{"enabled":false},"translation_5":{"enabled":false}}},"compact_overlay":{"preset":"compact_overlay","label":"Compact Bar","description":"Source Sans 3 inside a tight semi-opaque black bar � small footprint, maximum legibility.","built_in":true,"recommended_max_visible_lines":2,"base":{"font_family":"\"Source Sans 3 Regular\", \"Source Sans 3 Bold\", \"Segoe UI\", sans-serif","font_size_px":22,"font_weight":600,"fill_color":"#ffffff","stroke_color":"#000000","stroke_width_px":0,"shadow_color":"#000000","shadow_blur_px":0,"shadow_offset_x_px":0,"shadow_offset_y_px":0,"background_color":"#0a0d12","background_opacity":90,"background_padding_x_px":14,"background_padding_y_px":4,"background_radius_px":4,"line_spacing_em":1.05,"letter_spacing_em":0,"text_align":"center","line_gap_px":4,"effect":"none"},"line_slots":{"source":{"enabled":false},"translation_1":{"enabled":false},"translation_2":{"enabled":false},"translation_3":{"enabled":false},"translation_4":{"enabled":false},"translation_5":{"enabled":false}}},"soft_shadow":{"preset":"soft_shadow","label":"Soft Cloud","description":"Comfortaa with a wide diffused shadow and zero outline � feels airy, no edge crunch.","built_in":true,"recommended_max_visible_lines":null,"base":{"font_family":"\"Comfortaa Regular\", \"Segoe UI\", sans-serif","font_size_px":30,"font_weight":500,"fill_color":"#fff8eb","stroke_color":"#3a2a18","stroke_width_px":0,"shadow_color":"#1d1410","shadow_blur_px":22,"shadow_offset_x_px":0,"shadow_offset_y_px":6,"background_color":"#000000","background_opacity":0,"background_padding_x_px":12,"background_padding_y_px":4,"background_radius_px":10,"line_spacing_em":1.15,"letter_spacing_em":0.01,"text_align":"center","line_gap_px":9,"effect":"subtle_pop"},"line_slots":{"source":{"enabled":false},"translation_1":{"enabled":false},"translation_2":{"enabled":false},"translation_3":{"enabled":false},"translation_4":{"enabled":false},"translation_5":{"enabled":false}}},"anime_stream":{"preset":"anime_stream","label":"Anime Stream","description":"Mochiy Pop One for Latin/Japanese + Comfortaa Bold for Cyrillic � classic anime fansub caption: white fill, crisp violet outline, soft dark drop shadow.","built_in":true,"recommended_max_visible_lines":2,"base":{"font_family":"\"Mochiy Pop One Regular\", \"Comfortaa Bold\", \"Underdog Regular\", \"Bangers Regular\", \"Comic Relief Bold\", \"Poppins Bold\", \"Segoe UI\", sans-serif","font_size_px":40,"font_weight":800,"fill_color":"#ffffff","stroke_color":"#3a1a5c","stroke_width_px":1,"shadow_color":"#15071f","shadow_blur_px":8,"shadow_offset_x_px":0,"shadow_offset_y_px":3,"background_color":"#000000","background_opacity":0,"background_padding_x_px":12,"background_padding_y_px":4,"background_radius_px":10,"line_spacing_em":1.1,"letter_spacing_em":0.015,"text_align":"center","line_gap_px":6,"effect":"subtle_pop"},"line_slots":{"source":{"enabled":false},"translation_1":{"enabled":false},"translation_2":{"enabled":false},"translation_3":{"enabled":false},"translation_4":{"enabled":false},"translation_5":{"enabled":false}}},"accessibility_high_contrast":{"preset":"accessibility_high_contrast","label":"Max Contrast","description":"Pure white Montserrat Bold on a solid 100%-opaque black plate � WCAG AAA contrast in any environment.","built_in":true,"recommended_max_visible_lines":2,"base":{"font_family":"\"Montserrat Bold\", \"Montserrat Regular\", \"Segoe UI\", sans-serif","font_size_px":36,"font_weight":800,"fill_color":"#ffffff","stroke_color":"#000000","stroke_width_px":0,"shadow_color":"#000000","shadow_blur_px":0,"shadow_offset_x_px":0,"shadow_offset_y_px":0,"background_color":"#000000","background_opacity":100,"background_padding_x_px":24,"background_padding_y_px":10,"background_radius_px":6,"line_spacing_em":1.2,"letter_spacing_em":0.02,"text_align":"center","line_gap_px":8,"effect":"none"},"line_slots":{"source":{"enabled":false},"translation_1":{"enabled":false},"translation_2":{"enabled":false},"translation_3":{"enabled":false},"translation_4":{"enabled":false},"translation_5":{"enabled":false}}},"dark_cinema":{"preset":"dark_cinema","label":"Cinema Plate","description":"Playfair Display ivory on a solid warm sepia plate � letterboxed art-house aesthetic, readable on any background.","built_in":true,"recommended_max_visible_lines":2,"base":{"font_family":"\"Playfair Display Bold\", \"Playfair Display Regular\", Georgia, \"Times New Roman\", serif","font_size_px":30,"font_weight":700,"fill_color":"#f4e3b8","stroke_color":"#1a0a05","stroke_width_px":0,"shadow_color":"#08040a","shadow_blur_px":6,"shadow_offset_x_px":0,"shadow_offset_y_px":2,"background_color":"#1a0d08","background_opacity":95,"background_padding_x_px":26,"background_padding_y_px":10,"background_radius_px":4,"line_spacing_em":1.18,"letter_spacing_em":0.02,"text_align":"center","line_gap_px":8,"effect":"fade"},"line_slots":{"source":{"enabled":false},"translation_1":{"enabled":true,"fill_color":"#e8d4a0","stroke_color":"#08040a","font_size_px":24},"translation_2":{"enabled":false},"translation_3":{"enabled":false},"translation_4":{"enabled":false},"translation_5":{"enabled":false}}},"meeting_soft":{"preset":"meeting_soft","label":"Podcast Subtle","description":"Roboto Regular in light grey with no stroke and no plate � minimal, talking-head friendly.","built_in":true,"recommended_max_visible_lines":3,"base":{"font_family":"\"Roboto Regular\", \"Segoe UI\", \"Calibri\", sans-serif","font_size_px":24,"font_weight":400,"fill_color":"#e8edf5","stroke_color":"#000000","stroke_width_px":0,"shadow_color":"#0b1018","shadow_blur_px":8,"shadow_offset_x_px":0,"shadow_offset_y_px":1,"background_color":"#000000","background_opacity":0,"background_padding_x_px":12,"background_padding_y_px":4,"background_radius_px":10,"line_spacing_em":1.18,"letter_spacing_em":0,"text_align":"center","line_gap_px":5,"effect":"none"},"line_slots":{"source":{"enabled":false},"translation_1":{"enabled":false},"translation_2":{"enabled":false},"translation_3":{"enabled":false},"translation_4":{"enabled":false},"translation_5":{"enabled":false}}},"retro_terminal":{"preset":"retro_terminal","label":"Retro Terminal","description":"VT323 amber phosphor on a dark CRT panel � DEC VT320 / Apple ][ vibe with PT Mono for Cyrillic.","built_in":true,"recommended_max_visible_lines":3,"base":{"font_family":"\"VT323 Regular\", \"PT Mono Regular\", \"Share Tech Mono Regular\", \"Consolas\", \"Courier New\", monospace","font_size_px":36,"font_weight":400,"fill_color":"#ffb000","stroke_color":"#3a1c00","stroke_width_px":0,"shadow_color":"#ff8800","shadow_blur_px":14,"shadow_offset_x_px":0,"shadow_offset_y_px":0,"background_color":"#0a0805","background_opacity":92,"background_padding_x_px":18,"background_padding_y_px":6,"background_radius_px":2,"line_spacing_em":1.05,"letter_spacing_em":0.04,"text_align":"center","line_gap_px":4,"effect":"glow"},"line_slots":{"source":{"enabled":false},"translation_1":{"enabled":false},"translation_2":{"enabled":false},"translation_3":{"enabled":false},"translation_4":{"enabled":false},"translation_5":{"enabled":false}}},"fallout_pipboy":{"preset":"fallout_pipboy","label":"Fallout Pip-Boy","description":"Share Tech Mono in Pip-Boy phosphor green with a strong scanline glow; Ubuntu Mono Bold covers Cyrillic.","built_in":true,"recommended_max_visible_lines":3,"base":{"font_family":"\"Share Tech Mono Regular\", \"Ubuntu Mono Bold\", \"Ubuntu Mono Regular\", \"PT Mono Regular\", \"VT323 Regular\", \"Consolas\", \"Courier New\", monospace","font_size_px":30,"font_weight":400,"fill_color":"#4cff79","stroke_color":"#001f0a","stroke_width_px":0,"shadow_color":"#16ff3c","shadow_blur_px":18,"shadow_offset_x_px":0,"shadow_offset_y_px":0,"background_color":"#020806","background_opacity":95,"background_padding_x_px":18,"background_padding_y_px":6,"background_radius_px":2,"line_spacing_em":1.08,"letter_spacing_em":0.05,"text_align":"center","line_gap_px":5,"effect":"glow"},"line_slots":{"source":{"enabled":false},"translation_1":{"enabled":false},"translation_2":{"enabled":false},"translation_3":{"enabled":false},"translation_4":{"enabled":false},"translation_5":{"enabled":false}}},"comic_burst":{"preset":"comic_burst","label":"Comic Burst","description":"Bangers in comic-yellow with a chunky black outline and a hot-red shadow � Marvel SFX panel energy; Comic Relief Bold covers Cyrillic.","built_in":true,"recommended_max_visible_lines":1,"base":{"font_family":"\"Bangers Regular\", \"Comic Relief Bold\", \"Comic Relief Regular\", \"Impact\", \"Arial Black\", sans-serif","font_size_px":46,"font_weight":400,"fill_color":"#ffd60a","stroke_color":"#0a0a0a","stroke_width_px":5,"shadow_color":"#d6172a","shadow_blur_px":4,"shadow_offset_x_px":4,"shadow_offset_y_px":6,"background_color":"#000000","background_opacity":0,"background_padding_x_px":12,"background_padding_y_px":4,"background_radius_px":10,"line_spacing_em":1.15,"letter_spacing_em":0.045,"text_align":"center","line_gap_px":8,"effect":"zoom_in"},"line_slots":{"source":{"enabled":false},"translation_1":{"enabled":false},"translation_2":{"enabled":false},"translation_3":{"enabled":false},"translation_4":{"enabled":false},"translation_5":{"enabled":false}}},"cyberpunk_neon":{"preset":"cyberpunk_neon","label":"Cyberpunk Neon","description":"Orbitron Black in hot magenta with a cyan halo glow on a deep navy plate; Exo 2 Black handles Cyrillic with the same sci-fi geometry.","built_in":true,"recommended_max_visible_lines":2,"base":{"font_family":"\"Orbitron Black\", \"Exo 2 Black\", \"Orbitron Regular\", \"Exo 2 Regular\", \"Audiowide\", sans-serif","font_size_px":32,"font_weight":900,"fill_color":"#ff2bd6","stroke_color":"#03001a","stroke_width_px":2,"shadow_color":"#00f0ff","shadow_blur_px":22,"shadow_offset_x_px":0,"shadow_offset_y_px":0,"background_color":"#070416","background_opacity":88,"background_padding_x_px":20,"background_padding_y_px":8,"background_radius_px":4,"line_spacing_em":1.15,"letter_spacing_em":0.06,"text_align":"center","line_gap_px":7,"effect":"glow"},"line_slots":{"source":{"enabled":false},"translation_1":{"enabled":false},"translation_2":{"enabled":false},"translation_3":{"enabled":false},"translation_4":{"enabled":false},"translation_5":{"enabled":false}}},"noir_typewriter":{"preset":"noir_typewriter","label":"Film Noir","description":"Special Elite typewriter on a deep ink plate � 1940s detective / typewritten dossier mood; Cutive Mono carries the same vibe for Cyrillic.","built_in":true,"recommended_max_visible_lines":2,"base":{"font_family":"\"Special Elite Regular\", \"Cutive Mono Regular\", \"PT Mono Regular\", \"Courier New\", \"Consolas\", monospace","font_size_px":28,"font_weight":400,"fill_color":"#ece1c4","stroke_color":"#1a1208","stroke_width_px":0,"shadow_color":"#000000","shadow_blur_px":4,"shadow_offset_x_px":0,"shadow_offset_y_px":2,"background_color":"#100a06","background_opacity":92,"background_padding_x_px":22,"background_padding_y_px":10,"background_radius_px":0,"line_spacing_em":1.18,"letter_spacing_em":0.03,"text_align":"center","line_gap_px":6,"effect":"fade"},"line_slots":{"source":{"enabled":false},"translation_1":{"enabled":false},"translation_2":{"enabled":false},"translation_3":{"enabled":false},"translation_4":{"enabled":false},"translation_5":{"enabled":false}}},"vlog_pastel":{"preset":"vlog_pastel","label":"Vlog Pastel","description":"Poppins on a warm pastel pill � cozy lifestyle / vlog look, plays nicely with soft backgrounds.","built_in":true,"recommended_max_visible_lines":2,"base":{"font_family":"\"Poppins Regular\", \"Poppins Bold\", \"Segoe UI\", sans-serif","font_size_px":28,"font_weight":600,"fill_color":"#3a1e3d","stroke_color":"#3a1e3d","stroke_width_px":0,"shadow_color":"#a37fc3","shadow_blur_px":14,"shadow_offset_x_px":0,"shadow_offset_y_px":3,"background_color":"#ffdce5","background_opacity":90,"background_padding_x_px":18,"background_padding_y_px":7,"background_radius_px":22,"line_spacing_em":1.15,"letter_spacing_em":0.0,"text_align":"center","line_gap_px":6,"effect":"slide_up"},"line_slots":{"source":{"enabled":false},"translation_1":{"enabled":false},"translation_2":{"enabled":false},"translation_3":{"enabled":false},"translation_4":{"enabled":false},"translation_5":{"enabled":false}}}}"##;
+const BUILT_IN_PRESETS_JSON: &str = r##"{"clean_default":{"preset":"clean_default","label":"Clean Default","description":"Broadcast baseline: Inter + Noto Sans, crisp white, light outline and soft shadow — OBS-safe transparent plate.","built_in":true,"recommended_max_visible_lines":null,"base":{"font_family":"\"Inter Regular\", \"Noto Sans Regular\", \"Segoe UI\", Tahoma, sans-serif","font_size_px":32,"font_weight":600,"fill_color":"#ffffff","stroke_color":"#0b0d12","stroke_width_px":1.2,"shadow_color":"#000000","shadow_blur_px":10,"shadow_offset_x_px":0,"shadow_offset_y_px":2,"background_color":"#000000","background_opacity":0,"background_padding_x_px":12,"background_padding_y_px":4,"background_radius_px":8,"line_spacing_em":1.2,"letter_spacing_em":0,"text_align":"center","line_gap_px":8,"effect":"none"},"line_slots":{"source":{"enabled":false},"translation_1":{"enabled":false},"translation_2":{"enabled":false},"translation_3":{"enabled":false},"translation_4":{"enabled":false},"translation_5":{"enabled":false}}},"streamer_bold":{"preset":"streamer_bold","label":"Streamer Neon","description":"Gaming HUD: Oswald cyan with a restrained magenta halo; Montserrat covers Cyrillic without losing the neon punch.","built_in":true,"recommended_max_visible_lines":2,"base":{"font_family":"\"Oswald Bold\", \"Montserrat Bold\", \"Impact\", \"Arial Narrow Bold\", sans-serif","font_size_px":36,"font_weight":800,"fill_color":"#00e8ff","stroke_color":"#07040f","stroke_width_px":3,"shadow_color":"#ff2bd6","shadow_blur_px":16,"shadow_offset_x_px":0,"shadow_offset_y_px":0,"background_color":"#000000","background_opacity":0,"background_padding_x_px":12,"background_padding_y_px":4,"background_radius_px":8,"line_spacing_em":1.15,"letter_spacing_em":0.015,"text_align":"center","line_gap_px":8,"effect":"glow"},"line_slots":{"source":{"enabled":false},"translation_1":{"enabled":false},"translation_2":{"enabled":false},"translation_3":{"enabled":false},"translation_4":{"enabled":false},"translation_5":{"enabled":false}}},"dual_tone":{"preset":"dual_tone","label":"Dual Color","description":"Slot-colored captions: Lato/Noto body with high-contrast fills per language so source and translations separate at a glance.","built_in":true,"recommended_max_visible_lines":null,"base":{"font_family":"\"Lato Regular\", \"Noto Sans Regular\", \"Montserrat Regular\", \"Verdana\", \"Segoe UI\", sans-serif","font_size_px":30,"font_weight":700,"fill_color":"#ffffff","stroke_color":"#101218","stroke_width_px":2,"shadow_color":"#000000","shadow_blur_px":6,"shadow_offset_x_px":0,"shadow_offset_y_px":2,"background_color":"#000000","background_opacity":0,"background_padding_x_px":12,"background_padding_y_px":4,"background_radius_px":8,"line_spacing_em":1.18,"letter_spacing_em":0,"text_align":"center","line_gap_px":8,"effect":"fade"},"line_slots":{"source":{"enabled":true,"fill_color":"#ffe566","stroke_color":"#3a2a00","stroke_width_px":2},"translation_1":{"enabled":true,"fill_color":"#7ad7ff","stroke_color":"#062433","stroke_width_px":2},"translation_2":{"enabled":true,"fill_color":"#8ff0a4","stroke_color":"#063816","stroke_width_px":2},"translation_3":{"enabled":true,"fill_color":"#ffb0cf","stroke_color":"#3a0b22","stroke_width_px":2},"translation_4":{"enabled":false},"translation_5":{"enabled":false}}},"compact_overlay":{"preset":"compact_overlay","label":"Compact Bar","description":"YouTube-style caption bar: Noto/Source Sans on a dense near-opaque plate — small footprint, maximum legibility.","built_in":true,"recommended_max_visible_lines":2,"base":{"font_family":"\"Noto Sans Regular\", \"Source Sans 3 Regular\", \"Source Sans 3 Bold\", \"Segoe UI\", sans-serif","font_size_px":24,"font_weight":600,"fill_color":"#ffffff","stroke_color":"#000000","stroke_width_px":0,"shadow_color":"#000000","shadow_blur_px":0,"shadow_offset_x_px":0,"shadow_offset_y_px":0,"background_color":"#0a0d12","background_opacity":92,"background_padding_x_px":16,"background_padding_y_px":6,"background_radius_px":6,"line_spacing_em":1.1,"letter_spacing_em":0,"text_align":"center","line_gap_px":4,"effect":"none"},"line_slots":{"source":{"enabled":false},"translation_1":{"enabled":false},"translation_2":{"enabled":false},"translation_3":{"enabled":false},"translation_4":{"enabled":false},"translation_5":{"enabled":false}}},"soft_shadow":{"preset":"soft_shadow","label":"Soft Cloud","description":"Airy Comfortaa with a wide diffused shadow and no outline — soft presence that still reads on busy gameplay.","built_in":true,"recommended_max_visible_lines":null,"base":{"font_family":"\"Comfortaa Regular\", \"Noto Sans Regular\", \"Segoe UI\", sans-serif","font_size_px":30,"font_weight":600,"fill_color":"#fff7ef","stroke_color":"#2a2018","stroke_width_px":0,"shadow_color":"#0a0806","shadow_blur_px":20,"shadow_offset_x_px":0,"shadow_offset_y_px":4,"background_color":"#000000","background_opacity":0,"background_padding_x_px":12,"background_padding_y_px":4,"background_radius_px":10,"line_spacing_em":1.2,"letter_spacing_em":0.005,"text_align":"center","line_gap_px":8,"effect":"subtle_pop"},"line_slots":{"source":{"enabled":false},"translation_1":{"enabled":false},"translation_2":{"enabled":false},"translation_3":{"enabled":false},"translation_4":{"enabled":false},"translation_5":{"enabled":false}}},"anime_stream":{"preset":"anime_stream","label":"Anime Stream","description":"Mochiy Pop One for Latin/Japanese + Comfortaa Bold for Cyrillic — classic anime fansub caption: white fill, crisp violet outline, soft dark drop shadow.","built_in":true,"recommended_max_visible_lines":2,"base":{"font_family":"\"Mochiy Pop One Regular\", \"Comfortaa Bold\", \"Underdog Regular\", \"Bangers Regular\", \"Comic Relief Bold\", \"Poppins Bold\", \"Segoe UI\", sans-serif","font_size_px":40,"font_weight":800,"fill_color":"#ffffff","stroke_color":"#3a1a5c","stroke_width_px":1,"shadow_color":"#15071f","shadow_blur_px":8,"shadow_offset_x_px":0,"shadow_offset_y_px":3,"background_color":"#000000","background_opacity":0,"background_padding_x_px":12,"background_padding_y_px":4,"background_radius_px":10,"line_spacing_em":1.1,"letter_spacing_em":0.015,"text_align":"center","line_gap_px":6,"effect":"subtle_pop"},"line_slots":{"source":{"enabled":false},"translation_1":{"enabled":false},"translation_2":{"enabled":false},"translation_3":{"enabled":false},"translation_4":{"enabled":false},"translation_5":{"enabled":false}}},"accessibility_high_contrast":{"preset":"accessibility_high_contrast","label":"Max Contrast","description":"WCAG AAA solid caption box: pure white Montserrat Bold on fully opaque black — the only solid ink plate in the set.","built_in":true,"recommended_max_visible_lines":null,"base":{"font_family":"\"Montserrat Bold\", \"Noto Sans Bold\", \"Montserrat Regular\", \"Segoe UI\", sans-serif","font_size_px":38,"font_weight":800,"fill_color":"#ffffff","stroke_color":"#000000","stroke_width_px":0,"shadow_color":"#000000","shadow_blur_px":0,"shadow_offset_x_px":0,"shadow_offset_y_px":0,"background_color":"#000000","background_opacity":100,"background_padding_x_px":24,"background_padding_y_px":12,"background_radius_px":2,"line_spacing_em":1.15,"letter_spacing_em":0.02,"text_align":"center","line_gap_px":8,"effect":"none"},"line_slots":{"source":{"enabled":false},"translation_1":{"enabled":false},"translation_2":{"enabled":false},"translation_3":{"enabled":false},"translation_4":{"enabled":false},"translation_5":{"enabled":false}}},"dark_cinema":{"preset":"dark_cinema","label":"Cinema Plate","description":"Letterboxed cinema look: Playfair ivory on a warm sepia plate; translation slot slightly smaller for hierarchy.","built_in":true,"recommended_max_visible_lines":2,"base":{"font_family":"\"Playfair Display Bold\", \"Playfair Display Regular\", \"Merriweather Bold\", Georgia, \"Times New Roman\", serif","font_size_px":30,"font_weight":700,"fill_color":"#f3e6c4","stroke_color":"#140a06","stroke_width_px":0,"shadow_color":"#08040a","shadow_blur_px":4,"shadow_offset_x_px":0,"shadow_offset_y_px":1,"background_color":"#160e0a","background_opacity":94,"background_padding_x_px":24,"background_padding_y_px":10,"background_radius_px":4,"line_spacing_em":1.2,"letter_spacing_em":0.015,"text_align":"center","line_gap_px":8,"effect":"fade"},"line_slots":{"source":{"enabled":false},"translation_1":{"enabled":true,"fill_color":"#e4d2a4","stroke_color":"#08040a","font_size_px":24},"translation_2":{"enabled":false},"translation_3":{"enabled":false},"translation_4":{"enabled":false},"translation_5":{"enabled":false}}},"meeting_soft":{"preset":"meeting_soft","label":"Podcast Subtle","description":"Warm parchment paper captions: Merriweather / Noto on a translucent cream plate — soft editorial podcast look, not a dark box.","built_in":true,"recommended_max_visible_lines":null,"base":{"font_family":"\"Merriweather Regular\", \"Merriweather Bold\", \"Noto Sans Regular\", \"Georgia\", serif","font_size_px":28,"font_weight":500,"fill_color":"#2a1f16","stroke_color":"#c4a882","stroke_width_px":0,"shadow_color":"#8a6a48","shadow_blur_px":12,"shadow_offset_x_px":0,"shadow_offset_y_px":2,"background_color":"#f4e8d6","background_opacity":82,"background_padding_x_px":20,"background_padding_y_px":9,"background_radius_px":10,"line_spacing_em":1.28,"letter_spacing_em":0.01,"text_align":"center","line_gap_px":6,"effect":"fade"},"line_slots":{"source":{"enabled":false},"translation_1":{"enabled":false},"translation_2":{"enabled":false},"translation_3":{"enabled":false},"translation_4":{"enabled":false},"translation_5":{"enabled":false}}},"retro_terminal":{"preset":"retro_terminal","label":"Retro Terminal","description":"Amber phosphor CRT: VT323 for Latin terminal texture, IBM Plex Serif for Cyrillic — dense near-black plate, restrained glow.","built_in":true,"recommended_max_visible_lines":3,"base":{"font_family":"\"VT323 Regular\", \"IBM Plex Serif Regular\", \"IBM Plex Serif Medium\", \"PT Mono Regular\", \"Consolas\", \"Courier New\", monospace","font_size_px":32,"font_weight":400,"fill_color":"#ffb84d","stroke_color":"#2a1600","stroke_width_px":0,"shadow_color":"#ff8a00","shadow_blur_px":10,"shadow_offset_x_px":0,"shadow_offset_y_px":0,"background_color":"#070604","background_opacity":93,"background_padding_x_px":18,"background_padding_y_px":7,"background_radius_px":2,"line_spacing_em":1.1,"letter_spacing_em":0.02,"text_align":"center","line_gap_px":4,"effect":"glow"},"line_slots":{"source":{"enabled":false},"translation_1":{"enabled":false},"translation_2":{"enabled":false},"translation_3":{"enabled":false},"translation_4":{"enabled":false},"translation_5":{"enabled":false}}},"fallout_pipboy":{"preset":"fallout_pipboy","label":"Fallout Pip-Boy","description":"Pip-Boy phosphor green: Share Tech Mono for CRT Latin, Ubuntu Mono + IBM Plex Mono for Cyrillic — deep CRT plate, controlled bloom.","built_in":true,"recommended_max_visible_lines":3,"base":{"font_family":"\"Share Tech Mono Regular\", \"Ubuntu Mono Bold\", \"Ubuntu Mono Regular\", \"IBM Plex Mono Medium\", \"PT Mono Regular\", \"Consolas\", monospace","font_size_px":30,"font_weight":400,"fill_color":"#3dff7a","stroke_color":"#001a08","stroke_width_px":0,"shadow_color":"#14ff55","shadow_blur_px":12,"shadow_offset_x_px":0,"shadow_offset_y_px":0,"background_color":"#020806","background_opacity":94,"background_padding_x_px":18,"background_padding_y_px":7,"background_radius_px":2,"line_spacing_em":1.12,"letter_spacing_em":0.022,"text_align":"center","line_gap_px":5,"effect":"glow"},"line_slots":{"source":{"enabled":false},"translation_1":{"enabled":false},"translation_2":{"enabled":false},"translation_3":{"enabled":false},"translation_4":{"enabled":false},"translation_5":{"enabled":false}}},"comic_burst":{"preset":"comic_burst","label":"Comic Burst","description":"Comic SFX energy: Bangers yellow with a chunky black outline; Comic Relief Bold covers Cyrillic.","built_in":true,"recommended_max_visible_lines":1,"base":{"font_family":"\"Bangers Regular\", \"Comic Relief Bold\", \"Comic Relief Regular\", \"Impact\", \"Arial Black\", sans-serif","font_size_px":42,"font_weight":400,"fill_color":"#ffd60a","stroke_color":"#0a0a0a","stroke_width_px":4,"shadow_color":"#d6172a","shadow_blur_px":3,"shadow_offset_x_px":3,"shadow_offset_y_px":5,"background_color":"#000000","background_opacity":0,"background_padding_x_px":12,"background_padding_y_px":4,"background_radius_px":8,"line_spacing_em":1.15,"letter_spacing_em":0.03,"text_align":"center","line_gap_px":8,"effect":"zoom_in"},"line_slots":{"source":{"enabled":false},"translation_1":{"enabled":false},"translation_2":{"enabled":false},"translation_3":{"enabled":false},"translation_4":{"enabled":false},"translation_5":{"enabled":false}}},"cyberpunk_neon":{"preset":"cyberpunk_neon","label":"Cyberpunk Neon","description":"Sci-fi HUD: Orbitron magenta with a cyan halo on a deep navy plate; Exo 2 covers Cyrillic geometry.","built_in":true,"recommended_max_visible_lines":2,"base":{"font_family":"\"Orbitron Black\", \"Exo 2 Black\", \"Orbitron Regular\", \"Exo 2 Regular\", \"Montserrat Bold\", sans-serif","font_size_px":32,"font_weight":900,"fill_color":"#ff2bd6","stroke_color":"#03001a","stroke_width_px":2,"shadow_color":"#00f0ff","shadow_blur_px":18,"shadow_offset_x_px":0,"shadow_offset_y_px":0,"background_color":"#070416","background_opacity":90,"background_padding_x_px":20,"background_padding_y_px":8,"background_radius_px":4,"line_spacing_em":1.15,"letter_spacing_em":0.03,"text_align":"center","line_gap_px":7,"effect":"glow"},"line_slots":{"source":{"enabled":false},"translation_1":{"enabled":false},"translation_2":{"enabled":false},"translation_3":{"enabled":false},"translation_4":{"enabled":false},"translation_5":{"enabled":false}}},"noir_typewriter":{"preset":"noir_typewriter","label":"Film Noir","description":"1940s dossier captions: Special Elite for Latin typewriter texture, IBM Plex Mono for Cyrillic — warm ivory on deep ink, wide tracking, zero-radius plate, soft fade-in.","built_in":true,"recommended_max_visible_lines":2,"base":{"font_family":"\"Special Elite Regular\", \"IBM Plex Mono Medium\", \"IBM Plex Mono Regular\", \"PT Mono Regular\", \"Courier New\", \"Consolas\", monospace","font_size_px":28,"font_weight":400,"fill_color":"#f2e6c8","stroke_color":"#120c08","stroke_width_px":0,"shadow_color":"#000000","shadow_blur_px":2,"shadow_offset_x_px":0,"shadow_offset_y_px":1,"background_color":"#0a0705","background_opacity":94,"background_padding_x_px":24,"background_padding_y_px":11,"background_radius_px":0,"line_spacing_em":1.28,"letter_spacing_em":0.055,"text_align":"center","line_gap_px":6,"effect":"fade"},"line_slots":{"source":{"enabled":false},"translation_1":{"enabled":false},"translation_2":{"enabled":false},"translation_3":{"enabled":false},"translation_4":{"enabled":false},"translation_5":{"enabled":false}}},"vlog_pastel":{"preset":"vlog_pastel","label":"Vlog Pastel","description":"Lifestyle pill: Poppins on a warm pastel plate with stronger contrast for bright vlog footage.","built_in":true,"recommended_max_visible_lines":2,"base":{"font_family":"\"Poppins Regular\", \"Noto Sans Regular\", \"Poppins Bold\", \"Segoe UI\", sans-serif","font_size_px":28,"font_weight":600,"fill_color":"#2c1630","stroke_color":"#2c1630","stroke_width_px":0,"shadow_color":"#8f6aa8","shadow_blur_px":10,"shadow_offset_x_px":0,"shadow_offset_y_px":2,"background_color":"#ffd6e2","background_opacity":92,"background_padding_x_px":18,"background_padding_y_px":7,"background_radius_px":16,"line_spacing_em":1.18,"letter_spacing_em":0,"text_align":"center","line_gap_px":6,"effect":"slide_up"},"line_slots":{"source":{"enabled":false},"translation_1":{"enabled":false},"translation_2":{"enabled":false},"translation_3":{"enabled":false},"translation_4":{"enabled":false},"translation_5":{"enabled":false}}},"glass_frost":{"preset":"glass_frost","label":"Glass Frost","description":"Frosted ice glass: pale translucent ice plate (not a dark bar) with airy Raleway — dark ice-ink text floats on milky glass.","built_in":true,"recommended_max_visible_lines":null,"base":{"font_family":"\"Raleway Regular\", \"Raleway Bold\", \"Noto Sans Regular\", \"Segoe UI\", sans-serif","font_size_px":30,"font_weight":500,"fill_color":"#0b1a2e","stroke_color":"#9eb8d4","stroke_width_px":0,"shadow_color":"#7eb6e8","shadow_blur_px":18,"shadow_offset_x_px":0,"shadow_offset_y_px":2,"background_color":"#eef7ff","background_opacity":44,"background_padding_x_px":22,"background_padding_y_px":10,"background_radius_px":22,"line_spacing_em":1.22,"letter_spacing_em":0.03,"text_align":"center","line_gap_px":8,"effect":"blur_in"},"line_slots":{"source":{"enabled":false},"translation_1":{"enabled":false},"translation_2":{"enabled":false},"translation_3":{"enabled":false},"translation_4":{"enabled":false},"translation_5":{"enabled":false}}},"twitch_lower_third":{"preset":"twitch_lower_third","label":"Twitch Lower-Third","description":"Streamer lower-third chrome: condensed Oswald / Exo on saturated Twitch purple bar, left-aligned with magenta edge glow.","built_in":true,"recommended_max_visible_lines":null,"base":{"font_family":"\"Oswald Regular\", \"Oswald Bold\", \"Exo 2 Regular\", \"Noto Sans Bold\", \"Segoe UI\", sans-serif","font_size_px":28,"font_weight":700,"fill_color":"#ffffff","stroke_color":"#5a1fcf","stroke_width_px":0.8,"shadow_color":"#bf94ff","shadow_blur_px":16,"shadow_offset_x_px":0,"shadow_offset_y_px":0,"background_color":"#9146ff","background_opacity":78,"background_padding_x_px":28,"background_padding_y_px":7,"background_radius_px":0,"line_spacing_em":1.1,"letter_spacing_em":0.04,"text_align":"left","line_gap_px":3,"effect":"slide_up"},"line_slots":{"source":{"enabled":false},"translation_1":{"enabled":false},"translation_2":{"enabled":false},"translation_3":{"enabled":false},"translation_4":{"enabled":false},"translation_5":{"enabled":false}}},"warm_amber":{"preset":"warm_amber","label":"Warm Amber","description":"Night-stream warmth: Open Sans/Noto cream fill with a soft brown shadow — cozy Just Chatting energy.","built_in":true,"recommended_max_visible_lines":2,"base":{"font_family":"\"Open Sans Regular\", \"Open Sans Bold\", \"Noto Sans Regular\", \"Segoe UI\", sans-serif","font_size_px":30,"font_weight":600,"fill_color":"#fff1d6","stroke_color":"#2a1a0c","stroke_width_px":1,"shadow_color":"#1a1008","shadow_blur_px":14,"shadow_offset_x_px":0,"shadow_offset_y_px":3,"background_color":"#000000","background_opacity":0,"background_padding_x_px":12,"background_padding_y_px":4,"background_radius_px":8,"line_spacing_em":1.2,"letter_spacing_em":0,"text_align":"center","line_gap_px":7,"effect":"subtle_pop"},"line_slots":{"source":{"enabled":false},"translation_1":{"enabled":false},"translation_2":{"enabled":false},"translation_3":{"enabled":false},"translation_4":{"enabled":false},"translation_5":{"enabled":false}}},"esports_hud":{"preset":"esports_hud","label":"Esports HUD","description":"Competitive HUD: Exo 2 / Oswald white with a thin cyan outline — sharp, no heavy neon bloom.","built_in":true,"recommended_max_visible_lines":2,"base":{"font_family":"\"Exo 2 Black\", \"Exo 2 Regular\", \"Oswald Bold\", \"Montserrat Bold\", sans-serif","font_size_px":32,"font_weight":800,"fill_color":"#f4fbff","stroke_color":"#00d4ff","stroke_width_px":1.5,"shadow_color":"#001018","shadow_blur_px":6,"shadow_offset_x_px":0,"shadow_offset_y_px":1,"background_color":"#000000","background_opacity":0,"background_padding_x_px":12,"background_padding_y_px":4,"background_radius_px":4,"line_spacing_em":1.12,"letter_spacing_em":0.02,"text_align":"center","line_gap_px":6,"effect":"none"},"line_slots":{"source":{"enabled":false},"translation_1":{"enabled":false},"translation_2":{"enabled":false},"translation_3":{"enabled":false},"translation_4":{"enabled":false},"translation_5":{"enabled":false}}},"dual_caption_modern":{"preset":"dual_caption_modern","label":"Dual Caption Modern","description":"Calm dual-language plate: warm gold source + soft sky translation on a shared dark bar for bilingual streams.","built_in":true,"recommended_max_visible_lines":2,"base":{"font_family":"\"Raleway Bold\", \"Raleway Regular\", \"Noto Sans Regular\", \"Segoe UI\", sans-serif","font_size_px":28,"font_weight":600,"fill_color":"#f0f3f8","stroke_color":"#0a0c10","stroke_width_px":0,"shadow_color":"#000000","shadow_blur_px":4,"shadow_offset_x_px":0,"shadow_offset_y_px":1,"background_color":"#12151c","background_opacity":90,"background_padding_x_px":18,"background_padding_y_px":8,"background_radius_px":8,"line_spacing_em":1.18,"letter_spacing_em":0,"text_align":"center","line_gap_px":6,"effect":"fade"},"line_slots":{"source":{"enabled":true,"fill_color":"#ffcc66","stroke_color":"#2a1e08","stroke_width_px":0},"translation_1":{"enabled":true,"fill_color":"#a8d8ff","stroke_color":"#0a2030","stroke_width_px":0,"font_size_px":26},"translation_2":{"enabled":false},"translation_3":{"enabled":false},"translation_4":{"enabled":false},"translation_5":{"enabled":false}}}}"##;
 
 fn built_in_preset_catalog() -> &'static Value {
     static CACHE: OnceLock<Value> = OnceLock::new();
@@ -411,6 +429,10 @@ fn migrate_unknown_preset_name(name: &str, catalog: &Value) -> String {
     }
     let migrated = match name {
         "jp_stream_single" | "jp_dual_caption" => "anime_stream",
+        // Collapsed similar “black plate” family into distinct material presets.
+        "sakura_soft" => "meeting_soft",
+        "minimal_mono" => "glass_frost",
+        "editorial_news" => "dark_cinema",
         _ => return "clean_default".to_string(),
     };
     if obj.contains_key(migrated) {
@@ -576,6 +598,8 @@ mod tests {
             "glow",
             "fade",
             "subtle_pop",
+            "pulse",
+            "reveal",
             "none",
         ] {
             let payload = json!({
@@ -595,6 +619,71 @@ mod tests {
         });
         let effective = resolve_effective_subtitle_style(&payload);
         assert_eq!(effective["base"]["effect"], "none");
+    }
+
+    #[test]
+    fn style_clamps_match_dashboard_ui_limits() {
+        let payload = json!({
+            "preset": "clean_default",
+            "base": {
+                "shadow_blur_px": 40,
+                "line_spacing_em": 2.5,
+                "letter_spacing_em": 0.5,
+                "shadow_offset_x_px": -24,
+                "stroke_width_px": 4
+            }
+        });
+        let effective = resolve_effective_subtitle_style(&payload);
+        let base = &effective["base"];
+        assert_eq!(base["shadow_blur_px"].as_f64().unwrap(), 40.0);
+        assert_eq!(base["line_spacing_em"].as_f64().unwrap(), 2.5);
+        assert_eq!(base["letter_spacing_em"].as_f64().unwrap(), 0.5);
+        assert_eq!(base["shadow_offset_x_px"].as_i64().unwrap(), -24);
+        assert_eq!(base["stroke_width_px"].as_f64().unwrap(), 4.0);
+
+        let clipped = resolve_effective_subtitle_style(&json!({
+            "preset": "clean_default",
+            "base": { "stroke_width_px": 12 }
+        }));
+        assert_eq!(
+            clipped["base"]["stroke_width_px"].as_f64().unwrap(),
+            4.0,
+            "outline width clamps to ASS scale 0–4"
+        );
+    }
+
+    #[test]
+    fn stroke_width_accepts_numeric_strings_including_zero() {
+        for (raw, expected) in [("0", 0.0), ("1.2", 1.2), ("1.25", 1.3), ("4.5", 4.0), ("12", 4.0)] {
+            let payload = json!({
+                "preset": "clean_default",
+                "base": { "stroke_width_px": raw }
+            });
+            let effective = resolve_effective_subtitle_style(&payload);
+            assert_eq!(
+                effective["base"]["stroke_width_px"].as_f64().unwrap(),
+                expected,
+                "raw stroke {raw}"
+            );
+        }
+
+        let slot_payload = json!({
+            "preset": "clean_default",
+            "base": { "stroke_width_px": 2 },
+            "line_slots": {
+                "source": {
+                    "enabled": true,
+                    "stroke_width_px": "0"
+                }
+            }
+        });
+        let effective = resolve_effective_subtitle_style(&slot_payload);
+        assert_eq!(
+            effective["line_slots"]["source"]["stroke_width_px"]
+                .as_f64()
+                .unwrap(),
+            0.0
+        );
     }
 
     #[test]
@@ -661,10 +750,79 @@ mod tests {
             "comic_burst",
             "vlog_pastel",
             "anime_stream",
+            "glass_frost",
+            "twitch_lower_third",
+            "meeting_soft",
+            "esports_hud",
+            "dual_caption_modern",
         ] {
             assert!(catalog.get(key).is_some(), "missing preset {key}");
             assert_eq!(catalog[key]["built_in"], true);
         }
+        for removed in ["sakura_soft", "minimal_mono", "editorial_news"] {
+            assert!(
+                catalog.get(removed).is_none(),
+                "collapsed plate preset {removed} should be removed"
+            );
+        }
+    }
+
+    #[test]
+    fn collapsed_plate_presets_migrate() {
+        for (legacy, target) in [
+            ("sakura_soft", "meeting_soft"),
+            ("minimal_mono", "glass_frost"),
+            ("editorial_news", "dark_cinema"),
+        ] {
+            let effective = resolve_effective_subtitle_style(&json!({ "preset": legacy }));
+            assert_eq!(effective["preset"], target, "legacy {legacy}");
+        }
+    }
+
+    #[test]
+    fn readable_plate_family_uses_distinct_materials() {
+        let catalog = subtitle_style_presets(None);
+        let max_bg = catalog["accessibility_high_contrast"]["base"]["background_color"]
+            .as_str()
+            .unwrap_or("");
+        let podcast_bg = catalog["meeting_soft"]["base"]["background_color"]
+            .as_str()
+            .unwrap_or("");
+        let glass_bg = catalog["glass_frost"]["base"]["background_color"]
+            .as_str()
+            .unwrap_or("");
+        let twitch_bg = catalog["twitch_lower_third"]["base"]["background_color"]
+            .as_str()
+            .unwrap_or("");
+        assert_eq!(max_bg.to_ascii_lowercase(), "#000000");
+        assert_ne!(podcast_bg.to_ascii_lowercase(), "#000000");
+        assert_ne!(glass_bg.to_ascii_lowercase(), "#000000");
+        assert_ne!(twitch_bg.to_ascii_lowercase(), "#000000");
+        assert_ne!(podcast_bg, glass_bg);
+        assert_ne!(glass_bg, twitch_bg);
+        assert_eq!(
+            catalog["twitch_lower_third"]["base"]["text_align"],
+            "left"
+        );
+        // Light translucent materials — not dark charcoal boxes.
+        assert_eq!(catalog["meeting_soft"]["base"]["background_color"], "#f4e8d6");
+        assert_eq!(catalog["glass_frost"]["base"]["background_color"], "#eef7ff");
+        assert_eq!(catalog["twitch_lower_third"]["base"]["background_color"], "#9146ff");
+        let glass_op = catalog["glass_frost"]["base"]["background_opacity"]
+            .as_i64()
+            .unwrap_or(100);
+        assert!(
+            (30..=55).contains(&glass_op),
+            "glass_frost must stay milky-translucent, got {glass_op}%"
+        );
+        assert_eq!(
+            catalog["glass_frost"]["base"]["fill_color"]
+                .as_str()
+                .unwrap_or("")
+                .to_ascii_lowercase(),
+            "#0b1a2e",
+            "frosted ice plate uses dark ice-ink text"
+        );
     }
 
     #[test]
@@ -694,12 +852,20 @@ mod tests {
     fn themed_presets_include_cyrillic_capable_fallback() {
         let catalog = subtitle_style_presets(None);
         for (preset, fallback_token) in [
-            ("anime_stream", "Underdog Regular"),
-            ("retro_terminal", "PT Mono Regular"),
+            ("anime_stream", "Comfortaa Bold"),
+            ("retro_terminal", "IBM Plex Serif"),
             ("fallout_pipboy", "Ubuntu Mono"),
             ("comic_burst", "Comic Relief"),
             ("cyberpunk_neon", "Exo 2"),
-            ("noir_typewriter", "Cutive Mono"),
+            ("noir_typewriter", "IBM Plex Mono"),
+            ("dual_tone", "Noto Sans"),
+            ("vlog_pastel", "Noto Sans"),
+            ("clean_default", "Noto Sans"),
+            ("streamer_bold", "Montserrat"),
+            ("compact_overlay", "Noto Sans"),
+            ("meeting_soft", "Noto Sans"),
+            ("glass_frost", "Noto Sans"),
+            ("twitch_lower_third", "Noto Sans"),
         ] {
             let family = catalog[preset]["base"]["font_family"]
                 .as_str()
@@ -712,14 +878,139 @@ mod tests {
     }
 
     #[test]
+    fn latin_only_primaries_put_cyrillic_project_face_before_system_generics() {
+        let catalog = subtitle_style_presets(None);
+        // Faces shipped without a Cyrillic cmap — must not be the only project face
+        // before Consolas/Segoe steal the script with the wrong look.
+        let cases = [
+            ("retro_terminal", "VT323 Regular", "IBM Plex Serif"),
+            ("fallout_pipboy", "Share Tech Mono Regular", "Ubuntu Mono"),
+            ("noir_typewriter", "Special Elite Regular", "IBM Plex Mono"),
+            ("comic_burst", "Bangers Regular", "Comic Relief"),
+            ("cyberpunk_neon", "Orbitron Black", "Exo 2"),
+            ("anime_stream", "Mochiy Pop One Regular", "Comfortaa Bold"),
+            ("dual_tone", "Lato Regular", "Noto Sans"),
+            ("vlog_pastel", "Poppins Regular", "Noto Sans"),
+        ];
+        for (preset, primary, cyr_face) in cases {
+            let family = catalog[preset]["base"]["font_family"]
+                .as_str()
+                .unwrap_or("");
+            let primary_at = family.find(primary).expect("primary face");
+            let cyr_at = family.find(cyr_face).expect("cyrillic face");
+            assert!(
+                cyr_at > primary_at,
+                "{preset}: {cyr_face} must follow {primary} in {family}"
+            );
+            for system in ["Consolas", "Segoe UI", "Courier New", "sans-serif", "monospace"] {
+                if let Some(sys_at) = family.find(system) {
+                    assert!(
+                        cyr_at < sys_at,
+                        "{preset}: {cyr_face} must precede system generic {system} in {family}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn redesigned_mono_noir_family_uses_plex_stacks() {
+        let catalog = subtitle_style_presets(None);
+        let noir = catalog["noir_typewriter"]["base"]["font_family"]
+            .as_str()
+            .unwrap_or("");
+        assert!(noir.contains("Special Elite Regular"));
+        assert!(noir.contains("IBM Plex Mono Medium"));
+        assert!(
+            (noir.find("Special Elite Regular").unwrap())
+                < (noir.find("IBM Plex Mono Medium").unwrap())
+        );
+        assert_eq!(catalog["noir_typewriter"]["base"]["background_radius_px"], 0);
+        assert!(
+            catalog["noir_typewriter"]["base"]["letter_spacing_em"]
+                .as_f64()
+                .unwrap()
+                >= 0.05
+        );
+
+        let retro = catalog["retro_terminal"]["base"]["font_family"]
+            .as_str()
+            .unwrap_or("");
+        assert!(retro.contains("VT323 Regular"));
+        assert!(retro.contains("IBM Plex Serif Regular"));
+    }
+
+    #[test]
+    fn jetbrains_font_alias_canonicalizes_to_registered_family() {
+        let payload = json!({
+            "preset": "glass_frost",
+            "base": {
+                "font_family": "\"JetBrains Mono Regular\", \"PT Mono Regular\", monospace"
+            }
+        });
+        let effective = resolve_effective_subtitle_style(&payload);
+        let family = effective["base"]["font_family"].as_str().unwrap_or("");
+        assert!(family.contains("Jet Brains Mono Regular"));
+        assert!(!family.contains("\"JetBrains Mono Regular\""));
+    }
+
+    #[test]
+    fn anime_stream_keeps_dual_script_font_stack() {
+        let catalog = subtitle_style_presets(None);
+        let family = catalog["anime_stream"]["base"]["font_family"]
+            .as_str()
+            .unwrap_or("");
+        assert!(family.contains("Mochiy Pop One"), "latin/jp face");
+        assert!(family.contains("Comfortaa Bold"), "cyrillic-matching face");
+        assert!(family.contains("Comic Relief Bold"), "cyrillic comic fallback");
+        assert!(
+            !family.contains("Noto Sans"),
+            "Noto must not steal anime Cyrillic fallback styling"
+        );
+        assert_eq!(catalog["anime_stream"]["base"]["font_size_px"], 40);
+        assert_eq!(catalog["anime_stream"]["base"]["stroke_width_px"], 1.0);
+    }
+
+    #[test]
+    fn meeting_soft_uses_readable_plate_on_bright_backgrounds() {
+        let catalog = subtitle_style_presets(None);
+        let base = &catalog["meeting_soft"]["base"];
+        let opacity = base["background_opacity"].as_i64().unwrap_or(0);
+        assert!(
+            opacity >= 75,
+            "meeting_soft parchment plate needs enough body for bright slides"
+        );
+        assert_eq!(
+            base["background_color"]
+                .as_str()
+                .unwrap_or("")
+                .to_ascii_lowercase(),
+            "#f4e8d6"
+        );
+        // Dark ink on cream paper — not white-on-charcoal.
+        assert_ne!(
+            base["fill_color"]
+                .as_str()
+                .unwrap_or("")
+                .to_ascii_lowercase(),
+            "#ffffff"
+        );
+    }
+
+    #[test]
     fn plate_backed_presets_use_opaque_enough_plates() {
         let catalog = subtitle_style_presets(None);
+        // Intentionally translucent materials (frosted glass / stream chrome).
+        const TRANSLUCENT_OK: &[&str] = &["glass_frost", "twitch_lower_third", "meeting_soft"];
         for (key, preset) in catalog.as_object().expect("catalog object") {
             if preset.get("built_in").and_then(|v| v.as_bool()) != Some(true) {
                 continue;
             }
             let opacity = preset["base"]["background_opacity"].as_i64().unwrap_or(0);
             if opacity <= 0 {
+                continue;
+            }
+            if TRANSLUCENT_OK.contains(&key.as_str()) {
                 continue;
             }
             assert!(
@@ -777,6 +1068,33 @@ mod tests {
                 "built-in preset {key} reuses ({font_family}, {fill_color})"
             );
         }
+    }
+
+    #[test]
+    fn new_modern_presets_use_expected_font_tokens() {
+        let catalog = subtitle_style_presets(None);
+        for (preset, token) in [
+            ("glass_frost", "Raleway"),
+            ("twitch_lower_third", "Oswald"),
+            ("meeting_soft", "Merriweather"),
+            ("warm_amber", "Open Sans"),
+            ("esports_hud", "Exo 2"),
+            ("dual_caption_modern", "Raleway"),
+            ("retro_terminal", "IBM Plex Serif"),
+        ] {
+            let family = catalog[preset]["base"]["font_family"]
+                .as_str()
+                .unwrap_or("");
+            assert!(
+                family.contains(token),
+                "preset {preset} expected font token {token} in {family}"
+            );
+        }
+        assert_eq!(catalog["dual_caption_modern"]["line_slots"]["source"]["enabled"], true);
+        assert_eq!(
+            catalog["dual_caption_modern"]["line_slots"]["translation_1"]["enabled"],
+            true
+        );
     }
 
     #[test]

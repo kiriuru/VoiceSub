@@ -8,7 +8,9 @@ use std::sync::Arc;
 
 use super::{
     ProviderError, ProviderInfo, TranslateRequest, TranslationProvider, base_diagnostics, http,
-    http::SharedHttpClient, normalize_source_lang,
+    http::SharedHttpClient,
+    lang_codes::libretranslate_lang,
+    normalize_source_lang,
 };
 
 pub struct PublicLibreTranslateMirrorProvider {
@@ -40,10 +42,16 @@ impl TranslationProvider for PublicLibreTranslateMirrorProvider {
             api_url.as_str()
         };
 
+        let source = normalize_source_lang(request.source_lang);
+        let source = if source == "auto" {
+            "auto".to_string()
+        } else {
+            libretranslate_lang(&source)
+        };
         let body = json!({
             "q": request.text,
-            "source": normalize_source_lang(request.source_lang),
-            "target": request.target_lang,
+            "source": source,
+            "target": libretranslate_lang(request.target_lang),
             "format": "text",
         });
 
@@ -56,6 +64,7 @@ impl TranslationProvider for PublicLibreTranslateMirrorProvider {
             None,
             None,
             "Public LibreTranslate mirror request failed",
+            request.timeout_secs,
         )
         .await?;
 

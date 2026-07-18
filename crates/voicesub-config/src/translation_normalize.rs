@@ -6,7 +6,7 @@ use crate::secrets::{
     normalize_google_translate_api_key, normalize_provider_secret, normalize_provider_text_value,
 };
 
-pub const SUPPORTED_TRANSLATION_PROVIDERS: [&str; 13] = [
+pub const SUPPORTED_TRANSLATION_PROVIDERS: [&str; 17] = [
     "google_translate_v2",
     "google_cloud_translation_v3",
     "google_gas_url",
@@ -20,6 +20,10 @@ pub const SUPPORTED_TRANSLATION_PROVIDERS: [&str; 13] = [
     "ollama",
     "public_libretranslate_mirror",
     "free_web_translate",
+    "baidu_translate",
+    "youdao_translate",
+    "tencent_tmt",
+    "caiyun_translator",
 ];
 
 const CANONICAL_SLOT_IDS: [&str; 5] = [
@@ -66,30 +70,50 @@ pub fn default_translation_provider_settings() -> Value {
             "api_key": "",
             "base_url": "https://api.openai.com/v1",
             "model": "",
-            "custom_prompt": ""
+            "custom_prompt": "",
+            "override_prompt": "false"
         },
         "openrouter": {
             "api_key": "",
             "base_url": "https://openrouter.ai/api/v1",
             "model": "",
-            "custom_prompt": ""
+            "custom_prompt": "",
+            "override_prompt": "false"
         },
         "lm_studio": {
             "api_key": "",
             "base_url": "http://127.0.0.1:1234/v1",
             "model": "",
-            "custom_prompt": ""
+            "custom_prompt": "",
+            "override_prompt": "false"
         },
         "ollama": {
             "api_key": "",
             "base_url": "http://127.0.0.1:11434/v1",
             "model": "",
-            "custom_prompt": ""
+            "custom_prompt": "",
+            "override_prompt": "false"
         },
         "public_libretranslate_mirror": {
             "api_url": "https://translate.fedilab.app/translate"
         },
-        "free_web_translate": {}
+        "free_web_translate": {},
+        "baidu_translate": {
+            "app_id": "",
+            "secret_key": ""
+        },
+        "youdao_translate": {
+            "app_key": "",
+            "app_secret": ""
+        },
+        "tencent_tmt": {
+            "secret_id": "",
+            "secret_key": "",
+            "region": "ap-guangzhou"
+        },
+        "caiyun_translator": {
+            "token": ""
+        }
     })
 }
 
@@ -203,12 +227,39 @@ fn normalize_provider_block(
                 "api_url": api_url,
             })
         }
-        "openai" => {
+        "openai" | "openrouter" | "lm_studio" | "ollama" => {
+            let default_base = match provider_name {
+                "openai" => "https://api.openai.com/v1",
+                "openrouter" => "https://openrouter.ai/api/v1",
+                "lm_studio" => "http://127.0.0.1:1234/v1",
+                _ => "http://127.0.0.1:11434/v1",
+            };
             let base_url = str_value(normalized.get("base_url"));
             let base_url = if base_url.is_empty() {
-                "https://api.openai.com/v1".to_string()
+                default_base.to_string()
             } else {
                 normalize_provider_text_value(&base_url)
+            };
+            let custom_prompt = normalize_provider_text_value(
+                normalized
+                    .get("custom_prompt")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(""),
+            );
+            let override_raw = str_value(normalized.get("override_prompt"));
+            let override_prompt = if override_raw.is_empty() {
+                if custom_prompt.is_empty() {
+                    "false".to_string()
+                } else {
+                    "true".to_string()
+                }
+            } else if matches!(
+                override_raw.to_ascii_lowercase().as_str(),
+                "true" | "1" | "yes" | "on"
+            ) {
+                "true".to_string()
+            } else {
+                "false".to_string()
             };
             json!({
                 "api_key": normalize_provider_secret(
@@ -218,69 +269,8 @@ fn normalize_provider_block(
                 "model": normalize_provider_text_value(
                     normalized.get("model").and_then(|v| v.as_str()).unwrap_or(""),
                 ),
-                "custom_prompt": normalize_provider_text_value(
-                    normalized.get("custom_prompt").and_then(|v| v.as_str()).unwrap_or(""),
-                ),
-            })
-        }
-        "openrouter" => {
-            let base_url = str_value(normalized.get("base_url"));
-            let base_url = if base_url.is_empty() {
-                "https://openrouter.ai/api/v1".to_string()
-            } else {
-                normalize_provider_text_value(&base_url)
-            };
-            json!({
-                "api_key": normalize_provider_secret(
-                    normalized.get("api_key").and_then(|v| v.as_str()).unwrap_or(""),
-                ),
-                "base_url": base_url,
-                "model": normalize_provider_text_value(
-                    normalized.get("model").and_then(|v| v.as_str()).unwrap_or(""),
-                ),
-                "custom_prompt": normalize_provider_text_value(
-                    normalized.get("custom_prompt").and_then(|v| v.as_str()).unwrap_or(""),
-                ),
-            })
-        }
-        "lm_studio" => {
-            let base_url = str_value(normalized.get("base_url"));
-            let base_url = if base_url.is_empty() {
-                "http://127.0.0.1:1234/v1".to_string()
-            } else {
-                normalize_provider_text_value(&base_url)
-            };
-            json!({
-                "api_key": normalize_provider_secret(
-                    normalized.get("api_key").and_then(|v| v.as_str()).unwrap_or(""),
-                ),
-                "base_url": base_url,
-                "model": normalize_provider_text_value(
-                    normalized.get("model").and_then(|v| v.as_str()).unwrap_or(""),
-                ),
-                "custom_prompt": normalize_provider_text_value(
-                    normalized.get("custom_prompt").and_then(|v| v.as_str()).unwrap_or(""),
-                ),
-            })
-        }
-        "ollama" => {
-            let base_url = str_value(normalized.get("base_url"));
-            let base_url = if base_url.is_empty() {
-                "http://127.0.0.1:11434/v1".to_string()
-            } else {
-                normalize_provider_text_value(&base_url)
-            };
-            json!({
-                "api_key": normalize_provider_secret(
-                    normalized.get("api_key").and_then(|v| v.as_str()).unwrap_or(""),
-                ),
-                "base_url": base_url,
-                "model": normalize_provider_text_value(
-                    normalized.get("model").and_then(|v| v.as_str()).unwrap_or(""),
-                ),
-                "custom_prompt": normalize_provider_text_value(
-                    normalized.get("custom_prompt").and_then(|v| v.as_str()).unwrap_or(""),
-                ),
+                "custom_prompt": custom_prompt,
+                "override_prompt": override_prompt,
             })
         }
         "public_libretranslate_mirror" => {
@@ -298,6 +288,44 @@ fn normalize_provider_block(
             "gas_url": normalize_provider_text_value(
                 normalized.get("gas_url").and_then(|v| v.as_str()).unwrap_or(""),
             )
+        }),
+        "baidu_translate" => json!({
+            "app_id": normalize_provider_text_value(
+                normalized.get("app_id").and_then(|v| v.as_str()).unwrap_or(""),
+            ),
+            "secret_key": normalize_provider_secret(
+                normalized.get("secret_key").and_then(|v| v.as_str()).unwrap_or(""),
+            ),
+        }),
+        "youdao_translate" => json!({
+            "app_key": normalize_provider_text_value(
+                normalized.get("app_key").and_then(|v| v.as_str()).unwrap_or(""),
+            ),
+            "app_secret": normalize_provider_secret(
+                normalized.get("app_secret").and_then(|v| v.as_str()).unwrap_or(""),
+            ),
+        }),
+        "tencent_tmt" => {
+            let region = str_value(normalized.get("region"));
+            let region = if region.is_empty() {
+                "ap-guangzhou".to_string()
+            } else {
+                normalize_provider_text_value(&region)
+            };
+            json!({
+                "secret_id": normalize_provider_secret(
+                    normalized.get("secret_id").and_then(|v| v.as_str()).unwrap_or(""),
+                ),
+                "secret_key": normalize_provider_secret(
+                    normalized.get("secret_key").and_then(|v| v.as_str()).unwrap_or(""),
+                ),
+                "region": region,
+            })
+        }
+        "caiyun_translator" => json!({
+            "token": normalize_provider_secret(
+                normalized.get("token").and_then(|v| v.as_str()).unwrap_or(""),
+            ),
         }),
         _ => {
             let mut out = Map::new();
@@ -550,7 +578,7 @@ pub fn normalize_translation_config(
         translation.get("timeout_ms").or(defaults.get("timeout_ms")),
         10_000,
     )
-    .clamp(1_000, 60_000);
+    .clamp(1_000, 300_000);
     let queue_max_size = int_or(
         translation
             .get("queue_max_size")
@@ -666,7 +694,7 @@ mod tests {
             &defaults,
             &json!(["en"]),
         );
-        assert_eq!(out["timeout_ms"], 60_000);
+        assert_eq!(out["timeout_ms"], 300_000);
         assert_eq!(out["lines"].as_array().unwrap().len(), 2);
         assert_eq!(out["target_languages"], json!(["de", "fr"]));
     }

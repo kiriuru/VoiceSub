@@ -48,6 +48,8 @@ fn voicesub_version() -> String {
 
 #[tauri::command]
 fn set_dashboard_layout(window: WebviewWindow, compact: bool) -> Result<(), String> {
+    // Called only when ui.layout actually changes (dashboard gates repeats).
+    // Always apply size constraints for the mode, then center once.
     if compact {
         window
             .set_size(LogicalSize::new(390.0, 844.0))
@@ -165,21 +167,23 @@ pub fn run() {
     let http_handle = http_runtime.handle().clone();
     let ws_publisher = runtime_service.ws_publisher();
     let publisher_for_tts = ws_publisher.clone();
-    let broadcaster_handle = http_handle.clone();
+    // Twitch → desktop RuntimeEventBus. Chat is bus-only (OBS must not see it).
+    // Connection updates also hit EventsHub so snapshot replay can restore TTS UI.
     let tts_broadcaster: voicesub_twitch::EventBroadcaster = Arc::new(move |message| {
         let publisher = publisher_for_tts.clone();
-        let handle = broadcaster_handle.clone();
-        handle.spawn(async move {
-            let channel = message
-                .get("type")
-                .and_then(|value| value.as_str())
-                .unwrap_or("event")
-                .to_string();
-            let payload = message.get("payload").cloned().unwrap_or(message);
-            publisher
-                .broadcast_channel(&channel, &channel, payload)
-                .await;
-        });
+        let channel = message
+            .get("type")
+            .and_then(|value| value.as_str())
+            .unwrap_or("event");
+        let payload = message
+            .get("payload")
+            .cloned()
+            .unwrap_or_else(|| message.clone());
+        if channel == "twitch_chat_message" {
+            publisher.publish_event_bus_only(channel, channel, payload);
+            return;
+        }
+        publisher.broadcast_channel_now(channel, channel, payload);
     });
     let tts_service = Arc::new(TtsModuleService::with_broadcaster(
         project_root.join("user-data"),
@@ -274,7 +278,17 @@ pub fn run() {
             let app_for_speech_activity = app_handle.clone();
             tts_state.pipeline.set_speech_planned_listener(Arc::new(
                 move |items: &[voicesub_tts::SpeechQueueItem]| {
-                    let _ = app_for_speech_activity.emit("tts-speech-activity", items);
+                    if let Err(err) = app_for_speech_activity.emit_to(
+                        TTS_WINDOW_LABEL,
+                        "tts-speech-activity",
+                        items,
+                    ) {
+                        warn!(
+                            target: "voicesub.tts.ipc",
+                            error = %err,
+                            "tts-speech-activity emit_to failed"
+                        );
+                    }
                 },
             ));
             tts_state.pipeline.clone().start();
@@ -288,12 +302,23 @@ pub fn run() {
                 pipeline_for_bus,
             ));
             let pipeline_for_playback = tts_state.pipeline.clone();
+            let app_for_playback = app_handle.clone();
             std::thread::Builder::new()
                 .name("voicesub-tts-playback-events".into())
                 .spawn(move || {
                     while let Ok(finished) = completion_rx.recv() {
                         pipeline_for_playback.on_playback_finished(&finished);
-                        let _ = app_handle.emit("playback-finished", finished);
+                        if let Err(err) = app_for_playback.emit_to(
+                            TTS_WINDOW_LABEL,
+                            "playback-finished",
+                            &finished,
+                        ) {
+                            warn!(
+                                target: "voicesub.tts.ipc",
+                                error = %err,
+                                "playback-finished emit_to failed"
+                            );
+                        }
                     }
                 })
                 .expect("spawn playback completion event thread");

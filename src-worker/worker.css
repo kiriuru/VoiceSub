@@ -1,9 +1,21 @@
 @import "../src/lib/styles/global.css";
 
+html,
+body {
+  overflow: auto;
+}
+
 body {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+}
+
+#app {
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
 }
 
 .worker-page {

@@ -351,7 +351,7 @@ async fn translate_target_short_circuits_for_empty_source_text() {
         .await;
 
     assert!(item.success);
-    assert!(item.cached);
+    assert!(!item.cached);
     assert_eq!(item.text, "   ");
     assert!(fake.calls().is_empty());
     let status = diagnostics
@@ -376,7 +376,7 @@ async fn translate_target_short_circuits_when_source_and_target_match() {
         .await;
 
     assert!(item.success);
-    assert!(item.cached);
+    assert!(!item.cached);
     assert_eq!(item.text, "hello world");
     assert!(fake.calls().is_empty());
 }
@@ -474,6 +474,83 @@ async fn apply_live_settings_propagates_cache_toggle() {
 
     assert!(!item.cached);
     assert_eq!(item.text, "hello:fr");
+}
+
+#[tokio::test]
+async fn first_apply_live_settings_preserves_persisted_cache() {
+    let temp = TempDir::new().unwrap();
+    let fake = Arc::new(FakeProvider::new(HashMap::new()));
+    let mut providers = HashMap::new();
+    providers.insert(
+        "google_translate_v2".into(),
+        fake.clone() as Arc<dyn TranslationProvider>,
+    );
+    let engine = TranslationEngine::with_providers(providers, Some(temp.path().to_path_buf()));
+    engine.seed_translation_cache("google_translate_v2", "en", "fr", "hello", "bonjour");
+    // Force disk write before "restart".
+    drop(engine);
+
+    let mut providers = HashMap::new();
+    providers.insert(
+        "google_translate_v2".into(),
+        fake as Arc<dyn TranslationProvider>,
+    );
+    let mut engine = TranslationEngine::with_providers(providers, Some(temp.path().to_path_buf()));
+    let settings = json!({
+        "enabled": true,
+        "provider": "google_translate_v2",
+        "lines": [{
+            "slot_id": "translation_1",
+            "enabled": true,
+            "target_lang": "fr",
+            "provider": "google_translate_v2"
+        }],
+        "cache": { "enabled": true, "persist": true }
+    });
+    engine.apply_live_settings(&settings);
+
+    let line = PreparedLine {
+        slot_id: "translation_1".into(),
+        target_lang: "fr".into(),
+        provider_name: "google_translate_v2".into(),
+        provider_settings: HashMap::new(),
+        provider_group: "stable".into(),
+        experimental: false,
+        local_provider: false,
+        label: "FR".into(),
+    };
+    let (item, _) = engine
+        .translate_target("hello", "en", &line, TranslateTargetOptions::default())
+        .await;
+
+    assert!(item.success);
+    assert!(item.cached);
+    assert_eq!(item.text, "bonjour");
+}
+
+#[tokio::test]
+async fn translate_targets_normalizes_source_lang_for_cache_lookup() {
+    let fake = Arc::new(FakeProvider::new(HashMap::new()));
+    let mut providers = HashMap::new();
+    providers.insert("stub".into(), fake.clone() as Arc<dyn TranslationProvider>);
+    let engine = TranslationEngine::with_providers(providers, None);
+    engine.seed_translation_cache("stub", "EN", "fr", "hello", "bonjour");
+
+    let batch = engine
+        .translate_targets(
+            "hello",
+            "en",
+            "stub",
+            &HashMap::new(),
+            &["fr".into()],
+            0,
+        )
+        .await;
+
+    assert_eq!(batch.items.len(), 1);
+    assert!(batch.items[0].cached);
+    assert_eq!(batch.items[0].text, "bonjour");
+    assert!(fake.calls().is_empty());
 }
 
 #[tokio::test]
@@ -582,7 +659,7 @@ async fn google_cloud_translation_v3_uses_advanced_endpoint_and_bearer_token() {
             "targetLanguageCode": "en",
             "sourceLanguageCode": "ru",
             "mimeType": "text/plain",
-            "model": "general/nmt"
+            "model": "projects/demo-project/locations/global/models/general/nmt"
         })))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "translations": [{ "translatedText": "hello" }]

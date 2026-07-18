@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
+use std::fs;
 use std::net::SocketAddr;
-
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use std::sync::{
     Arc, Condvar, Mutex, RwLock as StdRwLock,
@@ -24,8 +24,9 @@ use voicesub_browser::{
 
 use crate::http::{
     BackgroundTaskRegistry, HttpState, LoopbackAuth, PartialEmitCoordinator,
-    RuntimeMetricsCollector, RuntimeStatusBroadcaster, StylePresetsFn, build_router,
-    spawn_runtime_heartbeat, spawn_startup_check,
+    RuntimeMetricsCollector, RuntimeOrchestrator, RuntimeStatusBroadcaster, StylePresetsFn,
+    build_router, spawn_runtime_heartbeat, spawn_startup_check,
+    terminate_previous_browser_workers,
 };
 use voicesub_config::read_full_logging_enabled;
 use voicesub_config::{
@@ -343,6 +344,8 @@ pub struct RuntimeService {
     local_asr_speech: Arc<crate::local_asr_speech_source::SharedLocalAsrSpeechSource>,
 
     ordered_ingest: Arc<OrderedBrowserSpeechIngest>,
+
+    orchestrator: RuntimeOrchestrator,
 }
 
 impl RuntimeService {
@@ -516,7 +519,7 @@ impl RuntimeService {
             }
         });
 
-        let translation_cache_dir = paths.user_data_dir.join("cache");
+        let translation_cache_dir = resolve_translation_cache_dir(&paths.user_data_dir);
         let translation = Arc::new(tokio::sync::Mutex::new(TranslationRuntimeController::new(
             config_getter,
             translation_publish,
@@ -661,6 +664,7 @@ impl RuntimeService {
             local_asr,
             local_asr_speech,
             ordered_ingest: browser_speech_for_ingest,
+            orchestrator: RuntimeOrchestrator::default(),
         }
     }
 
@@ -773,6 +777,7 @@ impl RuntimeService {
             self.config_snapshot.clone(),
             self.config.clone(),
             self.bind_addr.clone(),
+            self.orchestrator.clone(),
             session_log,
             structured_runtime_logger,
             export_service,
@@ -894,16 +899,39 @@ impl RuntimeService {
         let payload = store.payload().clone();
         let url = worker_url_for_payload(&base, &payload);
         let chrome_launch = voicesub_browser::chrome_launch_from_config(&payload);
+        drop(store);
+
+        let previous_worker_pid = self.orchestrator.tracked_worker_pid().await;
+        terminate_previous_browser_workers(&self.paths.user_data_dir, previous_worker_pid);
 
         let launcher = BrowserWorkerLauncher::new(&self.paths.user_data_dir);
-
         let result = launcher.launch_worker(&url, &chrome_launch)?;
+        let tracked_pid = if result.pid == 0 {
+            None
+        } else {
+            Some(result.pid)
+        };
+        self.orchestrator
+            .set_tracked_worker_pid(tracked_pid)
+            .await;
         // Persist the PID so a crash before graceful stop can reap this worker on the next
-        // startup, matching the HTTP `/api/runtime/start` path (review HIGH#3). Without this
-        // an IPC-launched worker is invisible to `reap_orphan_worker`.
-        voicesub_browser::record_worker_pid(&self.paths.user_data_dir, result.pid);
+        // startup, matching the HTTP `/api/runtime/start` path.
+        if let Some(pid) = tracked_pid {
+            voicesub_browser::record_worker_pid(&self.paths.user_data_dir, pid);
+        }
         Ok(result)
     }
+}
+
+fn resolve_translation_cache_dir(user_data_dir: &Path) -> PathBuf {
+    let preferred = user_data_dir.join("translation-cache");
+    let preferred_file = preferred.join("translation_cache.json");
+    let legacy_file = user_data_dir.join("cache").join("translation_cache.json");
+    if !preferred_file.exists() && legacy_file.exists() {
+        let _ = fs::create_dir_all(&preferred);
+        let _ = fs::copy(&legacy_file, &preferred_file);
+    }
+    preferred
 }
 
 #[cfg(test)]

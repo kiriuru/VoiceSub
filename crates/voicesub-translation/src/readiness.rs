@@ -1,12 +1,12 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::net::{SocketAddr, TcpStream};
+use std::net::{TcpStream, ToSocketAddrs};
 use std::sync::Arc;
 use std::time::Duration;
 
 use serde_json::{Value, json};
 
 use crate::engine::NormalizedLine;
-use crate::providers::{TranslationProvider, canonical_provider_name};
+use crate::providers::{TranslationProvider, canonical_provider_name, resolve_deepl_api_url};
 
 const CONNECT_PROBE_TIMEOUT: Duration = Duration::from_millis(400);
 
@@ -17,10 +17,40 @@ fn required_fields(provider_name: &str) -> &'static [&'static str] {
         "google_gas_url" => &["gas_url"],
         "azure_translator" => &["api_key", "endpoint"],
         "deepl" => &["api_key"],
+        // api_url has a built-in default; keep optional so readiness matches filled config defaults.
+        "libretranslate" => &[],
+        "baidu_translate" => &["app_id", "secret_key"],
+        "youdao_translate" => &["app_key", "app_secret"],
+        "tencent_tmt" => &["secret_id", "secret_key"],
+        "caiyun_translator" => &["token"],
         "openai" | "openrouter" => &["api_key", "model"],
         "lm_studio" | "ollama" => &["base_url", "model"],
         _ => &[],
     }
+}
+
+fn soft_warnings(
+    provider_name: &str,
+    settings: &HashMap<String, String>,
+) -> Vec<String> {
+    let mut warnings = Vec::new();
+    if provider_name == "azure_translator" {
+        let region = settings.get("region").map(|s| s.trim()).unwrap_or("");
+        if region.is_empty() {
+            warnings.push(
+                "Azure region is empty; multi-service keys usually need a region header.".into(),
+            );
+        }
+    }
+    if provider_name == "libretranslate" {
+        let api_url = settings.get("api_url").map(|s| s.trim()).unwrap_or("");
+        if api_url.contains("libretranslate.com") {
+            warnings.push(
+                "Public libretranslate.com may require an API key or rate-limit anonymous use.".into(),
+            );
+        }
+    }
+    warnings
 }
 
 fn provider_endpoint_summary(
@@ -57,10 +87,23 @@ fn provider_endpoint_summary(
                 .filter(|s| !s.is_empty())
                 .unwrap_or_else(|| "https://api.cognitive.microsofttranslator.com".into()),
         ),
-        "deepl" | "libretranslate" | "public_libretranslate_mirror" => settings
+        "deepl" => {
+            let api_key = settings.get("api_key").map(|s| s.as_str()).unwrap_or("");
+            let api_url = settings.get("api_url").map(|s| s.as_str()).unwrap_or("");
+            Some(resolve_deepl_api_url(api_key, api_url))
+        }
+        "libretranslate" | "public_libretranslate_mirror" => settings
             .get("api_url")
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty()),
+        "baidu_translate" => {
+            Some("https://fanyi-api.baidu.com/api/trans/vip/translate".into())
+        }
+        "youdao_translate" => Some("https://openapi.youdao.com/api".into()),
+        "tencent_tmt" => Some("https://tmt.tencentcloudapi.com".into()),
+        "caiyun_translator" => {
+            Some("https://api.interpreter.caiyunai.com/v1/translator".into())
+        }
         "openai" | "openrouter" | "lm_studio" | "ollama" => settings
             .get("base_url")
             .map(|s| s.trim().to_string())
@@ -85,12 +128,19 @@ fn local_endpoint_reachable(endpoint: &str) -> (bool, Option<String>) {
         .port()
         .unwrap_or(if url.scheme() == "https" { 443 } else { 80 });
     let addr = format!("{host}:{port}");
-    let Ok(socket_addr) = addr.parse::<SocketAddr>() else {
+    let Ok(addrs) = addr.to_socket_addrs() else {
         return (false, Some("endpoint address invalid".into()));
     };
-    match TcpStream::connect_timeout(&socket_addr, CONNECT_PROBE_TIMEOUT) {
-        Ok(_) => (true, None),
-        Err(err) => (false, Some(format!("unreachable: {err}"))),
+    let mut last_error = None;
+    for socket_addr in addrs {
+        match TcpStream::connect_timeout(&socket_addr, CONNECT_PROBE_TIMEOUT) {
+            Ok(_) => return (true, None),
+            Err(err) => last_error = Some(err),
+        }
+    }
+    match last_error {
+        Some(err) => (false, Some(format!("unreachable: {err}"))),
+        None => (false, Some("endpoint address invalid".into())),
     }
 }
 
@@ -151,6 +201,7 @@ pub fn summarize_readiness(
     let mut any_local = false;
     let mut all_ready = true;
     let mut unreachable_local = BTreeMap::new();
+    let mut warnings: Vec<String> = Vec::new();
 
     for line in &enabled_lines {
         let provider_name = canonical_provider_name(&line.provider);
@@ -181,6 +232,11 @@ pub fn summarize_readiness(
             .unwrap_or(false);
         any_experimental |= provider.info().experimental;
         any_local |= provider.info().local_provider;
+        for warning in soft_warnings(&provider_name, &normalized) {
+            if !warnings.contains(&warning) {
+                warnings.push(warning);
+            }
+        }
 
         let missing: Vec<String> = required_fields(&provider_name)
             .iter()
@@ -322,6 +378,7 @@ pub fn summarize_readiness(
             "status": "experimental",
             "summary": "Experimental translation provider configuration is active on one or more lines.",
             "reason": "Experimental providers may fail or change behavior without notice.",
+            "warnings": warnings,
             "missing_fields": [],
             "target_languages": line_target_languages,
             "provider_endpoint": endpoint,
@@ -342,6 +399,7 @@ pub fn summarize_readiness(
     } else {
         format!("Translation provider '{primary_provider}' is configured.")
     };
+    let soft_degraded = !warnings.is_empty();
 
     json!({
         "enabled": true,
@@ -351,10 +409,11 @@ pub fn summarize_readiness(
         "local_provider": any_local,
         "configured": true,
         "ready": all_ready,
-        "degraded": false,
-        "status": "ready",
+        "degraded": soft_degraded,
+        "status": if soft_degraded { "ready_with_warnings" } else { "ready" },
         "summary": summary,
-        "reason": null,
+        "reason": warnings.first().cloned(),
+        "warnings": warnings,
         "missing_fields": [],
         "target_languages": line_target_languages,
         "provider_endpoint": endpoint,
@@ -365,4 +424,22 @@ pub fn summarize_readiness(
         "line_target_languages": line_target_languages,
         "line_missing_fields": {},
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn local_endpoint_accepts_hostname_and_ip() {
+        let (_ok, hostname_reason) = local_endpoint_reachable("http://localhost:1");
+        assert_ne!(
+            hostname_reason.as_deref(),
+            Some("endpoint address invalid"),
+            "hostname should resolve via DNS, not SocketAddr parse"
+        );
+
+        let (_ok, ip_reason) = local_endpoint_reachable("http://127.0.0.1:1");
+        assert_ne!(ip_reason.as_deref(), Some("endpoint address invalid"));
+    }
 }

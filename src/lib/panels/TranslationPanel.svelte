@@ -1,8 +1,8 @@
 <script lang="ts">
 
   import { locale, t } from "../i18n";
-  import { listRecommendedOpenAiModels } from "../api";
-  import { LANGUAGES, PROVIDERS } from "../constants";
+  import { listOpenAiCompatibleModels, openExternalUrl } from "../api";
+  import { LANGUAGES, OPENAI_RECOMMENDED_CHAT_MODELS, PROVIDERS } from "../constants";
   import ProviderSelect from "../components/ProviderSelect.svelte";
   import {
     ensureLine,
@@ -16,8 +16,11 @@
     getProviderFieldPlaceholder,
     getProviderHintKey,
     getProviderSetting,
+    getProviderSetupUrl,
     getSlotDisplayLabel,
     getSlotNumber,
+    isCustomPromptOverrideEnabled,
+    isLlmProvider,
     isTranslationLineEnabled,
     nextAvailableSlot,
     normalizeDisplayOrder,
@@ -36,8 +39,9 @@
   let settingsProvider = "";
   let newTargetLang = "en";
   let apiKeyVisible = false;
-  let openAiModels: string[] = [];
-  let openAiModelsLoading = false;
+  let compatibleModels: string[] = [];
+  let recommendedModels: string[] = [...OPENAI_RECOMMENDED_CHAT_MODELS];
+  let modelsLoading = false;
   let modelShowAll = false;
   let modelStatus = "";
   let lineValidationMessage = "";
@@ -59,6 +63,8 @@
   $: providerSettings = (translation.provider_settings?.[editingProvider] || {}) as Record<string, unknown>;
   $: cache = (translation.cache || {}) as Record<string, unknown>;
   $: providerHint = tr(getProviderHintKey(editingProvider));
+  $: providerSetupUrl = getProviderSetupUrl(editingProvider);
+  $: promptOverrideEnabled = isCustomPromptOverrideEnabled(providerSettings);
   $: enabledProviders = getEnabledProviderNames(config, defaultProvider);
   $: enabledProviderLabels = enabledProviders
     .map((name) => PROVIDERS[name]?.label || name)
@@ -79,11 +85,16 @@
       : "",
   ].filter(Boolean);
   $: providerStatusText = providerStatusParts.join(" ");
-  $: visibleOpenAiModels = modelShowAll
-    ? openAiModels
-    : openAiModels.filter((id) =>
-        ["gpt-4o-mini", "gpt-4.1-mini", "gpt-4.1-nano", "gpt-4o", "gpt-4.1"].includes(id),
-      );
+  $: visibleCompatibleModels = (() => {
+    if (modelShowAll || editingProvider !== "openai") {
+      return compatibleModels;
+    }
+    const set = new Set(compatibleModels);
+    const curated = recommendedModels.filter((id) => set.has(id));
+    return curated.length > 0 ? curated : compatibleModels;
+  })();
+  $: supportsModelPicker = editingProvider === "openai" || editingProvider === "lm_studio";
+  $: editingProvider, ((compatibleModels = []), (modelStatus = ""), (modelShowAll = false));
   function emit(next: ConfigPayload) {
     onChange(next);
   }
@@ -201,7 +212,7 @@
     emit(draft);
   }
 
-  function selectLine(slotId: string, event: MouseEvent) {
+  function selectLine(slotId: string, event: MouseEvent | KeyboardEvent) {
     const target = event.target;
     if (target instanceof Element && target.closest("select, input, textarea, button, label, a")) {
       return;
@@ -231,25 +242,56 @@
     apiKeyVisible = !apiKeyVisible;
   }
 
-  async function loadOpenAiModels() {
-    if (editingProvider !== "openai") return;
-    modelStatus = tr("translation.models.loading_recommended");
-    openAiModelsLoading = true;
+  async function loadCompatibleModels(options?: { showAll?: boolean }) {
+    if (!supportsModelPicker) return;
+    const showAll = options?.showAll ?? true;
+    modelStatus = tr("translation.models.loading");
+    modelsLoading = true;
     try {
-      const data = await listRecommendedOpenAiModels();
-      openAiModels = Array.isArray(data.models) ? data.models.map((item) => String(item)) : [];
-      modelStatus = tr("translation.models.list_loaded", { count: openAiModels.length });
+      const data = await listOpenAiCompatibleModels({
+        apiKey: getProviderSetting(editingProvider, providerSettings, "api_key"),
+        baseUrl: getProviderSetting(editingProvider, providerSettings, "base_url"),
+        showAll,
+      });
+      if (data.ok === false || data.error) {
+        compatibleModels = [];
+        modelStatus = tr("translation.models.error", {
+          message: data.error || "unknown error",
+        });
+        return;
+      }
+      compatibleModels = Array.isArray(data.models)
+        ? data.models.map((item) => String(item)).filter(Boolean)
+        : [];
+      if (Array.isArray(data.recommended_models) && data.recommended_models.length > 0) {
+        recommendedModels = data.recommended_models.map((item) => String(item));
+      }
+      modelStatus = tr("translation.models.list_loaded", { count: compatibleModels.length });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       modelStatus = tr("translation.models.error", { message });
     } finally {
-      openAiModelsLoading = false;
+      modelsLoading = false;
     }
   }
 
-  function pickOpenAiModel(modelId: string) {
+  function pickCompatibleModel(modelId: string) {
     if (!modelId) return;
     updateProviderSetting("model", modelId);
+  }
+
+  function setPromptOverride(enabled: boolean) {
+    updateProviderSetting("override_prompt", enabled ? "true" : "false");
+  }
+
+  async function openProviderSetup() {
+    if (!providerSetupUrl) return;
+    try {
+      await openExternalUrl(providerSetupUrl);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      modelStatus = tr("translation.models.error", { message });
+    }
   }
 
 </script>
@@ -360,7 +402,10 @@
               tabindex="0"
               on:click={(e) => selectLine(slotId, e)}
               on:keydown={(e) => {
-                if (e.key === "Enter" || e.key === " ") selectLine(slotId, e as unknown as MouseEvent);
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  selectLine(slotId, e);
+                }
               }}
             >
               <div class="translation-line-head">
@@ -484,20 +529,49 @@
       <div class="translation-provider-settings-heading">
         <h3>{tr("translation.provider_settings.for", { provider: providerMeta?.label || editingProvider })}</h3>
         <p class="muted translation-provider-meta-hint">{providerHint}</p>
+        {#if providerSetupUrl}
+          <button type="button" class="btn btn-ghost translation-provider-setup" on:click={openProviderSetup}>
+            {tr("translation.provider.setup_link")}
+          </button>
+        {/if}
       </div>
       {#each providerMeta.fields as field}
         {#if field === "custom_prompt"}
-
-          <label class="stack-field translation-provider-field">
-            <span>{fieldLabel(field)}</span>
-            <textarea
-              class="control translation-prompt"
-              rows="4"
-              placeholder={tr("translation.custom_prompt")}
-              value={getProviderSetting(editingProvider, providerSettings, field)}
-              on:input={(e) => updateProviderSetting(field, (e.currentTarget as HTMLTextAreaElement).value)}
-            ></textarea>
-          </label>
+          {#if isLlmProvider(editingProvider)}
+            <label class="checkbox-row">
+              <input
+                type="checkbox"
+                checked={promptOverrideEnabled}
+                on:change={(e) => setPromptOverride((e.currentTarget as HTMLInputElement).checked)}
+              />
+              <span>{tr("translation.custom_prompt.override")}</span>
+            </label>
+            {#if promptOverrideEnabled}
+              <label class="stack-field translation-provider-field">
+                <span>{fieldLabel(field)}</span>
+                <textarea
+                  class="control translation-prompt"
+                  rows="4"
+                  placeholder={tr("translation.custom_prompt")}
+                  value={getProviderSetting(editingProvider, providerSettings, field)}
+                  on:input={(e) =>
+                    updateProviderSetting(field, (e.currentTarget as HTMLTextAreaElement).value)}
+                ></textarea>
+              </label>
+            {/if}
+          {:else}
+            <label class="stack-field translation-provider-field">
+              <span>{fieldLabel(field)}</span>
+              <textarea
+                class="control translation-prompt"
+                rows="4"
+                placeholder={tr("translation.custom_prompt")}
+                value={getProviderSetting(editingProvider, providerSettings, field)}
+                on:input={(e) =>
+                  updateProviderSetting(field, (e.currentTarget as HTMLTextAreaElement).value)}
+              ></textarea>
+            </label>
+          {/if}
         {:else if field === "api_key"}
 
           <div class="translation-secret-row">
@@ -518,7 +592,7 @@
             </button>
 
           </div>
-        {:else if field === "model" && editingProvider === "openai"}
+        {:else if field === "model" && supportsModelPicker}
 
           <div class="translation-model-row">
             <label class="stack-field translation-provider-field grow">
@@ -535,15 +609,16 @@
             <button
               type="button"
               class="btn btn-ghost"
-              disabled={openAiModelsLoading}
-              on:click={loadOpenAiModels}
+              disabled={modelsLoading}
+              on:click={() => loadCompatibleModels({ showAll: true })}
             >
-              {tr("translation.model.load_recommended")}
-
+              {editingProvider === "lm_studio"
+                ? tr("translation.lm_studio.test_connection")
+                : tr("translation.model.show_models")}
             </button>
 
           </div>
-          {#if openAiModels.length}
+          {#if compatibleModels.length}
 
             <div class="translation-model-picker">
               <label class="stack-field translation-provider-field grow">
@@ -551,9 +626,10 @@
                 <select
                   class="control"
                   value={getProviderSetting(editingProvider, providerSettings, "model")}
-                  on:change={(e) => pickOpenAiModel((e.currentTarget as HTMLSelectElement).value)}
+                  on:change={(e) =>
+                    pickCompatibleModel((e.currentTarget as HTMLSelectElement).value)}
                 >
-                  {#each visibleOpenAiModels as modelId}
+                  {#each visibleCompatibleModels as modelId}
 
                     <option value={modelId}>{modelId}</option>
                   {/each}
@@ -562,10 +638,12 @@
 
               </label>
 
-              <label class="checkbox-row">
-                <input type="checkbox" bind:checked={modelShowAll} />
-                <span>{tr("translation.model.show_all")}</span>
-              </label>
+              {#if editingProvider === "openai"}
+                <label class="checkbox-row">
+                  <input type="checkbox" bind:checked={modelShowAll} />
+                  <span>{tr("translation.model.show_all")}</span>
+                </label>
+              {/if}
 
             </div>
           {/if}
@@ -669,6 +747,10 @@
     margin: 6px 0 0;
     font-size: 12px;
     line-height: 1.45;
+  }
+  .translation-provider-setup {
+    margin-top: 8px;
+    align-self: start;
   }
   .translation-provider-warning {
     margin: 0;

@@ -48,7 +48,6 @@
     TTS_TEST_LANG_CODES,
   } from "./lib/tts-lang";
   import {
-    applyDashboardUiPresentation,
     applyUiThemeFromConfig,
     buildSpeechContextFromConfig,
     fetchSettingsPayload,
@@ -284,11 +283,15 @@
     runtimeEventsConnecting = true;
     let unlisten: (() => void) | null = null;
     try {
-      unlisten = await startRuntimeEventChannelWithHandler(handleRuntimeEvent, () => {
-        if (connectGen === runtimeEventsConnectGen) {
-          eventsStatus = "connected";
-        }
-      });
+      unlisten = await startRuntimeEventChannelWithHandler(
+        handleRuntimeEvent,
+        () => {
+          if (connectGen === runtimeEventsConnectGen) {
+            eventsStatus = "connected";
+          }
+        },
+        { snapshotMode: "tts" },
+      );
     } finally {
       if (connectGen === runtimeEventsConnectGen) {
         runtimeEventsConnecting = false;
@@ -355,7 +358,9 @@
   }
 
   function applyDashboardUiSync(partial: ConfigPayload) {
-    applyDashboardUiPresentation(partial);
+    // Theme/font via shared helper; locale via applyDashboardLocale (idempotent + sample text).
+    applyUiThemeFromConfig(partial);
+    applyUiLocaleFromConfig(partial);
   }
 
   async function refreshSpeechContext() {
@@ -570,12 +575,25 @@
         playbackFinishedUnlisten = null;
       }
       runtimeTimer = setInterval(() => {
-        void refreshRuntime();
+        // HTTP runtime poll only when the IPC channel is down; runtime_update covers the live path.
+        if (eventsStatus !== "connected") {
+          void refreshRuntime();
+        }
         reconnectRuntimeEventsIfNeeded();
       }, 3000);
       refreshKeepaliveContext();
       resourceTelemetryTimer = setInterval(() => void refreshResourceTelemetry(), 30_000);
-      speechContextTimer = setInterval(() => void refreshSpeechContext(), 5000);
+      // Focus handler refreshes immediately; while IPC is healthy poll every 15s (3×5s ticks).
+      let speechContextTicks = 0;
+      speechContextTimer = setInterval(() => {
+        speechContextTicks += 1;
+        if (eventsStatus === "connected" && speechContextTicks % 3 !== 0) {
+          return;
+        }
+        void refreshSpeechContext();
+      }, 5000);
+      // IPC already delivers ui_config_sync to this window; skip /ws/events so
+      // overlay/runtime frames do not flood the TTS webview (same as Local ASR).
       unsubscribeUiSync = subscribeUiConfigSync(
         (partial) => {
           applyDashboardUiSync(partial);
@@ -938,7 +956,11 @@
       </div>
 
       <div class="tts-status-badges">
-        <span class="badge" class:active={eventsStatus === "connected"}>{tr("tts.badge.events")}: {eventsStatus}</span>
+        <span class="badge" class:active={eventsStatus === "connected"}
+          >{tr("tts.badge.events")}: {eventsStatus === "connected"
+            ? tr("common.connected")
+            : tr("common.disconnected")}</span
+        >
         <span class="badge" class:active={isRuntimeActive(runtime)}>
           {tr("tts.badge.runtime")}: {isRuntimeActive(runtime) ? tr("tts.badge.runtime_active") : tr("tts.badge.runtime_idle")}
         </span>

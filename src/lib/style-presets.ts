@@ -1,4 +1,5 @@
 import type { StylePresetCatalog } from "./types";
+import { STYLE_BASE_DEFAULTS } from "./style-field-utils";
 
 export function normalizePresetKey(name: string): string {
   return name.trim().replace(/\s+/g, "_").toLowerCase();
@@ -27,8 +28,10 @@ export function applyStylePreset(
   const preset = catalog[presetKey];
   if (!preset || typeof preset !== "object") return style;
 
+  // Start from defaults + preset base (not the previous base) so switching
+  // presets cannot leave stale metrics (letter-spacing, stroke, opacity, …).
   const base = {
-    ...(typeof style.base === "object" && style.base ? style.base : {}),
+    ...STYLE_BASE_DEFAULTS,
     ...(typeof preset.base === "object" && preset.base ? (preset.base as Record<string, unknown>) : {}),
   };
 
@@ -43,8 +46,8 @@ export function applyStylePreset(
     preset: presetKey,
     base,
     line_slots: lineSlots,
-    source: { ...(style.source || {}), ...base },
-    translation_1: { ...(style.translation_1 || style.translation || {}), ...base },
+    source: { ...base },
+    translation_1: { ...base },
   } as unknown as Record<string, Record<string, unknown>>;
 }
 
@@ -195,7 +198,10 @@ export function applyPresetToLineSlot(
   const current = { ...(lineSlots[slotName] || {}) };
   const next: Record<string, unknown> = { ...current, enabled: true };
   Object.entries(sourceBase).forEach(([key, value]) => {
-    next[key] = value === null || value === undefined ? null : String(value);
+    // Keep numbers/booleans as typed values. Stringifying broke stroke_width_px
+    // (and other metrics) — Rust clamp ignored numeric strings and fell back
+    // to defaults (e.g. "0" → 2).
+    next[key] = value === null || value === undefined ? null : value;
   });
   lineSlots[slotName] = next as Record<string, unknown>;
   return { ...style, line_slots: lineSlots };

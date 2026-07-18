@@ -2,9 +2,11 @@ fn main() {
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
         tauri_build::AppManifest::new().commands(&[
             "voicesub_version",
+            "get_loopback_api_token",
             "launch_browser_worker",
             "get_runtime_state_snapshot",
             "set_dashboard_layout",
+            "tts_report_webview_activity",
             "tts_get_config",
             "tts_set_provider",
             "tts_set_enabled",

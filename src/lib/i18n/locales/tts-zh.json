@@ -169,5 +169,7 @@
   "tts.twitch.irc": "IRC",
   "tts.twitch.chat_empty": "尚无聊天消息。",
   "tts.twitch.clean": "通过",
-  "tts.twitch.filtered": "已过滤"
+  "tts.twitch.filtered": "已过滤",
+  "tts.oauth.popup_blocked": "无法打开浏览器 — 请允许弹出窗口或重启 VoiceSub。",
+  "tts.oauth.client_id_required": "需要 Twitch Client ID"
 }

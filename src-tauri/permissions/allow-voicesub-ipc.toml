@@ -3,6 +3,7 @@ identifier = "allow-voicesub-ipc"
 description = "VoiceSub shell and TTS module IPC (localhost webviews)."
 commands.allow = [
   "voicesub_version",
+  "get_loopback_api_token",
   "launch_browser_worker",
   "get_runtime_state_snapshot",
   "set_dashboard_layout",

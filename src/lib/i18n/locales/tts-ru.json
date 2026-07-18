@@ -169,5 +169,7 @@
   "tts.twitch.irc": "IRC",
   "tts.twitch.chat_empty": "Сообщений чата пока нет.",
   "tts.twitch.clean": "чистый",
-  "tts.twitch.filtered": "отфильтровано"
+  "tts.twitch.filtered": "отфильтровано",
+  "tts.oauth.popup_blocked": "Не удалось открыть браузер — разрешите всплывающие окна или перезапустите VoiceSub.",
+  "tts.oauth.client_id_required": "Требуется Twitch Client ID"
 }

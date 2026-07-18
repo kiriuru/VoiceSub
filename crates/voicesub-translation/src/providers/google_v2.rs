@@ -105,6 +105,7 @@ impl TranslationProvider for GoogleTranslateV2Provider {
             .transport
             .client()
             .post("https://translation.googleapis.com/language/translate/v2")
+            .timeout(super::http::effective_request_timeout(request.timeout_secs))
             .query(&[("key", api_key.as_str())])
             .form(&form)
             .send()
@@ -113,8 +114,9 @@ impl TranslationProvider for GoogleTranslateV2Provider {
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
+            let detail = super::http::truncate_error_body(&body, 280);
             return Err(ProviderError::Message(format!(
-                "Google Translate v2 HTTP {status}: {body}"
+                "Google Translate v2 HTTP {status}: {detail}"
             )));
         }
 

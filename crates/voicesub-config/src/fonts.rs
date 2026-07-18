@@ -70,6 +70,40 @@ fn font_extension_format(ext: &str) -> Option<&'static str> {
     }
 }
 
+/// Latin + common punctuation. Applied to shipped faces that have no Cyrillic
+/// cmap so the browser skips them for Russian text and uses the next family
+/// in the preset stack (Ubuntu Mono / PT Mono / Noto / Comfortaa / …).
+const UNICODE_RANGE_LATIN: &str = "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD";
+
+/// Latin + Japanese — for Mochiy Pop One (JP primary, Cyrillic via Comfortaa).
+const UNICODE_RANGE_LATIN_JP: &str = "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+3040-30FF, U+31F0-31FF, U+3400-4DBF, U+4E00-9FFF, U+F900-FAFF, U+FF00-FFEF, U+FEFF, U+FFFD";
+
+/// Shipped `bin/fonts` files without a Cyrillic cmap (verified offline).
+fn unicode_range_for_font_filename(filename: &str) -> Option<&'static str> {
+    let stem = filename
+        .rsplit_once('.')
+        .map(|(stem, _)| stem)
+        .unwrap_or(filename);
+    match stem {
+        "Bangers-Regular"
+        | "BebasNeue-Regular"
+        | "CutiveMono-Regular"
+        | "Lato-Bold"
+        | "Lato-Regular"
+        | "Orbitron-Black"
+        | "Orbitron-Regular"
+        | "Oswald-Bold"
+        | "Oswald-Regular"
+        | "Poppins-Bold"
+        | "Poppins-Regular"
+        | "ShareTechMono-Regular"
+        | "SpecialElite-Regular"
+        | "VT323-Regular" => Some(UNICODE_RANGE_LATIN),
+        "MochiyPopOne-Regular" => Some(UNICODE_RANGE_LATIN_JP),
+        _ => None,
+    }
+}
+
 /// Returns one catalog entry per project-local font file.
 pub fn list_project_font_entries(project_fonts_dir: &Path) -> Vec<Value> {
     let _ = std::fs::create_dir_all(project_fonts_dir);
@@ -207,10 +241,17 @@ pub fn build_project_fonts_stylesheet(project_fonts_dir: &Path) -> String {
             .get("format")
             .and_then(|v| v.as_str())
             .unwrap_or_default();
+        let filename = entry
+            .get("filename")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default();
         let family = label.replace('"', "\\\"");
+        let unicode_range = unicode_range_for_font_filename(filename)
+            .map(|range| format!("\n  unicode-range: {range};"))
+            .unwrap_or_default();
 
         rules.push(format!(
-            "@font-face {{\n  font-family: \"{family}\";\n  src: url(\"{url}\") format(\"{format}\");\n  font-display: swap;\n}}"
+            "@font-face {{\n  font-family: \"{family}\";\n  src: url(\"{url}\") format(\"{format}\");\n  font-display: swap;{unicode_range}\n}}"
         ));
     }
 
@@ -227,6 +268,95 @@ mod tests {
         let _ = std::fs::create_dir_all(&dir);
         let css = build_project_fonts_stylesheet(&dir);
         assert!(css.contains("No project-local fonts"));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn latin_only_faces_get_unicode_range_so_cyrillic_falls_through() {
+        let dir = std::env::temp_dir().join(format!(
+            "voicesub-fonts-range-test-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::create_dir_all(&dir);
+        // Minimal valid-enough TTF is not required — stylesheet only needs the filename.
+        let font_path = dir.join("VT323-Regular.ttf");
+        std::fs::write(&font_path, b"unused").unwrap();
+        let cyr_path = dir.join("UbuntuMono-Regular.ttf");
+        std::fs::write(&cyr_path, b"unused").unwrap();
+
+        let css = build_project_fonts_stylesheet(&dir);
+        assert!(
+            css.contains("font-family: \"VT323 Regular\""),
+            "expected VT323 face in {css}"
+        );
+        assert!(
+            css.contains("unicode-range:"),
+            "VT323 must declare unicode-range so Cyrillic uses Ubuntu/PT Mono"
+        );
+        // Cyrillic-capable Ubuntu Mono must NOT be range-limited.
+        let ubuntu_idx = css.find("font-family: \"Ubuntu Mono Regular\"").unwrap();
+        let ubuntu_block_end = css[ubuntu_idx..]
+            .find('}')
+            .map(|i| ubuntu_idx + i)
+            .unwrap();
+        let ubuntu_block = &css[ubuntu_idx..ubuntu_block_end];
+        assert!(
+            !ubuntu_block.contains("unicode-range"),
+            "Ubuntu Mono must stay unrestricted for Cyrillic: {ubuntu_block}"
+        );
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn jetbrains_family_name_keeps_brand_split_from_filename() {
+        let dir = std::env::temp_dir().join(format!(
+            "voicesub-fonts-jb-test-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::create_dir_all(&dir);
+        std::fs::write(dir.join("JetBrainsMono-Regular.ttf"), b"x").unwrap();
+        let entries = list_project_font_entries(&dir);
+        assert_eq!(entries[0]["label"], "Jet Brains Mono Regular");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn special_elite_is_latin_only_so_noir_cyrillic_uses_plex_mono() {
+        assert_eq!(
+            unicode_range_for_font_filename("SpecialElite-Regular.ttf"),
+            Some(UNICODE_RANGE_LATIN)
+        );
+        assert_eq!(
+            unicode_range_for_font_filename("IBMPlexMono-Medium.ttf"),
+            None,
+            "IBM Plex Mono must stay unrestricted for Cyrillic in Film Noir"
+        );
+
+        let dir = std::env::temp_dir().join(format!(
+            "voicesub-fonts-noir-test-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::create_dir_all(&dir);
+        std::fs::write(dir.join("SpecialElite-Regular.ttf"), b"x").unwrap();
+        std::fs::write(dir.join("IBMPlexMono-Medium.ttf"), b"x").unwrap();
+        let css = build_project_fonts_stylesheet(&dir);
+        let elite_idx = css
+            .find("font-family: \"Special Elite Regular\"")
+            .expect("Special Elite face");
+        let elite_end = css[elite_idx..].find('}').map(|i| elite_idx + i).unwrap();
+        assert!(
+            css[elite_idx..elite_end].contains("unicode-range:"),
+            "Special Elite must declare unicode-range for dual-script Film Noir"
+        );
+        let plex_idx = css
+            .find("font-family: \"IBM Plex Mono Medium\"")
+            .expect("Plex face");
+        let plex_end = css[plex_idx..].find('}').map(|i| plex_idx + i).unwrap();
+        assert!(
+            !css[plex_idx..plex_end].contains("unicode-range"),
+            "Plex Mono must accept Cyrillic"
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 }

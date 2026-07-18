@@ -1,14 +1,20 @@
 mod azure;
+mod baidu;
+mod caiyun;
+mod crypto_util;
 mod deepl;
 mod experimental_google_web;
 mod google_gas;
 mod google_v2;
 mod google_v3;
 mod http;
+mod lang_codes;
 mod libretranslate;
 mod openai_compatible;
 mod public_mirrors;
 mod stub;
+mod tencent_tmt;
+mod youdao;
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -18,16 +24,23 @@ use serde_json::{Value, json};
 use thiserror::Error;
 
 pub use azure::AzureTranslatorProvider;
-pub use deepl::DeepLProvider;
+pub use baidu::BaiduTranslateProvider;
+pub use caiyun::CaiyunTranslatorProvider;
+pub use deepl::{DeepLProvider, resolve_deepl_api_url};
 pub use experimental_google_web::{FreeWebTranslateProvider, GoogleWebProvider};
 pub use google_gas::GoogleGasUrlProvider;
 pub use google_v2::GoogleTranslateV2Provider;
 pub use google_v3::GoogleCloudTranslationV3Provider;
-pub use http::{SharedHttpClient, build_translation_http_client};
+pub use http::{
+    MAX_HTTP_REQUEST_TIMEOUT_SECONDS, SharedHttpClient, build_translation_http_client,
+    effective_request_timeout,
+};
 pub use libretranslate::LibreTranslateProvider;
 pub use openai_compatible::OpenAICompatibleChatProvider;
 pub use public_mirrors::PublicLibreTranslateMirrorProvider;
 pub use stub::StubTranslationProvider;
+pub use tencent_tmt::TencentTmtProvider;
+pub use youdao::YoudaoTranslateProvider;
 
 pub const SUPPORTED_PROVIDERS: &[&str] = &[
     "google_translate_v2",
@@ -43,6 +56,10 @@ pub const SUPPORTED_PROVIDERS: &[&str] = &[
     "ollama",
     "public_libretranslate_mirror",
     "free_web_translate",
+    "baidu_translate",
+    "youdao_translate",
+    "tencent_tmt",
+    "caiyun_translator",
 ];
 
 #[derive(Debug, Clone, Copy)]
@@ -78,6 +95,10 @@ impl ProviderError {
                     || lower.contains("http 429")
                     || lower.contains("timed out")
                     || lower.contains("network error")
+                    // LM Studio JIT: first attempt may abort while the engine starts.
+                    || lower.contains("model is unloaded")
+                    || lower.contains("channel error")
+                    || lower.contains("startup was aborted")
             }
         }
     }
@@ -189,7 +210,23 @@ pub fn build_default_registry(
     );
     registry.insert(
         "free_web_translate".into(),
-        Arc::new(FreeWebTranslateProvider::new(transport)),
+        Arc::new(FreeWebTranslateProvider::new(transport.clone())),
+    );
+    registry.insert(
+        "baidu_translate".into(),
+        Arc::new(BaiduTranslateProvider::new(transport.clone())),
+    );
+    registry.insert(
+        "youdao_translate".into(),
+        Arc::new(YoudaoTranslateProvider::new(transport.clone())),
+    );
+    registry.insert(
+        "tencent_tmt".into(),
+        Arc::new(TencentTmtProvider::new(transport.clone())),
+    );
+    registry.insert(
+        "caiyun_translator".into(),
+        Arc::new(CaiyunTranslatorProvider::new(transport)),
     );
     registry
 }

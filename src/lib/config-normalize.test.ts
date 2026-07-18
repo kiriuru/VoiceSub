@@ -92,6 +92,18 @@ describe("normalizeConfigPayload SST parity", () => {
     expect(invalid.ui?.language).toBe("");
   });
 
+  it("trims ui.font_family and defaults empty", () => {
+    const trimmed = normalizeConfigPayload({
+      ui: { font_family: '  "Segoe UI", sans-serif  ' },
+    } as ConfigPayload);
+    expect(trimmed.ui?.font_family).toBe('"Segoe UI", sans-serif');
+
+    const missing = normalizeConfigPayload({
+      ui: { language: "en" },
+    } as ConfigPayload);
+    expect(missing.ui?.font_family).toBe("");
+  });
+
   it("clamps invalid obs_closed_captions.output_mode to disabled", () => {
     const out = normalizeConfigPayload({
       obs_closed_captions: { output_mode: "bogus_mode" },

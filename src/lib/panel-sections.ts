@@ -32,3 +32,13 @@ export const OBS_PANEL_SECTIONS: PanelSection[] = [
   { id: "obs-section-captions", labelKey: "nav.obs.section.captions" },
   { id: "obs-section-status", labelKey: "nav.obs.section.status" },
 ];
+
+export const HELP_PANEL_SECTIONS: PanelSection[] = [
+  { id: "help-section-quick-start", labelKey: "help.jump.quick_start" },
+  { id: "help-section-recognition", labelKey: "help.jump.recognition" },
+  { id: "help-section-translation", labelKey: "help.jump.translation" },
+  { id: "help-section-subtitles", labelKey: "help.jump.subtitles" },
+  { id: "help-section-style", labelKey: "help.jump.style" },
+  { id: "help-section-obs", labelKey: "help.jump.obs" },
+  { id: "help-section-tools", labelKey: "help.jump.tools" },
+];

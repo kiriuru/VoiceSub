@@ -44,7 +44,7 @@
       on:click={() => onSelect(item.id)}
     >
       <span class="compact-bottom-tab-icon" aria-hidden="true">
-        <svelte:component this={item.icon} size={22} strokeWidth={1.75} />
+        <svelte:component this={item.icon} size={25} strokeWidth={1.75} />
       </span>
       <span class="compact-bottom-tab-label">{tr(item.labelKey)}</span>
     </button>

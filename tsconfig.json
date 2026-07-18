@@ -9,7 +9,7 @@
     "noUncheckedIndexedAccess": true,
     "types": ["svelte"]
   },
-  "include": ["src/**/*.ts", "src/**/*.svelte", "src-worker/**/*.ts", "src-worker/**/*.svelte", "src-worker/env.d.ts"],
+  "include": ["src/**/*.ts", "src/**/*.svelte", "src/env.d.ts", "src-worker/**/*.ts", "src-worker/**/*.svelte", "src-worker/env.d.ts"],
   "exclude": [
     "src/**/*.test.ts",
     "src-worker/**/*.test.ts",

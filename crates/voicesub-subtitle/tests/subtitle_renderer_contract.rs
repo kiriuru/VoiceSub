@@ -103,12 +103,17 @@ fn renderer_has_shape_signature_fast_path() {
 }
 
 #[test]
-fn fast_path_keeps_single_innerhtml_wipe_statement() {
+fn slow_path_uses_replace_children_for_container_swap() {
     let source = subtitle_style_js();
+    assert_contains(
+        &source,
+        "container.replaceChildren(wrapper)",
+        "slow path should swap via replaceChildren",
+    );
     assert_eq!(
         count_innerhtml_wipe_statements(&source),
-        1,
-        "subtitle-style.js must contain exactly one container.innerHTML wipe statement"
+        0,
+        "subtitle-style.js must not use container.innerHTML wipe after replaceChildren migration"
     );
 }
 

@@ -26,7 +26,7 @@ export const MORE_TAB_IDS: TabId[] = [
   "help",
 ];
 
-/** Subtitles hub sub-screens (display + style). */
+/** Subtitles destination tabs (display + style) switched via top bar. */
 export const SUBTITLES_TAB_IDS: TabId[] = ["subtitles", "style"];
 
 export function isMoreTab(tab: TabId): boolean {

@@ -64,6 +64,7 @@ impl TranslationProvider for GoogleCloudTranslationV3Provider {
             location.as_str()
         };
         let model = http::setting(request.settings, "model");
+        let model = expand_google_v3_model(&model, &project_id, location);
 
         let endpoint = format!(
             "{}/v3/projects/{project_id}/locations/{location}:translateText",
@@ -109,6 +110,7 @@ impl TranslationProvider for GoogleCloudTranslationV3Provider {
             None,
             Some(&header_refs),
             "Google Cloud Translation v3 request failed",
+            request.timeout_secs,
         )
         .await?;
 
@@ -139,7 +141,8 @@ impl TranslationProvider for GoogleCloudTranslationV3Provider {
         } else {
             location
         };
-        let model = http::setting(settings, "model");
+        let model_raw = http::setting(settings, "model");
+        let model = expand_google_v3_model(&model_raw, &project_id, &location);
 
         let endpoint = if project_id.is_empty() {
             String::new()
@@ -173,9 +176,53 @@ impl TranslationProvider for GoogleCloudTranslationV3Provider {
             );
             obj.insert(
                 "status_message".into(),
-                json!("Cloud Translation - Advanced (v3) via REST. Requires OAuth access token; API keys are not supported."),
+                json!("Cloud Translation - Advanced (v3) via REST. Requires OAuth access token; API keys are not supported. Short model ids (e.g. general/nmt) expand to full resource names."),
             );
         }
         diag
+    }
+}
+
+/// Expand short model ids (`general/nmt`) to the full v3 resource name.
+pub fn expand_google_v3_model(model: &str, project_id: &str, location: &str) -> String {
+    let model = model.trim();
+    if model.is_empty() {
+        return String::new();
+    }
+    if model.starts_with("projects/") {
+        return model.to_string();
+    }
+    if project_id.trim().is_empty() {
+        return model.to_string();
+    }
+    let location = if location.trim().is_empty() {
+        "global"
+    } else {
+        location.trim()
+    };
+    format!("projects/{project_id}/locations/{location}/models/{model}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn expands_short_model_ids() {
+        assert_eq!(
+            expand_google_v3_model("general/nmt", "my-proj", "global"),
+            "projects/my-proj/locations/global/models/general/nmt"
+        );
+    }
+
+    #[test]
+    fn keeps_full_resource_names() {
+        let full = "projects/p/locations/us/models/general/nmt";
+        assert_eq!(expand_google_v3_model(full, "other", "global"), full);
+    }
+
+    #[test]
+    fn empty_model_stays_empty() {
+        assert_eq!(expand_google_v3_model("", "p", "global"), "");
     }
 }

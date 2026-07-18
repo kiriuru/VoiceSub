@@ -2,14 +2,18 @@ use std::collections::HashMap;
 
 use async_trait::async_trait;
 use reqwest::Method;
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use std::sync::Arc;
 
 use super::{
     ProviderError, ProviderInfo, TranslateRequest, TranslationProvider, base_diagnostics, http,
-    http::SharedHttpClient, normalize_source_lang,
+    http::SharedHttpClient,
+    lang_codes::{deepl_source_lang, deepl_target_lang},
 };
+
+pub const DEEPL_FREE_API_URL: &str = "https://api-free.deepl.com/v2/translate";
+pub const DEEPL_PRO_API_URL: &str = "https://api.deepl.com/v2/translate";
 
 pub struct DeepLProvider {
     transport: Arc<SharedHttpClient>,
@@ -19,6 +23,24 @@ impl DeepLProvider {
     pub fn new(transport: Arc<SharedHttpClient>) -> Self {
         Self { transport }
     }
+}
+
+/// Free DeepL keys end with `:fx`. Treat empty / stock free|pro URLs as auto-select.
+pub fn resolve_deepl_api_url(api_key: &str, configured_api_url: &str) -> String {
+    let free_key = api_key.contains(":fx");
+    let auto = if free_key {
+        DEEPL_FREE_API_URL
+    } else {
+        DEEPL_PRO_API_URL
+    };
+    let configured = configured_api_url.trim();
+    if configured.is_empty()
+        || configured.eq_ignore_ascii_case(DEEPL_FREE_API_URL)
+        || configured.eq_ignore_ascii_case(DEEPL_PRO_API_URL)
+    {
+        return auto.to_string();
+    }
+    configured.to_string()
 }
 
 #[async_trait]
@@ -39,19 +61,10 @@ impl TranslationProvider for DeepLProvider {
         }
 
         let configured_api_url = http::setting(request.settings, "api_url");
-        let api_url = if configured_api_url.is_empty() {
-            "https://api-free.deepl.com/v2/translate".to_string()
-        } else {
-            configured_api_url
-        };
+        let api_url = resolve_deepl_api_url(&api_key, &configured_api_url);
 
-        let target_lang = request.target_lang.to_ascii_uppercase();
-        let source = normalize_source_lang(request.source_lang);
-        let upper_source = if source != "auto" {
-            Some(source.to_ascii_uppercase())
-        } else {
-            None
-        };
+        let target_lang = deepl_target_lang(request.target_lang);
+        let upper_source = deepl_source_lang(request.source_lang);
         let mut form: Vec<(&str, &str)> = vec![
             ("auth_key", api_key.as_str()),
             ("text", request.text),
@@ -70,6 +83,7 @@ impl TranslationProvider for DeepLProvider {
             Some(&form),
             None,
             "DeepL request failed",
+            request.timeout_secs,
         )
         .await?;
 
@@ -92,6 +106,70 @@ impl TranslationProvider for DeepLProvider {
     }
 
     fn diagnostics(&self, settings: &HashMap<String, String>) -> Value {
-        base_diagnostics(&self.info(), settings)
+        let api_key = http::setting(settings, "api_key");
+        let configured = http::setting(settings, "api_url");
+        let resolved = if api_key.is_empty() {
+            if configured.trim().is_empty() {
+                DEEPL_FREE_API_URL.to_string()
+            } else {
+                configured
+            }
+        } else {
+            resolve_deepl_api_url(&api_key, &configured)
+        };
+        let mut diag = base_diagnostics(&self.info(), settings);
+        if let Some(obj) = diag.as_object_mut() {
+            obj.insert("endpoint_used".into(), json!(resolved));
+            obj.insert(
+                "deepl_api_tier".into(),
+                json!(if api_key.contains(":fx") {
+                    "free"
+                } else if api_key.is_empty() {
+                    "unknown"
+                } else {
+                    "pro"
+                }),
+            );
+            obj.insert(
+                "status_message".into(),
+                json!(
+                    "DeepL maps UI codes (en/zh-cn/pt) to API targets; Free vs Pro URL is chosen from the API key (:fx → free) unless a custom api_url is set."
+                ),
+            );
+        }
+        diag
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn free_key_selects_free_url() {
+        assert_eq!(
+            resolve_deepl_api_url("abc:fx", ""),
+            DEEPL_FREE_API_URL
+        );
+        assert_eq!(
+            resolve_deepl_api_url("abc:fx", DEEPL_PRO_API_URL),
+            DEEPL_FREE_API_URL
+        );
+    }
+
+    #[test]
+    fn pro_key_selects_pro_url_even_when_default_free_configured() {
+        assert_eq!(
+            resolve_deepl_api_url("pro-key-without-fx", DEEPL_FREE_API_URL),
+            DEEPL_PRO_API_URL
+        );
+    }
+
+    #[test]
+    fn custom_url_is_preserved() {
+        assert_eq!(
+            resolve_deepl_api_url("pro-key", "https://proxy.example/translate"),
+            "https://proxy.example/translate"
+        );
     }
 }

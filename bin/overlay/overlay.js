@@ -51,16 +51,35 @@
   };
 
   const runtimeGoneClearDelayMs = 900;
-  const staleGuard = window.SstWsStaleGuard?.createWsStaleGuardState?.() || {
+  // Module script for SstWsStaleGuard is deferred; classic overlay.js runs first.
+  // Resolve lazily so the guard activates once the module finishes loading.
+  let staleGuard = {
     sequenceByType: new Map(),
     timestampByType: new Map(),
   };
-  const normalizeWsEventType = window.SstWsStaleGuard?.normalizeWsEventType || ((type) => String(type || "").trim().toLowerCase());
-  const isWsEventStale = window.SstWsStaleGuard?.isWsEventStale || (() => false);
+  let normalizeWsEventType = (type) => String(type || "").trim().toLowerCase();
+  let isWsEventStale = () => false;
+  let staleGuardBound = false;
+
+  function ensureStaleGuard() {
+    if (staleGuardBound) return;
+    const api = window.SstWsStaleGuard;
+    if (!api?.createWsStaleGuardState) return;
+    staleGuard = api.createWsStaleGuardState();
+    if (typeof api.normalizeWsEventType === "function") {
+      normalizeWsEventType = api.normalizeWsEventType;
+    }
+    if (typeof api.isWsEventStale === "function") {
+      isWsEventStale = api.isWsEventStale;
+    }
+    staleGuardBound = true;
+  }
+
   let connectionId = 0;
   let reconnectBackoffMs = 1000;
   const maxReconnectBackoffMs = 10000;
   let reconnectTimer = null;
+  let runtimeGoneClearTimer = null;
   let pendingOverlayPayload = null;
   let overlayRenderRafId = 0;
   let overlayRenderTimerId = 0;
@@ -300,7 +319,12 @@
   }
 
   function scheduleRuntimeGoneClear(currentConnectionId) {
-    window.setTimeout(() => {
+    if (runtimeGoneClearTimer !== null) {
+      window.clearTimeout(runtimeGoneClearTimer);
+      runtimeGoneClearTimer = null;
+    }
+    runtimeGoneClearTimer = window.setTimeout(() => {
+      runtimeGoneClearTimer = null;
       if (currentConnectionId !== connectionId) {
         return;
       }
@@ -314,9 +338,16 @@
   }
 
   function buildPresentationPayload() {
+    // Preserve backend slot identity (style_slot / slot_id / lang). Stripping
+    // to kind+text made inferStyleSlot reindex by arrival order, so a lone
+    // translation_2 row wrongly picked up translation_1 line overrides.
     const completedItems = overlayState.completedItems.map((item) => ({
       kind: item.kind || "source",
       text: item.text || "",
+      style_slot: item.style_slot || "",
+      lang: item.lang || "",
+      slot_id: item.slot_id || "",
+      target_lang: item.target_lang || "",
     }));
     return {
       preset: overlayState.preset,
@@ -463,7 +494,12 @@
         }
         return;
       }
+      if (runtimeGoneClearTimer !== null) {
+        window.clearTimeout(runtimeGoneClearTimer);
+        runtimeGoneClearTimer = null;
+      }
       reconnectBackoffMs = 1000;
+      ensureStaleGuard();
       writeDebug(
         "ws connected",
         `preset=${overlayState.preset}, compact=${overlayState.compact ? "on" : "off"}, debug=${debugMode ? "on" : "off"}`
@@ -475,6 +511,7 @@
         return;
       }
       try {
+        ensureStaleGuard();
         const data = JSON.parse(event.data);
         const eventType = normalizeWsEventType(data.type);
         if (eventType === "overlay_update" && data.payload) {

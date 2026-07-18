@@ -46,7 +46,7 @@
     if (e.target === dialogEl) close();
   }}
 >
-  <div class="runtime-details-sheet__panel surface-card">
+  <div class="runtime-details-sheet__panel">
     <header class="runtime-details-sheet__header">
       <h2 id="runtime-details-title">{tr("runtime.details.title")}</h2>
       <button type="button" class="top-app-bar__icon-btn" aria-label={tr("common.close")} on:click={close}>
@@ -90,21 +90,23 @@
 
 <style>
   .runtime-details-sheet {
-    border: 0;
-    padding: 0;
-    background: transparent;
     max-width: min(520px, calc(100vw - 32px));
     width: 100%;
-  }
-
-  .runtime-details-sheet::backdrop {
-    background: rgba(4, 8, 16, 0.55);
-    backdrop-filter: blur(4px);
+    color: var(--text-primary);
   }
 
   .runtime-details-sheet__panel {
     padding: var(--space-5);
     margin: 0;
+    border: 1px solid var(--glass-border-strong, var(--glass-border));
+    border-radius: var(--radius-lg);
+    background: color-mix(in srgb, var(--bg-app, #080a12) 88%, #1c1e2a);
+    color: var(--text-primary);
+    box-shadow: var(--glass-shadow, 0 8px 32px rgba(0, 0, 0, 0.35));
+  }
+
+  :global(html[data-ui-theme="light"]) .runtime-details-sheet__panel {
+    background: color-mix(in srgb, #ffffff 92%, var(--bg-app, #f6f8fc));
   }
 
   .runtime-details-sheet__header {
@@ -119,9 +121,14 @@
     margin: 0;
     font-size: 20px;
     font-weight: 500;
+    color: var(--text-primary);
   }
 
   .runtime-details-sheet__body {
     gap: var(--space-4);
+  }
+
+  .runtime-details-sheet__body :global(.eyebrow) {
+    color: color-mix(in srgb, var(--text-primary) 72%, var(--text-secondary));
   }
 </style>

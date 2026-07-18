@@ -21,7 +21,6 @@
       ...config,
       asr: {
         ...(config.asr || {}),
-        mode: "browser_google",
         browser: { ...browser, ...partial },
       },
     });
@@ -32,7 +31,6 @@
       ...config,
       asr: {
         ...(config.asr || {}),
-        mode: "browser_google",
         realtime: { ...realtime, ...partial },
       },
     });

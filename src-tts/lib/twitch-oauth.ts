@@ -42,7 +42,7 @@ export function twitchOAuthRedirectUri(): string {
 export function buildTwitchAuthorizeUrl(clientId: string): string {
   const id = clientId.trim();
   if (!id) {
-    throw new Error("Twitch Client ID is required");
+    throw new Error("tts.oauth.client_id_required");
   }
   const params = new URLSearchParams({
     client_id: id,

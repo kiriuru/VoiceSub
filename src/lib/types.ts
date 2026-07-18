@@ -81,6 +81,7 @@ export interface ConfigPayload {
     language?: string;
     layout?: string;
     theme?: string;
+    font_family?: string;
     show_translation_results?: boolean;
     palette?: Record<string, string>;
   };

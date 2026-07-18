@@ -53,6 +53,7 @@ impl TranslationProvider for GoogleGasUrlProvider {
             None,
             None,
             "Google GAS URL request failed",
+            request.timeout_secs,
         )
         .await?;
 

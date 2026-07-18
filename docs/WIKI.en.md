@@ -259,10 +259,10 @@ Technical architecture: `docs/TECHNICAL_ARCHITECTURE.en.md`. SST `0.4.4` is a fr
 
 ## 10. Word replacement
 
-- Find/replace rules **before** translation and output.
-- Built-in profanity lists (en, ru, ja, ko, zh).
-- Case-insensitive / whole words only.
-- TTS sync via `tts_sync_source_text_replacement` when TTS is enabled.
+- Find/replace applied **before** translation and display (`TranscriptController`).
+- Built-in lists + **stems** (en/ru) and obfuscation normalization (leet, separators, letter repeats).
+- Case-insensitive / whole words (CJK uses substring match, not `\b`).
+- Twitch chat TTS uses its own `include_builtin_profanity` flag (not dashboard custom pairs).
 
 ---
 

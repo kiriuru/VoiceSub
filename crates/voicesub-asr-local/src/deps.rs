@@ -343,8 +343,17 @@ pub fn env_check(module_dir: &Path) -> LocalAsrEnvCheck {
 fn check_group(names: &[&str], dirs: &[PathBuf], download_mb: u64) -> DllGroupStatus {
     let mut found = Vec::new();
     let mut missing = Vec::new();
+    // Prefer exact `dir.join(name)` — CUDA Toolkit `bin/` can be huge; never scan it
+    // unless a case-insensitive fallback is actually needed.
+    let mut indexes: Option<Vec<DllDirIndex>> = None;
     for name in names {
-        if let Some(path) = find_dll(name, dirs) {
+        let path = find_dll_direct(name, dirs).or_else(|| {
+            if indexes.is_none() {
+                indexes = Some(dirs.iter().map(|dir| DllDirIndex::scan(dir)).collect());
+            }
+            find_dll_in_indexes(name, indexes.as_ref().unwrap())
+        });
+        if let Some(path) = path {
             found.push(FoundDll {
                 name: (*name).to_string(),
                 path: path.display().to_string(),
@@ -361,6 +370,54 @@ fn check_group(names: &[&str], dirs: &[PathBuf], download_mb: u64) -> DllGroupSt
     }
 }
 
+struct DllDirIndex {
+    files: std::collections::HashMap<String, PathBuf>,
+}
+
+impl DllDirIndex {
+    fn scan(dir: &Path) -> Self {
+        let mut files = std::collections::HashMap::new();
+        if !dir.is_dir() {
+            return Self { files };
+        }
+        if let Ok(read) = fs::read_dir(dir) {
+            for entry in read.flatten() {
+                let path = entry.path();
+                if !path.is_file() {
+                    continue;
+                }
+                if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                    files.insert(name.to_ascii_lowercase(), path);
+                }
+            }
+        }
+        Self { files }
+    }
+
+    fn get(&self, name: &str) -> Option<&PathBuf> {
+        self.files.get(&name.to_ascii_lowercase())
+    }
+}
+
+fn find_dll_in_indexes(name: &str, indexes: &[DllDirIndex]) -> Option<PathBuf> {
+    for index in indexes {
+        if let Some(path) = index.get(name) {
+            return Some(path.clone());
+        }
+    }
+    None
+}
+
+fn find_dll_direct(name: &str, dirs: &[PathBuf]) -> Option<PathBuf> {
+    for dir in dirs {
+        let direct = dir.join(name);
+        if direct.is_file() {
+            return Some(direct);
+        }
+    }
+    None
+}
+
 fn check_vcruntime(layout: &RuntimeLayout) -> DllGroupStatus {
     let mut dirs = vec![layout.vcruntime.clone()];
     if let Some(system32) = system32_dir() {
@@ -374,29 +431,10 @@ fn system32_dir() -> Option<PathBuf> {
 }
 
 fn find_dll(name: &str, dirs: &[PathBuf]) -> Option<PathBuf> {
-    for dir in dirs {
-        if !dir.is_dir() {
-            continue;
-        }
-        let direct = dir.join(name);
-        if direct.is_file() {
-            return Some(direct);
-        }
-        if let Ok(read) = fs::read_dir(dir) {
-            for entry in read.flatten() {
-                let path = entry.path();
-                if path.is_file()
-                    && path
-                        .file_name()
-                        .and_then(|n| n.to_str())
-                        .is_some_and(|n| n.eq_ignore_ascii_case(name))
-                {
-                    return Some(path);
-                }
-            }
-        }
-    }
-    None
+    find_dll_direct(name, dirs).or_else(|| {
+        let indexes: Vec<DllDirIndex> = dirs.iter().map(|dir| DllDirIndex::scan(dir)).collect();
+        find_dll_in_indexes(name, &indexes)
+    })
 }
 
 fn check_cuda_toolkit_13() -> CudaToolkitStatus {

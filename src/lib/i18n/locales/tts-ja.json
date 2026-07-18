@@ -169,5 +169,7 @@
   "tts.twitch.irc": "IRC",
   "tts.twitch.chat_empty": "チャットメッセージはまだありません。",
   "tts.twitch.clean": "クリーン",
-  "tts.twitch.filtered": "フィルタ済み"
+  "tts.twitch.filtered": "フィルタ済み",
+  "tts.oauth.popup_blocked": "ブラウザを開けませんでした。ポップアップを許可するか VoiceSub を再起動してください。",
+  "tts.oauth.client_id_required": "Twitch Client ID が必要です"
 }

@@ -174,8 +174,18 @@
   >
     <header class="setup-modal__header">
       <h2 id="local-asr-setup-title">{tr("local_asr.setup.title")}</h2>
-      <button type="button" class="setup-modal__close secondary" onclick={onClose}>
-        {tr("local_asr.setup.close")}
+      <button
+        type="button"
+        class="top-app-bar__icon-btn"
+        aria-label={tr("local_asr.setup.close")}
+        onclick={onClose}
+      >
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+          <path
+            fill="currentColor"
+            d="M18.3 5.71a1 1 0 0 0-1.41 0L12 10.59 7.11 5.7A1 1 0 0 0 5.7 7.11L10.59 12l-4.89 4.89a1 1 0 1 0 1.41 1.42L12 13.41l4.89 4.89a1 1 0 0 0 1.42-1.41L13.41 12l4.89-4.89a1 1 0 0 0-.01-1.4Z"
+          />
+        </svg>
       </button>
     </header>
 
@@ -340,7 +350,7 @@
       </table>
 
       <div class="row-actions">
-        <button class="secondary" disabled={busy} onclick={() => void onRefreshDeps()}>
+        <button type="button" class="btn btn-ghost" disabled={busy} onclick={() => void onRefreshDeps()}>
           {tr("local_asr.system.recheck")}
         </button>
       </div>

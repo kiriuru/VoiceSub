@@ -18,6 +18,7 @@ describe("dashboard preview contracts (SubtitleOutputPreview)", () => {
     expect(source).toContain("disposeRenderContainer");
     expect(source).toContain("onDestroy");
     expect(source).toContain("renderer.disposeRenderContainer?.(previewEl)");
+    expect(source).toContain("result?.empty");
   });
 
   it("renders through SubtitleStyleRenderer when preview payload exists", () => {

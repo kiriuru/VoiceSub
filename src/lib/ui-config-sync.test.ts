@@ -3,16 +3,42 @@ import {
   flushUiConfigServerSyncForTests,
   publishUiConfigSync,
   uiConfigFromWsPayload,
+  uiPresentationSignature,
 } from "./ui-config-sync";
 import { LOOPBACK_TOKEN_HEADER } from "./loopback-api";
+
+describe("uiPresentationSignature", () => {
+  it("ignores non-presentation config fields", () => {
+    const a = uiPresentationSignature({
+      ui: { theme: "dark", language: "en", layout: "standard" },
+      translation: { enabled: true },
+    });
+    const b = uiPresentationSignature({
+      ui: { theme: "dark", language: "en", layout: "standard" },
+      translation: { enabled: false },
+    });
+    expect(a).toBe(b);
+  });
+
+  it("changes when theme/locale/font/layout/palette change", () => {
+    const base = uiPresentationSignature({
+      ui: { theme: "dark", language: "en", layout: "standard", font_family: "Segoe UI" },
+    });
+    expect(
+      uiPresentationSignature({
+        ui: { theme: "light", language: "en", layout: "standard", font_family: "Segoe UI" },
+      }),
+    ).not.toBe(base);
+  });
+});
 
 describe("uiConfigFromWsPayload", () => {
   it("extracts ui section from ws payload", () => {
     const payload = uiConfigFromWsPayload({
-      ui: { theme: "dark", palette: { accent: "#FF4FB4" } },
+      ui: { theme: "dark", font_family: '"Segoe UI", sans-serif', palette: { accent: "#FF4FB4" } },
     });
     expect(payload).toEqual({
-      ui: { theme: "dark", palette: { accent: "#FF4FB4" } },
+      ui: { theme: "dark", font_family: '"Segoe UI", sans-serif', palette: { accent: "#FF4FB4" } },
     });
   });
 

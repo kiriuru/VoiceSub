@@ -169,5 +169,7 @@
   "tts.twitch.irc": "IRC",
   "tts.twitch.chat_empty": "No chat messages yet.",
   "tts.twitch.clean": "clean",
-  "tts.twitch.filtered": "filtered"
+  "tts.twitch.filtered": "filtered",
+  "tts.oauth.popup_blocked": "Could not open browser — allow popups or restart VoiceSub.",
+  "tts.oauth.client_id_required": "Twitch Client ID is required"
 }

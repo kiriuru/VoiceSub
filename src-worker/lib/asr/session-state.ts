@@ -8,6 +8,7 @@ export function createBrowserAsrStateSeed(existing?: Partial<BrowserAsrState>): 
     desiredRunning: Boolean(seed.desiredRunning),
     pendingStart: Boolean(seed.pendingStart),
     generationId: Number(seed.generationId || 0),
+    stopEpoch: Number(seed.stopEpoch || 0),
     sessionId: seed.sessionId || `browser-worker-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
     providerName: seed.providerName || seed.browserMode || "browser_google",
     browserMode: seed.browserMode || "browser_google",

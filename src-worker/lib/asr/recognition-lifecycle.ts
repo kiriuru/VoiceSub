@@ -120,6 +120,9 @@ export function performControlledStart(manager: AsrManagerHost, reason: string):
     manager.appendLogInternal("recognition.start deferred: recognition is stopping");
     return;
   }
+  // Bump generation on every controlled start (including session_cycle) so late events
+  // from the previous recognition are rejected server-side and by local handlers.
+  manager.state.generationId = Number(manager.state.generationId || 0) + 1;
   const generationId = Number(manager.state.generationId || 0);
   cleanupRecognitionInstance(manager, manager.state.recognitionGenerationId);
   manager.setSupervisorStateInternal("starting");
@@ -253,12 +256,13 @@ export function scheduleRestart(
     delayMs > (manager.restartDelayByReasonMs.normal_onend ?? 0) ? "backoff" : "restarting"
   );
   manager.setStatusInternal("restarting");
-  const capturedGeneration = Number(manager.state.generationId || 0);
+  const capturedStopEpoch = Number(manager.state.stopEpoch || 0);
   manager.state.restartTimer = window.setTimeout(() => {
     if (!manager.state.desiredRunning) {
       return;
     }
-    if (capturedGeneration !== Number(manager.state.generationId || 0)) {
+    // Only user/control stop cancels a scheduled restart (not generation bumps on cycle).
+    if (capturedStopEpoch !== Number(manager.state.stopEpoch || 0)) {
       return;
     }
     if (manager.state.browserSupervisorState === "stopping") {

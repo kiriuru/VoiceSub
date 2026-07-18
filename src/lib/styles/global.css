@@ -27,7 +27,24 @@ body {
     radial-gradient(ellipse 70% 45% at 88% 12%, rgb(var(--ui-accent-secondary-rgb) / calc(var(--atmosphere-strength) * 0.85)), transparent 50%),
     radial-gradient(ellipse 90% 40% at 50% 100%, rgb(var(--ui-accent-tertiary-rgb) / calc(var(--atmosphere-strength) * 0.65)), transparent 45%),
     linear-gradient(180deg, var(--glass-0) 0%, var(--bg-app) 100%);
-  min-height: 100%;
+}
+
+/* Pass-through when StandardShell owns the shell; compact keeps .app-shell on this node. */
+.app-frame:not(.app-shell) {
+  display: contents;
+}
+
+/*
+ * Dashboard standard shell only: lock the window viewport so nav/top bar stay put
+ * and .standard-content scrolls. Do NOT apply to TTS / Local ASR / Worker modules
+ * (they share this stylesheet and need document scroll).
+ */
+html:has(.app-shell.standard-shell),
+html:has(.app-shell.standard-shell) body,
+html:has(.app-shell.standard-shell) #app {
+  height: 100%;
+  max-height: 100%;
+  overflow: hidden;
 }
 
 html[data-ui-theme="light"] body {
@@ -42,6 +59,26 @@ h1, h2, h3, p {
   margin-top: 0;
 }
 
+/*
+ * Native <dialog> UA styles use CanvasText/Canvas. Without an explicit color,
+ * titles and inherited copy render near-black on our dark glass panels.
+ */
+dialog {
+  color: var(--text-primary);
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+
+dialog::backdrop {
+  background: rgba(4, 8, 16, 0.55);
+  backdrop-filter: blur(4px);
+}
+
+html[data-ui-theme="light"] dialog::backdrop {
+  background: rgba(15, 20, 30, 0.35);
+}
+
 button, input, select, textarea {
   font: inherit;
 }
@@ -52,6 +89,7 @@ button, input, select, textarea {
   gap: 0;
 }
 
+/* Module windows (TTS) and legacy shell — document scroll; compact overrides via compact-layout.css. */
 .app-shell:not(.standard-shell) {
   min-height: 100vh;
   display: flex;
@@ -326,8 +364,9 @@ select.control {
 .badge.active { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); background: var(--accent-soft); }
 
 .state-pill {
-  opacity: 0.45;
-  transition: opacity 160ms ease;
+  opacity: 0.72;
+  color: var(--text-secondary);
+  transition: opacity 160ms ease, color 160ms ease, border-color 160ms ease;
 }
 
 .state-pill.is-active {
@@ -527,14 +566,6 @@ select.control {
 
 .bento-tile .section-heading {
   width: 100%;
-}
-
-.help-prose h3 {
-  margin-top: var(--space-4);
-}
-
-.help-prose ul {
-  padding-left: 1.2rem;
 }
 
 .copy-flash {

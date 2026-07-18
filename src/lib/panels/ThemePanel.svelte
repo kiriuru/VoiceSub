@@ -1,20 +1,25 @@
 <script lang="ts">
   import { locale, t } from "../i18n";
+  import { fontOptions } from "../font-catalog";
   import { UI_THEME_PRESETS } from "../ui-theme-presets";
-  import { applyUiPaletteToDocument } from "../ui-theme-css";
-  import type { ConfigPayload } from "../types";
+  import {
+    applyUiColorSchemeToDocument,
+    applyUiFontToDocument,
+    applyUiPaletteToDocument,
+  } from "../ui-theme-css";
+  import type { ConfigPayload, FontCatalog } from "../types";
 
   export let config: ConfigPayload;
+  export let fontCatalog: FontCatalog | null = null;
   export let onChange: (next: ConfigPayload) => void;
 
   $: loc = $locale;
-  function tr(key: string) {
-    loc;
-    return t(key);
-  }
+  $: tr = (key: string) => t(key, undefined, loc);
 
   $: ui = config.ui || {};
   $: palette = ui.palette || {};
+  $: fonts = fontOptions(fontCatalog);
+  $: selectedFontFamily = String(ui.font_family || "").trim();
 
   function detectUiPresetId(): string {
     for (const preset of UI_THEME_PRESETS) {
@@ -34,7 +39,7 @@
   $: activeUiPreset = detectUiPresetId();
 
   function applyTheme(theme: "dark" | "light") {
-    document.documentElement.dataset.uiTheme = theme;
+    applyUiColorSchemeToDocument(theme);
     onChange({ ...config, ui: { ...ui, theme } });
   }
 
@@ -44,11 +49,17 @@
     onChange({ ...config, ui: { ...ui, palette: nextPalette } });
   }
 
+  function applyUiFont(fontFamily: string) {
+    const next = String(fontFamily || "").trim();
+    applyUiFontToDocument(next);
+    onChange({ ...config, ui: { ...ui, font_family: next } });
+  }
+
   function applyUiPreset(presetId: string) {
     const preset = UI_THEME_PRESETS.find((item) => item.id === presetId) ?? UI_THEME_PRESETS[0];
     if (!preset?.theme || !preset.palette) return;
     const nextPalette = { ...palette, ...preset.palette };
-    document.documentElement.dataset.uiTheme = preset.theme;
+    applyUiColorSchemeToDocument(preset.theme);
     applyUiPaletteToDocument(nextPalette);
     onChange({
       ...config,
@@ -61,7 +72,7 @@
   }
 
   $: if (ui.theme) {
-    document.documentElement.dataset.uiTheme = ui.theme === "light" ? "light" : "dark";
+    applyUiColorSchemeToDocument(ui.theme === "light" ? "light" : "dark");
   }
 </script>
 
@@ -94,6 +105,20 @@
       {tr("style.ui_theme.mode.light")}
     </button>
   </div>
+
+  <label class="stack-field">
+    <span>{tr("style.ui_theme.font")}</span>
+    <select
+      class="control"
+      value={selectedFontFamily}
+      on:change={(e) => applyUiFont((e.currentTarget as HTMLSelectElement).value)}
+    >
+      <option value="">{tr("style.ui_theme.font.default")}</option>
+      {#each fonts as font}
+        <option value={font.family}>{font.label}</option>
+      {/each}
+    </select>
+  </label>
 
   <div class="palette-grid">
     <label class="stack-field palette-field">

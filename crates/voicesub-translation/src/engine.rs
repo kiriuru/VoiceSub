@@ -132,7 +132,7 @@ pub struct TranslationBatch {
 
 pub struct TranslationEngine {
     providers: HashMap<String, Arc<dyn TranslationProvider>>,
-    cache: TranslationCache,
+    cache: Arc<TranslationCache>,
     settings_signature: Option<String>,
     http_transport: Arc<SharedHttpClient>,
 }
@@ -147,7 +147,7 @@ impl TranslationEngine {
         let providers = build_default_registry(transport.clone());
         Self {
             providers,
-            cache: TranslationCache::with_dir(cache_dir, DEFAULT_MAX_ENTRIES),
+            cache: Arc::new(TranslationCache::with_dir(cache_dir, DEFAULT_MAX_ENTRIES)),
             settings_signature: None,
             http_transport: transport,
         }
@@ -159,7 +159,7 @@ impl TranslationEngine {
     ) -> Self {
         Self {
             providers,
-            cache: TranslationCache::with_dir(cache_dir, DEFAULT_MAX_ENTRIES),
+            cache: Arc::new(TranslationCache::with_dir(cache_dir, DEFAULT_MAX_ENTRIES)),
             settings_signature: None,
             http_transport: SharedHttpClient::new(crate::providers::build_translation_http_client()),
         }
@@ -201,13 +201,21 @@ impl TranslationEngine {
         source_text: &str,
         translated: &str,
     ) {
-        let key = cache_key(provider_name, source_lang, target_lang, source_text);
+        let key = cache_key(
+            provider_name,
+            &normalize_source_lang(source_lang),
+            &target_lang.trim().to_ascii_lowercase(),
+            source_text,
+        );
         self.cache.insert(key, translated.to_string());
     }
 
     pub fn apply_live_settings(&mut self, translation_config: &Value) {
         let signature = Self::build_settings_signature(translation_config);
-        if self.settings_signature.as_deref() != Some(signature.as_str()) {
+        // First apply only records the signature — do not wipe a persisted cache on startup.
+        if let Some(previous) = self.settings_signature.as_deref()
+            && previous != signature.as_str()
+        {
             self.cache.clear();
         }
         self.settings_signature = Some(signature);
@@ -291,8 +299,9 @@ impl TranslationEngine {
             LineTranslatePlan::Done(item, diagnostics) => (item, diagnostics),
             LineTranslatePlan::Fetch(work) => {
                 let cache_key = work.cache_key.clone();
+                let cache = Arc::clone(&self.cache);
                 let (item, diagnostics) = Self::run_line_fetch(work).await;
-                Self::cache_translation_result(&self.cache, &cache_key, &item);
+                Self::cache_translation_result(&cache, &cache_key, &item);
                 (item, diagnostics)
             }
         }
@@ -307,17 +316,17 @@ impl TranslationEngine {
         line: &PreparedLine,
         options: TranslateTargetOptions,
     ) -> (TranslationItem, Value) {
-        let plan = {
+        let (plan, cache) = {
             let mut guard = engine.lock().await;
-            guard.plan_line_translate(source_text, source_lang, line, &options)
+            let plan = guard.plan_line_translate(source_text, source_lang, line, &options);
+            (plan, Arc::clone(&guard.cache))
         };
         match plan {
             LineTranslatePlan::Done(item, diagnostics) => (item, diagnostics),
             LineTranslatePlan::Fetch(work) => {
                 let cache_key = work.cache_key.clone();
                 let (item, diagnostics) = Self::run_line_fetch(work).await;
-                let guard = engine.lock().await;
-                Self::cache_translation_result(&guard.cache, &cache_key, &item);
+                Self::cache_translation_result(&cache, &cache_key, &item);
                 (item, diagnostics)
             }
         }
@@ -384,7 +393,7 @@ impl TranslationEngine {
                     local_provider: line.local_provider,
                     success: true,
                     error: None,
-                    cached: true,
+                    cached: false,
                 },
                 diag,
             );
@@ -505,13 +514,19 @@ impl TranslationEngine {
         };
 
         let info = provider.info();
+        let normalized_source = normalize_source_lang(source_lang);
         let mut used_default_prompt = false;
         let mut last_status = None;
         let mut items: Vec<Option<TranslationItem>> = vec![None; clean_targets.len()];
         let mut pending = Vec::new();
 
         for (index, target_lang) in clean_targets.iter().enumerate() {
-            let key = cache_key(&provider_name, source_lang, target_lang, source_text);
+            let key = cache_key(
+                &provider_name,
+                &normalized_source,
+                target_lang,
+                source_text,
+            );
             if self.cache.enabled()
                 && let Some(cached) = self.cache.get(&key)
             {
@@ -548,7 +563,7 @@ impl TranslationEngine {
             };
             let provider = provider.clone();
             let source_text = source_text.to_string();
-            let source_lang = source_lang.to_string();
+            let source_lang = normalized_source.clone();
             let target_lang = target_lang.clone();
             let provider_settings = provider_settings.clone();
             pending.push(tokio::spawn(async move {
@@ -569,6 +584,7 @@ impl TranslationEngine {
             }));
         }
 
+        let cache = Arc::clone(&self.cache);
         for handle in pending {
             let (index, key, item, diagnostics) = handle.await.expect("translate target task");
             used_default_prompt |= diagnostics
@@ -580,8 +596,8 @@ impl TranslationEngine {
                 .and_then(|v| v.as_str())
                 .map(str::to_string)
                 .or(last_status);
-            if item.success && !item.text.is_empty() && self.cache.enabled() {
-                self.cache.insert(key, item.text.clone());
+            if item.success && !item.text.is_empty() && cache.enabled() {
+                cache.insert(key, item.text.clone());
             }
             items[index] = Some(item);
         }
@@ -590,7 +606,7 @@ impl TranslationEngine {
 
         TranslationBatch {
             provider: provider_name,
-            source_lang: source_lang.to_string(),
+            source_lang: normalized_source,
             target_languages: clean_targets,
             items,
             provider_group: info.group.to_string(),

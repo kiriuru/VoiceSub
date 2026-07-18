@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  HELP_PANEL_SECTIONS,
   OBS_PANEL_SECTIONS,
   SUBTITLES_PANEL_SECTIONS,
   TRANSLATION_PANEL_SECTIONS,
@@ -36,5 +37,17 @@ describe("panel-sections", () => {
   it("maps tab-linked sections when tabId is set", () => {
     expect(panelSectionTabForId(TRANSLATION_PANEL_SECTIONS, "translation-section-lines")).toBeUndefined();
     expect(panelSectionIdForTab(TRANSLATION_PANEL_SECTIONS, "translation")).toBeUndefined();
+  });
+
+  it("defines help anchors for top navigation", () => {
+    expect(HELP_PANEL_SECTIONS.map((s) => s.id)).toEqual([
+      "help-section-quick-start",
+      "help-section-recognition",
+      "help-section-translation",
+      "help-section-subtitles",
+      "help-section-style",
+      "help-section-obs",
+      "help-section-tools",
+    ]);
   });
 });

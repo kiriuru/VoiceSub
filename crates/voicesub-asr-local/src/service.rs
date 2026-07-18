@@ -38,15 +38,9 @@ impl LocalAsrModuleService {
         );
         cleanup_pending_runtime_removals(&module_dir);
         model_manager::cleanup_pending_model_removals(&module_dir);
-        if env_check(&module_dir).ort_gpu.ok {
-            if let Err(err) = InferenceEngine::ensure_ort_initialized(&module_dir) {
-                warn!(
-                    target: "voicesub.asr_local",
-                    error = %err,
-                    "failed to initialize GPU ONNX Runtime at startup"
-                );
-            }
-        }
+        // Do not run env_check / ORT init here: CUDA Toolkit `bin/` scans and ORT load
+        // block VoiceSub HTTP readiness (dashboard theme/settings appear seconds late).
+        // GPU ORT initializes lazily on first probe/load/status refresh.
         Self {
             store: LocalAsrConfigStore::new(module_dir),
             logs_dir,
@@ -87,8 +81,9 @@ impl LocalAsrModuleService {
     }
 
     pub fn diagnostics(&self) -> serde_json::Value {
+        // Heartbeat calls this every ~1s — reuse status()/env cache instead of env_check.
+        let status = self.status();
         let config = self.load_config().unwrap_or_default();
-        let env = env_check(self.store.module_dir());
         let inference = self.inference.snapshot();
         let test = self.test_bench.snapshot();
         let runtime_tel = self.runtime_session.emit_telemetry();
@@ -98,18 +93,18 @@ impl LocalAsrModuleService {
         } else {
             test_tel
         };
-        let status = build_status(&config, env.clone(), self.store.module_dir(), &inference);
-        let phase = if test.running || self.runtime_session.is_running() {
+        let is_runtime_running = test.running || self.runtime_session.is_running();
+        let phase = if is_runtime_running {
             LocalAsrModulePhase::Running
         } else {
             status.phase
         };
         assemble_local_asr_diagnostics(LocalAsrDiagnosticsInput {
             config: &config,
-            env: &env,
+            env: &status.env,
             inference: &inference,
             phase,
-            is_runtime_running: test.running || self.runtime_session.is_running(),
+            is_runtime_running,
             decode_count: u64::from(test.decode_count).max(tel.partial_emits),
             finalized_segments: u64::from(test.finalized_segments).max(tel.final_emits),
             emit_telemetry: Some(&tel),
@@ -528,6 +523,26 @@ mod tests {
         let service = LocalAsrModuleService::new(dir.path(), dir.path().join("logs"));
         service.unload_model_after_runtime_stop();
         assert!(!service.inference_snapshot().model_loaded);
+    }
+
+    #[test]
+    fn diagnostics_reuses_warm_status_cache() {
+        let dir = tempfile::tempdir().unwrap();
+        let service = LocalAsrModuleService::new(dir.path(), dir.path().join("logs"));
+        let first = service.refresh_status();
+        let diag = service.diagnostics();
+        assert_eq!(
+            diag.get("mode").and_then(|v| v.as_str()),
+            Some("local_parakeet")
+        );
+        assert_eq!(
+            diag.get("cpu_deps_ready").and_then(|v| v.as_bool()),
+            Some(first.env.cpu_deps_ready)
+        );
+        // Second diagnostics must stay consistent without invalidate (heartbeat hot path).
+        let diag2 = service.diagnostics();
+        assert_eq!(diag.get("cpu_deps_ready"), diag2.get("cpu_deps_ready"));
+        assert_eq!(diag.get("cuda_deps_ready"), diag2.get("cuda_deps_ready"));
     }
 
     #[test]

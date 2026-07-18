@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { locale, setLocale, t } from "../src/lib/i18n";
+  import { locale, setLocale, getLocale, t } from "../src/lib/i18n";
   import SetupModal from "./components/SetupModal.svelte";
   import ModuleStatusDetailsSheet from "./components/ModuleStatusDetailsSheet.svelte";
   import ModuleAlertDialog from "./components/ModuleAlertDialog.svelte";
@@ -137,14 +137,15 @@
   $effect(() => {
     const transferError = transfer?.error?.trim() ?? "";
     if (transfer?.cancelled) {
-      lastTransferError = "";
+      if (lastTransferError) lastTransferError = "";
       return;
     }
     if (transferError && transferError !== lastTransferError) {
       lastTransferError = transferError;
       showError(transferError);
+      return;
     }
-    if (!transferError) {
+    if (!transferError && lastTransferError) {
       lastTransferError = "";
     }
   });
@@ -154,8 +155,9 @@
     if (testError && testError !== lastTestBenchError) {
       lastTestBenchError = testError;
       showError(testError);
+      return;
     }
-    if (!testError) {
+    if (!testError && lastTestBenchError) {
       lastTestBenchError = "";
     }
   });
@@ -208,6 +210,8 @@
       const detail = (event as CustomEvent<{ locale?: string }>).detail;
       const code = detail?.locale;
       if (code === "en" || code === "ru" || code === "ja" || code === "ko" || code === "zh") {
+        // setLocale is idempotent; still guard so we never re-enter from our own event.
+        if (getLocale() === code) return;
         setLocale(code);
       }
     };
@@ -228,8 +232,13 @@
         transfer = await fetchLocalAsrTransfer();
         testBench = await fetchLocalAsrTestStatus();
         toolkitUrl = await fetchCudaToolkitUrl();
-        micDevices = await listLocalAsrMicrophones();
         await loadModuleConfig();
+        // Device enumeration is slow on Windows (cpal); defer so the window paints first.
+        void listLocalAsrMicrophones()
+          .then((devices) => {
+            micDevices = devices;
+          })
+          .catch(() => {});
       } catch (err) {
         showError(err instanceof Error ? err.message : String(err));
       }

@@ -7,11 +7,7 @@ export function getRestartRequiredReasons(
 ): string[] {
   const reasons: string[] = [];
 
-  if (
-    Boolean(previousPayload.logging?.full_enabled) !== Boolean(nextPayload.logging?.full_enabled)
-  ) {
-    reasons.push("config.restart_reason.full_logging");
-  }
+  // logging.full_enabled is applied live on settings save via apply_logging_preferences.
   if (
     String(previousPayload.asr?.browser?.recognition_language || "ru-RU") !==
     String(nextPayload.asr?.browser?.recognition_language || "ru-RU")

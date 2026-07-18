@@ -179,7 +179,10 @@ pub fn apply_voicesub_import_rules(payload: Value) -> Value {
         .to_ascii_lowercase();
 
     match mode.as_str() {
-        "local" | "browser_google_experimental" | "browser_google_experimental_edge" => {
+        "local"
+        | "browser_google_experimental"
+        | "browser_google_experimental_edge"
+        | "browser_google_edge" => {
             asr.insert("mode".into(), json!("browser_google"));
             asr.insert(
                 "import_hint".into(),
@@ -189,10 +192,7 @@ pub fn apply_voicesub_import_rules(payload: Value) -> Value {
         "" => {
             asr.insert("mode".into(), json!("browser_google"));
         }
-        _ if mode != "browser_google"
-            && mode != "browser_google_edge"
-            && mode != "local_parakeet" =>
-        {
+        _ if mode != "browser_google" && mode != "local_parakeet" => {
             asr.insert("mode".into(), json!("browser_google"));
         }
         _ => {}
@@ -267,6 +267,21 @@ mod tests {
             "asr": { "mode": "browser_google_experimental" }
         }));
         assert_eq!(imported["asr"]["mode"], "browser_google");
+    }
+
+    #[test]
+    fn maps_browser_google_edge_to_classic() {
+        let imported = import_sst_json_value(json!({
+            "config_version": 7,
+            "asr": { "mode": "browser_google_edge" }
+        }));
+        assert_eq!(imported["asr"]["mode"], "browser_google");
+        assert!(
+            imported["asr"]["import_hint"]
+                .as_str()
+                .unwrap()
+                .contains("browser_google_edge")
+        );
     }
 
     #[test]

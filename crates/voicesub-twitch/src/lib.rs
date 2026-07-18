@@ -31,7 +31,8 @@ pub use settings::{
     normalize_speak_template, normalize_twitch_settings, pause_separator,
 };
 pub use source_text_replacement::{
-    SourceTextReplacementPair, SourceTextReplacementSettings, apply_source_text_replacement,
-    settings_from_config_value, settings_from_section_value,
+    SourceTextReplacementPair, SourceTextReplacementSettings, apply_replacement_rules,
+    apply_source_text_replacement, effective_replacement_pairs, settings_from_config_value,
+    settings_from_section_value,
 };
 pub use tls::init_crypto_provider;

@@ -908,6 +908,144 @@ async fn dispatcher_prepare_failure_emits_structured_job_error() {
 }
 
 #[tokio::test]
+async fn dispatcher_same_sequence_resubmit_does_not_leak_active_jobs() {
+    let config = stub_config(json!({
+        "translation": {
+            "max_concurrent_jobs": 1,
+            "provider_settings": {
+                "stub": { "delay_ms_translation_1": "80" }
+            }
+        }
+    }));
+    let (recorder, publish) = RecordingPublisher::new();
+    let (_, relevance) = RelevanceSet::new(&[7]);
+    let dispatcher = make_dispatcher(config, publish, relevance);
+    dispatcher.start().await;
+    dispatcher.submit_final(7, "one", "ru", None).await;
+    dispatcher.submit_final(7, "two", "ru", None).await;
+
+    let deadline = Instant::now() + Duration::from_millis(1500);
+    loop {
+        let complete = recorder
+            .events
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|event| event.is_complete)
+            .count();
+        if complete >= 2 || Instant::now() >= deadline {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+
+    // A third job must still be able to start after both same-sequence jobs finish.
+    dispatcher.submit_final(7, "three", "ru", None).await;
+    let deadline = Instant::now() + Duration::from_millis(1500);
+    loop {
+        let complete = recorder
+            .events
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|event| event.is_complete && event.source_text == "three")
+            .count();
+        if complete >= 1 || Instant::now() >= deadline {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    dispatcher.stop().await;
+
+    let completed_three = recorder
+        .events
+        .lock()
+        .unwrap()
+        .iter()
+        .any(|event| event.is_complete && event.source_text == "three");
+    assert!(
+        completed_three,
+        "active_jobs leaked after same-sequence resubmit; third job never completed"
+    );
+}
+
+#[tokio::test]
+async fn dispatcher_refresh_provider_throttles_allows_higher_concurrency() {
+    let config = Arc::new(Mutex::new(stub_config(json!({
+        "translation": {
+            "provider_limits": { "stub": { "max_concurrent_targets": 1 } },
+            "lines": [
+                {
+                    "slot_id": "translation_1",
+                    "enabled": true,
+                    "target_lang": "en",
+                    "provider": "stub",
+                    "label": "EN"
+                },
+                {
+                    "slot_id": "translation_2",
+                    "enabled": true,
+                    "target_lang": "de",
+                    "provider": "stub",
+                    "label": "DE"
+                }
+            ],
+            "provider_settings": {
+                "stub": {
+                    "delay_ms_translation_1": "100",
+                    "delay_ms_translation_2": "100"
+                }
+            }
+        }
+    }))));
+    let config_getter: ConfigGetter = {
+        let config = config.clone();
+        Arc::new(move || config.lock().unwrap().clone())
+    };
+    let (recorder, publish) = RecordingPublisher::new();
+    let (_, relevance) = RelevanceSet::new(&[31]);
+    let engine = test_engine(reqwest::Client::new());
+    let dispatcher = TranslationDispatcher::with_callbacks(
+        engine,
+        config_getter,
+        publish,
+        relevance,
+        DispatcherCallbacks::default(),
+    );
+    dispatcher.start().await;
+
+    // Warm sticky semaphore at capacity 1, then raise limit and refresh.
+    {
+        let mut guard = config.lock().unwrap();
+        guard["translation"]["provider_limits"]["stub"]["max_concurrent_targets"] = json!(2);
+    }
+    dispatcher.refresh_provider_throttles().await;
+
+    let started = Instant::now();
+    dispatcher.submit_final(31, "hello", "ru", None).await;
+    let deadline = Instant::now() + Duration::from_millis(500);
+    loop {
+        let partial_count = recorder
+            .events
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|event| !event.is_complete)
+            .count();
+        if partial_count >= 2 || Instant::now() >= deadline {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    dispatcher.stop().await;
+    assert!(
+        started.elapsed() < Duration::from_millis(180),
+        "expected parallel provider calls after throttle refresh, elapsed={:?}",
+        started.elapsed()
+    );
+}
+
+#[tokio::test]
 async fn dispatcher_provider_concurrency_limit_serializes_targets() {
     let config = stub_config(json!({
         "translation": {

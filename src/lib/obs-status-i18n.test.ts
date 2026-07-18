@@ -64,9 +64,23 @@ describe("obs status i18n", () => {
     expect(line).not.toContain("Подключение не установлено");
   });
 
-  it("defines tools.profiles.name_label in all UI locales", () => {
+  it("defines tools profile and diagnostics keys in all UI locales", () => {
+    const required = [
+      "tools.profiles.name_label",
+      "tools.profiles.delete_confirm",
+      "tools.profiles.load_confirm",
+      "tools.config.import_redacted_confirm",
+      "tools.config.needs_save",
+      "tools.runtime.local_asr.ready",
+      "tools.runtime.logs_location",
+    ];
     for (const catalog of [en, ru, ja, ko, zh] as Record<string, string>[]) {
-      expect(catalog["tools.profiles.name_label"]).toBeTruthy();
+      for (const key of required) {
+        expect(catalog[key], `missing ${key}`).toBeTruthy();
+      }
+      expect(catalog["tools.profiles.delete_confirm"]).toContain("{name}");
+      expect(catalog["tools.runtime.logs_location"]).toContain("core.log");
+      expect(catalog["tools.runtime.logs_location"]).not.toContain("backend.log");
     }
   });
 

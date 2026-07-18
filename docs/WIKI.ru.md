@@ -259,10 +259,10 @@
 
 ## 10. Замена слов (Word Replace)
 
-- Правила find/replace **до** перевода и вывода.
-- Built-in profanity lists (en, ru, ja, ko, zh).
-- Case-insensitive / whole words only.
-- Синхронизация с TTS: `tts_sync_source_text_replacement` (если TTS включён).
+- Правила find/replace **до** перевода и вывода (`TranscriptController`).
+- Built-in списки + **корни** (en/ru) и нормализация обходов (leet, разделители, повтор букв).
+- Case-insensitive / whole words (CJK — substring, без `\b`).
+- Twitch chat TTS использует свой флаг `include_builtin_profanity` (не кастомные пары dashboard).
 
 ---
 

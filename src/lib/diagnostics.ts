@@ -11,10 +11,17 @@ export function diagnosticsFromRuntime(runtime: RuntimeStatus): DiagnosticsSnaps
     (runtime.asr?.diagnostics?.browser_worker as Record<string, unknown> | undefined) ||
     (asrRaw.browser_worker as Record<string, unknown> | undefined);
 
+  const localModule =
+    (runtime.asr?.local_module as Record<string, unknown> | undefined) ||
+    (asrRaw.local_module as Record<string, unknown> | undefined);
+
   return {
     asr: {
       ...asrRaw,
+      provider: asrRaw.provider || runtime.asr?.active_mode,
+      active_mode: runtime.asr?.active_mode || asrRaw.active_mode,
       browser_worker: browserWorker,
+      local_module: localModule,
     },
     translation: (raw.translation_diagnostics as Record<string, unknown> | undefined) || {},
     obs: (raw.obs_caption_diagnostics as Record<string, unknown> | undefined) || {},

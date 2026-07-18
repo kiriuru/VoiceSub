@@ -8,8 +8,11 @@
     loadProfile,
     saveProfile,
   } from "../api";
+  import ToolsResultDialog from "../components/ToolsResultDialog.svelte";
+  import { containsRedactedPlaceholders } from "../config-redacted";
   import { normalizeConfigPayload } from "../config-normalize";
   import { formatObsCcRuntimeStatus } from "../obs-status-i18n";
+  import { isValidProfileName, normalizeProfileName } from "../profile-name";
   import { redactObject } from "../redaction";
   import type { ConfigPayload, DiagnosticsSnapshot, StylePresetCatalog } from "../types";
 
@@ -17,6 +20,8 @@
   export let diagnostics: DiagnosticsSnapshot;
   export let onChange: (next: ConfigPayload) => void;
   export let onConfigLoad: (next: ConfigPayload, presets?: StylePresetCatalog) => void;
+
+  const CONFIG_EXPORT_FILENAME = "voicesub-config.json";
 
   $: fullLoggingEnabled = config.logging?.full_enabled === true;
 
@@ -35,69 +40,113 @@
 
   let profiles: string[] = [];
   let profileName = "";
-  let status = "";
-  let error = "";
   let busy = false;
+  let resultOpen = false;
+  let resultTone: "success" | "error" = "success";
+  let resultMessage = "";
 
-  async function refreshLists() {
+  function showResult(tone: "success" | "error", message: string) {
+    resultTone = tone;
+    resultMessage = message;
+    resultOpen = true;
+  }
+
+  function setSuccess(message: string) {
+    showResult("success", message);
+  }
+
+  function setFailure(err: unknown, fallback?: string) {
+    const message = err instanceof Error ? err.message : fallback || String(err);
+    showResult("error", message);
+  }
+
+  function requireValidProfileName(): string | null {
+    const name = normalizeProfileName(profileName);
+    if (!name || !isValidProfileName(name)) {
+      setFailure(tr("tools.profiles.invalid_name"));
+      return null;
+    }
+    return name;
+  }
+
+  function profileExists(name: string): boolean {
+    const needle = name.toLowerCase();
+    return profiles.some((entry) => entry.toLowerCase() === needle);
+  }
+
+  /** @returns false when the list could not be refreshed (error already announced when requested). */
+  async function refreshLists(options?: { announce?: boolean }): Promise<boolean> {
+    const announce = options?.announce !== false;
     try {
       const profilesRes = await listProfiles();
       profiles = profilesRes.profiles || [];
-      error = "";
+      return true;
     } catch (err) {
-      error = err instanceof Error ? err.message : String(err);
+      if (announce) setFailure(err);
+      return false;
     }
   }
 
   onMount(() => {
-    void refreshLists();
+    void refreshLists({ announce: false });
   });
 
   async function handleLoadProfile() {
-    const name = profileName.trim();
+    const name = requireValidProfileName();
     if (!name) return;
+    const confirmKey =
+      name === "default" ? "tools.profiles.default_load_confirm" : "tools.profiles.load_confirm";
+    if (!globalThis.confirm(tr(confirmKey, { name }))) return;
     busy = true;
-    status = "";
     try {
       const res = await loadProfile(name);
       onConfigLoad(normalizeConfigPayload(res.payload));
-      status = `${tr("tools.profiles.load")}: ${name}`;
+      setSuccess(tr("tools.result.profile_load", { name }));
     } catch (err) {
-      error = err instanceof Error ? err.message : String(err);
+      setFailure(err);
     } finally {
       busy = false;
     }
   }
 
   async function handleSaveProfile() {
-    const name = profileName.trim();
+    const name = requireValidProfileName();
     if (!name) return;
+    if (profileExists(name)) {
+      if (!globalThis.confirm(tr("tools.profiles.save_overwrite_confirm", { name }))) return;
+    }
     busy = true;
-    status = "";
     try {
-      await saveProfile(name, config);
-      await refreshLists();
-      status = `${tr("tools.profiles.save")}: ${name}`;
+      const res = await saveProfile(name, config);
+      if (!(await refreshLists())) return;
+      const path = res.saved_to || `user-data/profiles/${name}.json`;
+      setSuccess(tr("tools.result.profile_save", { name, path }));
     } catch (err) {
-      error = err instanceof Error ? err.message : String(err);
+      setFailure(err);
     } finally {
       busy = false;
     }
   }
 
   async function handleDeleteProfile() {
-    const name = profileName.trim();
+    const name = requireValidProfileName();
     if (!name) return;
-    const confirmMessage = tr("tools.profiles.delete_confirm").replace("{name}", name);
-    if (!globalThis.confirm(confirmMessage)) return;
+    if (name === "default") {
+      setFailure(tr("tools.profiles.cannot_delete_default"));
+      return;
+    }
+    if (!globalThis.confirm(tr("tools.profiles.delete_confirm", { name }))) return;
     busy = true;
-    status = "";
     try {
       const res = await deleteProfile(name);
-      await refreshLists();
-      status = res.deleted ? `${tr("tools.profiles.delete")}: ${name}` : `${name} — ${tr("common.error")}`;
+      if (!(await refreshLists())) return;
+      if (res.deleted) {
+        setSuccess(tr("tools.result.profile_delete", { name }));
+      } else {
+        setFailure(`${name} — ${tr("common.error")}`);
+      }
     } catch (err) {
-      error = err instanceof Error ? err.message : String(err);
+      setFailure(err);
     } finally {
       busy = false;
     }
@@ -105,16 +154,16 @@
 
   async function handleExportDiagnostics() {
     busy = true;
-    status = "";
     try {
-      await downloadDiagnostics();
-      status = tr("tools.config.export_diagnostics");
+      const { filename } = await downloadDiagnostics();
+      setSuccess(tr("tools.result.export_diagnostics", { filename }));
     } catch (err) {
-      error = err instanceof Error ? err.message : tr("tools.runtime.export_failed");
+      setFailure(err, tr("tools.runtime.export_failed"));
     } finally {
       busy = false;
     }
   }
+
   function formatMetric(value: unknown): string {
     if (value === null || value === undefined || value === "") return "—";
     const n = Number(value);
@@ -139,6 +188,13 @@
 
   $: translationMetrics = (diagnostics.metrics || {}) as Record<string, unknown>;
   $: translationDiag = (diagnostics.translation || {}) as Record<string, unknown>;
+  $: asrDiag = (diagnostics.asr || {}) as Record<string, unknown>;
+  $: browserWorker = (asrDiag.browser_worker || {}) as Record<string, unknown>;
+  $: localModule = (asrDiag.local_module || {}) as Record<string, unknown>;
+  $: asrProvider = String(asrDiag.provider || asrDiag.active_mode || "n/a");
+  $: workerConnected = browserWorker.worker_connected === true;
+  $: localReady = localModule.ready === true;
+  $: localPhase = String(localModule.phase || localModule.message || "—");
 
   function handleExportConfig() {
     const blob = new Blob([JSON.stringify(redactObject(config), null, 2)], {
@@ -147,10 +203,10 @@
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = "voicesub-config.json";
+    anchor.download = CONFIG_EXPORT_FILENAME;
     anchor.click();
     URL.revokeObjectURL(url);
-    status = tr("tools.config.export");
+    setSuccess(tr("tools.result.export_config", { filename: CONFIG_EXPORT_FILENAME }));
   }
 
   async function handleImportConfig(event: Event) {
@@ -158,14 +214,19 @@
     const file = input.files?.[0];
     if (!file) return;
     busy = true;
-    status = "";
     try {
       const text = await file.text();
-      const payload = normalizeConfigPayload(JSON.parse(text) as ConfigPayload);
+      const parsed = JSON.parse(text) as ConfigPayload;
+      if (containsRedactedPlaceholders(parsed)) {
+        if (!globalThis.confirm(tr("tools.config.import_redacted_confirm"))) {
+          return;
+        }
+      }
+      const payload = normalizeConfigPayload(parsed);
       onConfigLoad(payload);
-      status = tr("tools.config.import");
+      setSuccess(tr("tools.result.import_config", { filename: file.name }));
     } catch (err) {
-      error = err instanceof Error ? err.message : String(err);
+      setFailure(err);
     } finally {
       busy = false;
       input.value = "";
@@ -195,6 +256,7 @@
       placeholder={tr("tools.profiles.placeholder")}
       bind:value={profileName}
       list="profile-names"
+      disabled={busy}
     />
     <datalist id="profile-names">
       {#each profiles as name}
@@ -222,11 +284,18 @@
     <button class="btn btn-sm" disabled={busy} on:click={handleExportConfig}>
       {tr("tools.config.export")}
     </button>
-    <label class="btn btn-sm tools-file-btn">
+    <label class="btn btn-sm tools-file-btn" class:is-disabled={busy}>
       {tr("tools.config.import")}
-      <input type="file" accept="application/json,.json" hidden on:change={handleImportConfig} />
+      <input
+        type="file"
+        accept="application/json,.json"
+        hidden
+        disabled={busy}
+        on:change={handleImportConfig}
+      />
     </label>
   </div>
+  <p class="muted">{tr("tools.config.save_hint")}</p>
   </article>
 
   <article class="surface-card panel-padding bento-tile bento-span-full stack">
@@ -236,8 +305,9 @@
   </div>
 
   <p class="muted mono-block">
-    ASR: {String(diagnostics.asr?.provider || "n/a")}
-    · worker: {diagnostics.asr?.browser_worker && (diagnostics.asr.browser_worker as Record<string, unknown>).worker_connected ? tr("common.connected") : tr("common.disconnected")}
+    ASR: {asrProvider}
+    · worker: {workerConnected ? tr("common.connected") : tr("common.disconnected")}
+    · Local ASR: {localReady ? tr("tools.runtime.local_asr.ready") : tr("tools.runtime.local_asr.not_ready")} ({localPhase})
   </p>
   <p class="muted mono-block">
     Translation: {String(
@@ -269,42 +339,30 @@
   <p class="muted mono-block">
     WS connections: {String(diagnostics.metrics?.ws_events_connections_active ?? 0)}
     · jobs started: {String(diagnostics.metrics?.translation_jobs_started ?? 0)}
-    · stale dropped: {String(diagnostics.metrics?.translation_stale_results_dropped ?? 0)}
   </p>
   <label class="tools-logging-toggle stack-gap-sm">
     <input
       type="checkbox"
       checked={fullLoggingEnabled}
+      disabled={busy}
       on:change={(e) => setFullLoggingEnabled((e.currentTarget as HTMLInputElement).checked)}
     />
     <span>{tr("tools.runtime.full_logging")}</span>
   </label>
   <p class="muted">{tr("tools.runtime.full_logging.hint")}</p>
+  <p class="muted">{tr("tools.runtime.logs_location")}</p>
   <p class="muted mono-block">{formatObsCcRuntimeStatus(diagnostics.obs, tr)}</p>
   <p class="muted">{tr("tools.runtime.note")}</p>
   </article>
   </div>
-
-  {#if status || error}
-    <div class="tools-feedback bento-span-full">
-      {#if status}
-        <p class="muted save-status success">{status}</p>
-      {/if}
-      {#if error}
-        <p class="muted save-status error">{error}</p>
-      {/if}
-    </div>
-  {/if}
 </section>
+
+<ToolsResultDialog bind:open={resultOpen} tone={resultTone} message={resultMessage} />
 
 <style>
   .mono-block {
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     font-size: 13px;
-  }
-
-  .tools-feedback {
-    margin-top: var(--space-1);
   }
 
   .tools-logging-toggle {
@@ -341,5 +399,11 @@
   .tools-file-btn {
     cursor: pointer;
     margin: 0;
+  }
+
+  .tools-file-btn.is-disabled {
+    opacity: 0.55;
+    pointer-events: none;
+    cursor: not-allowed;
   }
 </style>

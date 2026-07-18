@@ -76,7 +76,6 @@ Tauri dev: embedded HTTP on `http://127.0.0.1:8765`; main webview opens the dash
 | `http://127.0.0.1:8765/` | Svelte dashboard |
 | `http://127.0.0.1:8765/overlay` | OBS Browser Source |
 | `http://127.0.0.1:8765/google-asr?autostart=1` | Browser Speech worker |
-| `http://127.0.0.1:8765/google-asr-edge` | Same worker (Edge smoke) |
 | `http://127.0.0.1:8765/tts` | TTS module UI |
 | `http://127.0.0.1:8765/local-asr` | Local ASR module UI |
 
@@ -89,7 +88,7 @@ Tauri dev: embedded HTTP on `http://127.0.0.1:8765`; main webview opens the dash
 | `GET /api/runtime/status` | Runtime snapshot + diagnostics (`asr.local_module`) |
 | `GET /api/settings/load` | Load config + presets + fonts |
 | `POST /api/settings/save` | Normalize + save `config.toml` |
-| `POST /api/ui/sync` | UI theme/locale sync → `ui_config_sync` |
+| `POST /api/ui/sync` | UI theme/locale/font sync → `ui_config_sync` |
 | `GET /api/exports/diagnostics` | Redacted diagnostics ZIP |
 | `GET /api/obs/url` | `{ overlay_url }` for OBS |
 | `GET /api/asr/local/status` | Local ASR module readiness / deps / model |
@@ -117,14 +116,14 @@ Tauri dev: embedded HTTP on `http://127.0.0.1:8765`; main webview opens the dash
 
 **VoiceSub** is a local Windows-first desktop app for real-time subtitles:
 
-- speech capture via **Browser Speech worker** (separate Chrome/Edge window with visible address bar, Web Speech API) **or** optional **Local ASR** (Parakeet ONNX, in-process mic);
+- speech capture via **Browser Speech worker** (separate Chrome window with visible address bar, Web Speech API) **or** optional **Local ASR** (Parakeet ONNX, in-process mic);
 - optional translation to 0..5 target languages with independent provider per slot;
 - unified subtitle payload routing to Svelte dashboard, vanilla OBS overlay, and OBS Closed Captions;
 - optional **TTS module** (subtitle speech, Twitch chat TTS);
 - optional **Local ASR module** (`/local-asr`, mode `local_parakeet` when `local_module.ready`);
 - diagnostics ZIP export and client-side trace logs.
 
-**ASR modes:** `browser_google` (default Web Speech at `/google-asr` / `/google-asr-edge`) and optional `local_parakeet` (Local ASR module, gated on `asr.local_module.ready`). Legacy SST `local` and experimental worker routes are not in core.
+**ASR modes:** `browser_google` (default Web Speech at `/google-asr`) and optional `local_parakeet` (Local ASR module, gated on `asr.local_module.ready`). Legacy SST `local` and experimental worker routes are not in core.
 
 Hard boundaries:
 
@@ -171,7 +170,7 @@ flowchart LR
   end
 
   subgraph Browser["Browser Speech"]
-    CHR["Chrome/Edge window<br/>/google-asr"]
+    CHR["Chrome window<br/>/google-asr"]
   end
 
   subgraph LocalAsr["Local ASR (optional)"]
@@ -274,7 +273,7 @@ src-tauri (Layer 4: IPC, window, bundle only)
 | `voicesub-types` | `PROJECT_VERSION`, WS envelope types, ASR event DTO |
 | `voicesub-config` | TOML store, defaults, legacy JSON import, paths, bind policy |
 | `voicesub-subtitle` | `SubtitleLifecycleCore`, `SubtitleRouter`, presentation, overlay contract |
-| `voicesub-translation` | `TranslationDispatcher`, `TranslationEngine`, 13 providers |
+| `voicesub-translation` | `TranslationDispatcher`, `TranslationEngine`, 17 providers |
 | `voicesub-browser` | Chrome supervisor, worker launch flags, operational FSM |
 | `voicesub-ws` | `/ws/events` hub, `/ws/asr_worker` hub, event sequence |
 | `voicesub-http` | Re-export `voicesub-runtime::http` (thin) |
@@ -299,7 +298,7 @@ src-tauri (Layer 4: IPC, window, bundle only)
 1. **Start** (`POST /api/runtime/start`):
    - merge optional inline `config_payload`;
    - apply live settings (translation, OBS, subtitle, logging);
-   - if `asr.mode = browser_google` (or edge variant): launch Chrome worker → `{base}/google-asr?autostart=1[&locale=…]` and browser speech ingest;
+   - if `asr.mode = browser_google`: launch Chrome worker → `{base}/google-asr?autostart=1[&locale=…]` and browser speech ingest;
    - if `asr.mode = local_parakeet`: assert `asr.local_module.ready`, start `LocalAsrSpeechSource` (no Chrome worker);
    - start translation dispatcher, OBS captions;
    - broadcast `preflight_update`, `runtime_update`.
@@ -343,17 +342,16 @@ Embedded HTTP server: dedicated Tokio runtime in Tauri process; bind from `AppCo
 | `translation` | Provider, lines (up to 5), cache, limits, `provider_settings` |
 | `subtitle_output` | Source/translation display order |
 | `subtitle_lifecycle` | TTL, sync flags; deprecated timing keys normalized only |
-| `source_text_replacement` | Find/replace pairs for ASR text |
+| `source_text_replacement` | Find/replace for ASR text (custom pairs + builtin stems/obfuscation normalize; applied in `TranscriptController` before subtitle/translation) |
 | `logging` | `full_enabled` — master switch for deep diagnostics |
 
 ### ASR mode (VoiceSub 0.6.0)
 
 | `asr.mode` | Status |
 | --- | --- |
-| `browser_google` | **Active default** — Chrome/Edge Web Speech worker |
+| `browser_google` | **Active default** — Chrome Web Speech worker |
 | `local_parakeet` | Optional Local ASR; Live selector only when `asr.local_module.ready` |
-| `browser_google_edge` | Preserved on import; same worker, different page URL |
-| `local`, `browser_google_experimental*` (import) | Mapped → `browser_google` + `import_hint` |
+| `local`, `browser_google_edge`, `browser_google_experimental*` (import) | Mapped → `browser_google` + `import_hint` |
 
 SST JSON import **preserves** `local_parakeet` (does not remap to `browser_google`). Readiness is a runtime gate, not an import remap.
 
@@ -369,7 +367,7 @@ Removed providers (e.g. `mymemory`) → fallback `google_translate_v2`.
 
 ### Profiles
 
-`user-data/profiles/{name}.toml` — named snapshots via `/api/profiles/*`.
+`user-data/profiles/{name}.json` — named snapshots via `/api/profiles/*`.
 
 ## 8. HTTP API (local)
 
@@ -397,7 +395,7 @@ Global middleware: CSP header, `Cache-Control: no-store`.
 | --- | --- | --- |
 | GET | `/api/devices/audio-inputs` | Empty list (browser ASR uses `getUserMedia`) |
 | GET | `/api/openai/recommended-models` | Static recommended models |
-| POST | `/api/openai/models` | Static list (key not used yet) |
+| POST | `/api/openai/models` | Live OpenAI-compatible `GET {base}/models` (chat filter for api.openai.com) |
 | POST | `/api/openai/usable-models` | Alias |
 
 ### Settings / Profiles
@@ -407,7 +405,7 @@ Global middleware: CSP header, `Cache-Control: no-store`.
 | GET | `/api/settings/load` | Config + subtitle presets + font catalog |
 | POST | `/api/settings/save` | Merge/save + live apply |
 | GET/POST/DELETE | `/api/profiles`, `/api/profiles/{name}` | Profile CRUD |
-| POST | `/api/ui/sync` | Debounced UI-only sync → `ui_config_sync` on EventBus (theme/locale across dashboard + TTS) |
+| POST | `/api/ui/sync` | Debounced UI-only sync → `ui_config_sync` on EventBus (theme/locale/`ui.font_family` across dashboard, Web ASR, TTS, Local ASR) |
 
 ### Runtime / OBS
 
@@ -455,7 +453,6 @@ Protected like other `/api/*`. Full table in [§18 Local ASR Module](#18-local-a
 | GET | `/` | `bin/dashboard/index.html` |
 | GET | `/overlay` | `bin/overlay/overlay.html` |
 | GET | `/google-asr` | `bin/worker/index.html` |
-| GET | `/google-asr-edge` | Same worker bundle |
 | GET | `/tts` | `bin/tts/index.html` |
 | GET | `/local-asr` | `bin/local-asr/index.html` |
 | GET | `/project-fonts.css` | Generated `@font-face` from `bin/fonts/` |
@@ -503,7 +500,7 @@ Payload enrichment: `event_sequence`, `created_at_ms`, `event_type` (`WsEventPub
 | `translation_update` | Per-sequence translation results |
 | `twitch_chat_message` | Twitch chat for TTS |
 | `twitch_connection_update` | Twitch connection state |
-| `ui_config_sync` | `{ ui: … }` theme/locale sync (Tauri IPC + optional WS when published via `/api/ui/sync`) |
+| `ui_config_sync` | `{ ui: … }` theme/locale/`font_family` sync (Tauri IPC + optional WS when published via `/api/ui/sync`) |
 
 **Stale guard:** overlay (`overlay.js` + `ws-stale-guard-logic.js`) drops stale events after stop/start (timestamp-first on sequence reset).
 
@@ -512,8 +509,8 @@ Payload enrichment: `event_sequence`, `created_at_ms`, `event_type` (`WsEventPub
 **Implementation:** `RuntimeEventBus` (`crates/voicesub-ws/src/event_bus.rs`) + Tauri emit `runtime-event` (`src-tauri/src/lib.rs`).
 
 - Main dashboard (`src/lib/runtime-events.ts`) and TTS module (`src-tts/App.svelte`) **do not** open `ws://127.0.0.1:8765/ws/events`; they receive the same `{ type, payload }` envelopes via Tauri events.
-- On subscribe: IPC `get_runtime_state_snapshot` replays runtime/subtitle/overlay/translation/diagnostics without WS handshake race.
-- `WsEventPublisher` mirrors broadcasts into the EventBus for shell clients; OBS overlay remains WS-only.
+- On subscribe: attach `listen(runtime-event)` **first** (buffer live frames), then IPC `get_runtime_state_snapshot`, then drain the buffer so a stale snapshot cannot overwrite newer live events. Dashboard replay prefers `overlay_update` (falls back to `subtitle_payload_update`); TTS replay is scoped to `runtime_update` + `twitch_connection_update` only.
+- `WsEventPublisher` mirrors most broadcasts into the EventBus for shell clients; OBS overlay remains WS-only. **Twitch chat** uses `publish_event_bus_only` (no `/ws/events` fanout); connection updates still hit the hub for snapshot replay.
 
 **Legacy:** `src/lib/ws.ts` (`EventsSocket`) for dev/external browser clients; production Tauri shell uses `runtime-events.ts`.
 
@@ -541,6 +538,8 @@ Payload enrichment: `event_sequence`, `created_at_ms`, `event_type` (`WsEventPub
 
 **Registration:** `src-tauri/src/lib.rs` → `tauri::generate_handler!`
 
+**Capabilities (per window):** `src-tauri/capabilities/default.json` (main — full `allow-voicesub-ipc`), `tts.json` (`allow-voicesub-tts-ipc`), `local-asr.json` (`allow-voicesub-local-asr-ipc`). `get_loopback_api_token` is allowlisted on all three.
+
 ### Shell commands
 
 | Command | Purpose |
@@ -549,7 +548,7 @@ Payload enrichment: `event_sequence`, `created_at_ms`, `event_type` (`WsEventPub
 | `get_loopback_api_token` | Per-session token for protected `/api/*` (fallback when HTML injection unavailable) |
 | `set_dashboard_layout` | Compact (390×844) vs standard (1280×900) window |
 | `launch_browser_worker` | Launch Chrome to worker URL without full runtime start |
-| `open_external_https_url` | Open validated HTTPS URL in system browser (update banner **Download**) |
+| `open_external_https_url` | Open allowlisted HTTPS URL in system browser (update banner, translation provider setup) |
 | `open_local_http_url` | Open validated loopback HTTP URL in system browser |
 
 ### TTS commands (`src-tauri/src/tts.rs`)
@@ -596,9 +595,9 @@ Module domain logic stays in `voicesub-asr-local` + HTTP; Tauri is window lifecy
 | `event_routing.rs` | Per-window `runtime-event` type filters + snapshot replay envelopes |
 | `ipc_pump.rs` | Bus→IPC pump: overlay coalescing (dashboard only), lag-resync debounce |
 
-**Tauri events (shell clients):** `runtime-event` (WS-shaped envelopes), `tts-speech-activity` (planned speech queue items for TTS UI log).
+**Tauri events (shell clients):** `runtime-event` (WS-shaped envelopes), `tts-speech-activity` / `playback-finished` — **`emit_to(tts)` only** (not global `emit`).
 
-**`runtime-event` routing (per window):** the bus→IPC pump (`src-tauri/src/ipc_pump.rs`, filters in `event_routing.rs`) emits with `emit_to(label, …)`, not a global `emit`. The **main** dashboard window receives every envelope; the **tts** window receives only `twitch_chat_message`, `twitch_connection_update`, `runtime_update`, `runtime_status`, `ui_config_sync` (the types `handleRuntimeEvent` acts on). This keeps the high-frequency `transcript_update` / `overlay_update` stream off the TTS webview's IPC channel. Payloads are forwarded by reference (no per-event deep clone). **`overlay_update` IPC to the main dashboard is trailing-edge coalesced** (default 90 ms, env `VOICESUB_OVERLAY_IPC_MIN_INTERVAL_MS`); OBS `/ws/events` still receives every frame. `runtime_update` / `translation_update` flush any pending coalesced overlay immediately. On `broadcast::RecvError::Lagged`, the pump records metrics (`event_bus_consumer_lagged_*`), debounces full snapshot resync (200 ms), then re-emits envelopes (`snapshot_to_envelopes`).
+**`runtime-event` routing (per window):** the bus→IPC pump (`src-tauri/src/ipc_pump.rs`, filters in `event_routing.rs`) emits with `emit_to(label, …)`, not a global `emit`. The **main** dashboard window receives every envelope; the **tts** window receives only `twitch_chat_message`, `twitch_connection_update`, `runtime_update`, `runtime_status`, `ui_config_sync` (the types `handleRuntimeEvent` acts on); the **local-asr** window receives only `ui_config_sync` for live theme/locale/font sync without Save. The Local ASR and TTS module UIs must **not** open `/ws/events` for UI sync (BroadcastChannel + Tauri IPC only) — a WS client would still receive full-rate overlay/runtime frames. `setLocale` is idempotent so `sst:locale-changed` / BroadcastChannel handlers cannot feedback-spin. This keeps the high-frequency `transcript_update` / `overlay_update` stream off module webview IPC channels. Payloads are forwarded by reference (no per-event deep clone). **`overlay_update` IPC to the main dashboard is trailing-edge coalesced** (default 90 ms, env `VOICESUB_OVERLAY_IPC_MIN_INTERVAL_MS`); OBS `/ws/events` still receives every frame. `runtime_update` / `translation_update` flush any pending coalesced overlay immediately. On `broadcast::RecvError::Lagged`, the pump records metrics (`event_bus_consumer_lagged_*`), queues a pending snapshot resync (never drops the last needed sync; 200 ms coalesce between follow-ups), then re-emits envelopes (`snapshot_to_envelopes` — overlay preferred over raw subtitle).
 
 **Partial coalescing:** `transcript_update` partials are leading-edge throttled in `TranscriptController` (default 90 ms, env `VOICESUB_TRANSCRIPT_PARTIAL_MIN_INTERVAL_MS`; new phrase/`sequence` and all finals bypass). Subtitle lifecycle and WS `overlay_update` still see every partial; ingest applies subtitle state **before** async transcript fanout. Only the redundant transcript IPC/WS channel is rate-limited.
 
@@ -665,7 +664,9 @@ With `logging.full_enabled`, close steps (`shutdown_begin`, `shutdown_step`, `sh
 
 ### Diagnostics ZIP
 
-`GET /api/exports/diagnostics` bundles: `runtime_status.json`, `config_redacted.json`, `environment.txt`, `latest_session.jsonl`, `core.log`, `runtime-events.log`.
+`GET /api/exports/diagnostics` bundles: `runtime_status.json`, `config_redacted.json`, `environment.txt`, `latest_session.jsonl`, `core.log`, `runtime-events.log` (plus deep JSONL traces when `logging.full_enabled`).
+
+ZIP files are written under `user-data/exports/` as `diagnostics-{unix}_{ms}.zip`. The exporter keeps the newest **12** diagnostics ZIPs and deletes older ones.
 
 ## 12. Browser Speech Worker
 
@@ -674,21 +675,20 @@ With `logging.full_enabled`, close steps (`shutdown_begin`, `shutdown_step`, `sh
 | Constant | Value |
 | --- | --- |
 | `WORKER_PATH` | `/google-asr` |
-| Edge alias | `/google-asr-edge` |
 | Launch URL | `{base}/google-asr?autostart=1[&locale={ui.language}]` |
 
 `worker_launch_browser`: `auto` | `google_chrome` (unknown → `auto`).
 
 ### Chrome launch invariants
 
-- **Separate** Chrome/Edge window with **visible address bar**
+- **Separate** Chrome window with **visible address bar**
 - Isolated `--user-data-dir`: `{user-data}/browser-worker-profile-classic-{engine}/`
-- Edge: `--disable-sync`, `--allow-browser-signin=false`; **never** `--disable-extensions` / `--bwsi`
-- **No** `--app`, hidden windows, in-tab worker
+- **Never** `--disable-extensions` / `--bwsi` / `--app=`
+- **No** hidden windows or in-tab worker
 - Anti-throttling Chrome flags + Windows EcoQoS opt-out (`launch_config.rs`, `ecoqos.rs`)
 - Detached process at **`ABOVE_NORMAL_PRIORITY_CLASS`** when `use_high_priority` (default true): keeps ASR responsive without `HIGH_PRIORITY_CLASS` preempting foreground apps and starving the rest of the system. Falls back to normal priority on `ERROR_ACCESS_DENIED`. Stop via `taskkill /T /F` (only when real `pid > 0`)
-- **Orphan reaping (`orphan_guard.rs`):** the live worker PID is persisted to `user-data/browser-worker.pid` on launch and cleared on graceful stop. `RuntimeService::start` reaps a leftover worker from a previous *crashed* session — but only if the persisted PID still maps to a Chromium-family image (`chrome.exe` / `msedge.exe`), guarding against PID reuse
-- **Launch stability (0.5.2+):** `launch_stability.rs` (flag profile), `profile_bloat_guard.rs` (profile dir hygiene), `process_affinity.rs` (Windows CPU affinity); contract tests in `crates/voicesub-browser/tests/chrome_launch_contract.rs`
+- **Orphan reaping (`orphan_guard.rs`):** the live worker PID is persisted to `user-data/browser-worker.pid` on launch and cleared after a successful kill. `RuntimeService::start` reaps a leftover worker from a previous *crashed* session — but only if the persisted PID still maps to `chrome.exe`. Failed kills keep the PID file for retry.
+- **Launch stability (0.5.2+):** `launch_stability.rs` (flag profile), `profile_bloat_guard.rs` (profile dir hygiene), `process_affinity.rs` (opt-in Windows CPU affinity via `VOICESUB_BROWSER_AFFINITY`); contract tests in `crates/voicesub-browser/tests/chrome_launch_contract.rs`
 
 ### Test harness (no Chrome spawn)
 
@@ -757,7 +757,7 @@ After a **committed** segment (natural or forced final) whose peak partial or fi
 **Crate:** `voicesub-translation`  
 **Entry:** `TranslationDispatcher` (`dispatcher.rs`)
 
-### Providers (13)
+### Providers (17)
 
 `SUPPORTED_PROVIDERS` in `providers/mod.rs`:
 
@@ -765,8 +765,6 @@ After a **committed** segment (natural or forced final) whose peak partial or fi
 | --- | --- |
 | `google_translate_v2` | API (default) |
 | `google_cloud_translation_v3` | API |
-| `google_gas_url` | API |
-| `google_web` | experimental |
 | `azure_translator` | API |
 | `deepl` | API |
 | `libretranslate` | API/self-hosted |
@@ -774,8 +772,16 @@ After a **committed** segment (natural or forced final) whose peak partial or fi
 | `openrouter` | llm |
 | `lm_studio` | local_llm |
 | `ollama` | local_llm |
-| `public_libretranslate_mirror` | API |
+| `baidu_translate` | china (free-tier quota) |
+| `youdao_translate` | china (free-tier quota) |
+| `tencent_tmt` | china (free-tier quota) |
+| `caiyun_translator` | china (zh/en/ja) |
+| `google_gas_url` | experimental |
+| `google_web` | experimental |
+| `public_libretranslate_mirror` | experimental |
 | `free_web_translate` | experimental |
+
+Provider notes: DeepL maps UI codes (`en`/`zh-cn`/`pt`) to API targets and picks Free vs Pro URL from the key (`:fx` → free) unless a custom `api_url` is set. Google v3 short model ids expand to full resource names. Azure prefers `zh-Hans`/`zh-Hant`; LibreTranslate maps Chinese to `zh`/`zt`. China providers: Baidu / Youdao / Tencent use free monthly quotas after console registration; Caiyun supports zh/en/ja only.
 
 Up to **5 translation lines** (`translation_1`…`translation_5`). Test stub `stub` — not in production registry.
 
@@ -785,6 +791,8 @@ Up to **5 translation lines** (`translation_1`…`translation_5`). Test stub `st
 - Late translations **allowed** (no wall-clock stale drop on browser path)
 - Preview supersession by `(segment_id, revision)`
 - Stale drop for superseded **in-flight** jobs on new segment/revision
+- Persistent cache under `user-data/translation-cache/` survives restart when settings are unchanged (first `apply_live_settings` does not wipe disk)
+- Per-request HTTP timeouts honor `timeout_ms` (client ceiling 300s); local LLM providers (`lm_studio` / `ollama`) use a ≥120s floor so JIT model load is not aborted; provider concurrency limits refresh on live settings apply
 
 ## 14. Subtitle Lifecycle and Presentation
 
@@ -1239,7 +1247,7 @@ Config key: `ui.language` (empty = browser default).
 1. **Local-first:** default localhost bind; no cloud assumptions.
 2. **Browser worker visibility:** separate window, visible URL bar, no hidden/throttled-to-death modes.
 3. **Subtitle lifecycle:** completed block persists until new phrase finalized; late translations allowed on browser path.
-4. **Translation:** 13 providers, full dispatcher semantics (queue, stale drop, supersession).
+4. **Translation:** 17 providers, full dispatcher semantics (queue, stale drop, supersession).
 5. **Overlay separation:** vanilla HTML for OBS; not bundled in dashboard Vite chunk.
 6. **No Node in runtime:** only compile-time frontend toolchain.
 7. **Config import:** legacy SST `config.json` import preserves user intent except explicitly removed modes.
@@ -1249,7 +1257,7 @@ Config key: `ui.language` (empty = browser default).
 ### 27.1 Current limitations
 
 - GitHub update **check + dashboard banner** implemented; installer auto-download not implemented (opens release page in system browser)
-- `POST /api/openai/models` — static list; live OpenAI model fetch deferred
+- `POST /api/openai/models` — live OpenAI-compatible model list; official OpenAI host filters to chat models
 - Browser ASR: audio input enumeration empty in core devices API (mic lives in Chrome). Local ASR enumerates mics via `GET /api/asr/local/mics/list` (cpal).
 
 ### 27.2 Technical debt
@@ -1290,7 +1298,7 @@ Config key: `ui.language` (empty = browser default).
 | Term | Meaning |
 | --- | --- |
 | **ASR** | Automatic Speech Recognition |
-| **Browser worker** | Chrome/Edge window running Web Speech at `/google-asr` |
+| **Browser worker** | Chrome window running Web Speech at `/google-asr` |
 | **Completed block** | Finalized subtitle segment shown until next phrase finalizes |
 | **Golden test** | Fixture-based regression test |
 | **Overlay** | Vanilla OBS Browser Source page at `/overlay` |
