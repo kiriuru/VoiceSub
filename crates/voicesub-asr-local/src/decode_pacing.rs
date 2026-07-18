@@ -100,13 +100,13 @@ impl DecodePacer {
     }
 }
 
-/// Live VAD force-final ceiling.
+/// Live VAD force-final ceiling (ms) when silence hold never fires.
 ///
-/// Keep this high so continuous speech accumulates as one subtitle phrase until a real
-/// silence hold. Latency on long buffers is handled by adaptive partial pacing — not by
-/// chopping the segment every few seconds (5500 ms felt like "cuts and restarts").
+/// Matches Local ASR UI / SST defaults (`maxSegmentMs: 5500`). Silence
+/// (`min_silence_ms`) remains the primary finalize path; this ceiling stops
+/// sticky WebRTC VAD from growing one partial for minutes without a Final.
 pub fn max_segment_ms_for_preset(_preset: &str) -> u32 {
-    120_000
+    5_500
 }
 
 #[cfg(test)]
@@ -146,9 +146,9 @@ mod tests {
     }
 
     #[test]
-    fn preset_max_segment_keeps_phrase_accumulation() {
-        assert_eq!(max_segment_ms_for_preset("low"), 120_000);
-        assert_eq!(max_segment_ms_for_preset("balanced"), 120_000);
-        assert_eq!(max_segment_ms_for_preset("quality"), 120_000);
+    fn preset_max_segment_force_finals_like_ui() {
+        assert_eq!(max_segment_ms_for_preset("low"), 5_500);
+        assert_eq!(max_segment_ms_for_preset("balanced"), 5_500);
+        assert_eq!(max_segment_ms_for_preset("quality"), 5_500);
     }
 }

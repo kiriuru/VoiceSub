@@ -1038,6 +1038,7 @@ Stop останавливает local pipeline (или browser path, если а
 
 - Пресеты latency: `low` / `balanced` / `quality`
 - Partial policy: `word_growth` через `voicesub-partial-emit`
+- VAD force-final потолок: `vad.max_segment_ms` по умолчанию **5500** (тишина — основной путь; потолок останавливает рост partial при «липком» speech)
 - Hallucination filter, emit telemetry, checklist setup (deps → model → mic test → final)
 - После смены realtime/VAD: нужен **Stop → Start** Live-сессии
 

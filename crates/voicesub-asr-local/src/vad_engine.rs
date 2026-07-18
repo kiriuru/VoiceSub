@@ -47,7 +47,7 @@ impl Default for VadEngineConfig {
             finalization_hold_ms: 350,
             min_speech_ms: 180,
             partial_emit_interval_ms: 280,
-            max_segment_ms: 120_000,
+            max_segment_ms: 5_500,
             energy_gate_enabled: false,
             min_rms_for_recognition: 0.0018,
             min_voiced_ratio: 0.0,

@@ -1045,6 +1045,7 @@ Module produces ready-to-display **partial** or **final** text. Core subtitle/tr
 
 - Latency presets: `low` / `balanced` / `quality`
 - Partial policy: `word_growth` via `voicesub-partial-emit`
+- VAD force-final ceiling: `vad.max_segment_ms` default **5500** (silence hold remains primary; ceiling stops sticky-speech partial growth)
 - Hallucination filter, emit telemetry, setup checklist (deps → model → mic test → final received)
 - After realtime/VAD changes: **Stop → Start** required for Live session
 

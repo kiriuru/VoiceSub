@@ -14,6 +14,10 @@ This file covers the desktop line: **VoiceSub** (from `0.5.0`) and earlier **SST
 
 ## [Unreleased]
 
+### Fixed
+
+- Local ASR: restore `max_segment_ms` to **5500** (UI / SST parity). The **120000** preset/default disabled force-final — partials could grow for minutes without a Final when WebRTC VAD stayed sticky; loading a config with exactly `120000` heals it back to `5500`.
+
 ## [0.6.0] - 2026-07-18
 
 ### Added

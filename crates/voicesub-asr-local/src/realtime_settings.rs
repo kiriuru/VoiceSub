@@ -250,7 +250,7 @@ mod tests {
         assert_eq!(vad.min_speech_ms, 180);
         assert_eq!(vad.min_silence_ms, 400);
         assert_eq!(vad.silence_hold_ms, 180);
-        assert_eq!(vad.max_segment_ms, 120_000);
+        assert_eq!(vad.max_segment_ms, 5_500);
         let rt = realtime_overrides_for_preset("balanced");
         assert_eq!(rt.latency_preset, "balanced");
         assert_eq!(rt.first_partial_min_speech_ms, Some(180));

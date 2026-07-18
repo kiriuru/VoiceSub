@@ -282,8 +282,8 @@ fn default_speech_pad_ms() -> u32 {
 }
 
 fn default_max_segment_ms() -> u32 {
-    // Long Live monologues: finalize on silence (or 2 min safety), not every ~5 s.
-    120_000
+    // Force-final ceiling when VAD silence hold never fires (UI / SST parity).
+    5_500
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -558,6 +558,7 @@ impl LocalAsrConfigStore {
             config.model.target_lang = default_target_lang();
         }
         heal_model_path(&mut config, &self.module_dir);
+        heal_broken_max_segment_ms(&mut config);
         Ok(config)
     }
 
@@ -621,9 +622,38 @@ fn heal_model_path(config: &mut LocalAsrConfig, module_dir: &Path) {
     }
 }
 
+/// Remap the known-bad 120s force-final ceiling that left partials growing without Finals.
+///
+/// Only the exact prior default (`120_000`) is healed so intentional long monologue
+/// ceilings (e.g. `90_000`) stay untouched.
+fn heal_broken_max_segment_ms(config: &mut LocalAsrConfig) {
+    const BROKEN_DEFAULT_MS: u32 = 120_000;
+    if config.vad.max_segment_ms == BROKEN_DEFAULT_MS {
+        info!(
+            target: "voicesub.asr_local",
+            from_ms = BROKEN_DEFAULT_MS,
+            to_ms = default_max_segment_ms(),
+            "healed local ASR max_segment_ms (restore UI/SST force-final ceiling)"
+        );
+        config.vad.max_segment_ms = default_max_segment_ms();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn heals_broken_120s_max_segment_default() {
+        let mut config = LocalAsrConfig::default();
+        config.vad.max_segment_ms = 120_000;
+        heal_broken_max_segment_ms(&mut config);
+        assert_eq!(config.vad.max_segment_ms, 5_500);
+
+        config.vad.max_segment_ms = 90_000;
+        heal_broken_max_segment_ms(&mut config);
+        assert_eq!(config.vad.max_segment_ms, 90_000);
+    }
 
     #[test]
     fn normalizes_session_thread_bounds() {
