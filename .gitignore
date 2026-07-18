@@ -80,6 +80,8 @@ src-tauri/windows/installer.nsi
 legacy/
 docs/COMMIT_CONVENTIONS.md
 docs/LOCAL_ASR_MODULE_PLAN.ru.md
+.github/
+.husky/
 
 # --- OS / IDE ---
 .vscode/
