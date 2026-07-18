@@ -40,3 +40,6 @@ lingua = { version = "1.8", default-features = false, features = [
     "vietnamese",
     "thai",
 ] }
+
+[lints]
+workspace = true

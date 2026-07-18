@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::time::Instant;
 
-use crate::policy::{should_emit_partial, PartialEmitInput};
+use crate::policy::{PartialEmitInput, should_emit_partial};
 use crate::settings::PartialEmitSettings;
 
 #[derive(Debug, Default)]

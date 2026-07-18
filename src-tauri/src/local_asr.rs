@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use tauri::{AppHandle, Manager, State, WebviewUrl, WebviewWindowBuilder};
 use tracing::info;
-use voicesub_asr_local::{build_local_asr_module_url, LOCAL_ASR_WINDOW_LABEL};
+use voicesub_asr_local::{LOCAL_ASR_WINDOW_LABEL, build_local_asr_module_url};
 
 pub struct LocalAsrState {
     pub bind_addr: std::net::SocketAddr,
@@ -18,6 +18,8 @@ fn local_asr_webview_data_dir(config_path: &std::path::Path) -> PathBuf {
 }
 
 #[tauri::command]
+// Must stay async on Windows: sync WebviewWindowBuilder::build deadlocks (WebView2).
+#[allow(clippy::unused_async)]
 pub async fn local_asr_open_window(
     app: AppHandle,
     state: State<'_, LocalAsrState>,
@@ -35,7 +37,9 @@ pub async fn local_asr_open_window(
         "creating local asr module window"
     );
     let parsed = url.parse::<url::Url>().map_err(|e| e.to_string())?;
-    let data_dir = local_asr_webview_data_dir(std::path::Path::new("user-data/modules/local-asr/config.toml"));
+    let data_dir = local_asr_webview_data_dir(std::path::Path::new(
+        "user-data/modules/local-asr/config.toml",
+    ));
     let _ = std::fs::create_dir_all(&data_dir);
 
     WebviewWindowBuilder::new(&app, LOCAL_ASR_WINDOW_LABEL, WebviewUrl::External(parsed))

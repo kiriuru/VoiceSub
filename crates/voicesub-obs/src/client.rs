@@ -255,7 +255,7 @@ impl ObsClientHandle {
         match self {
             Self::WebSocket(client) => client.send_request(request_type, request_data).await,
             #[cfg(test)]
-            Self::Mock(client) => client.send_request(request_type, request_data).await,
+            Self::Mock(client) => client.send_request(request_type, request_data),
         }
     }
 
@@ -263,7 +263,7 @@ impl ObsClientHandle {
         match self {
             Self::WebSocket(client) => client.ping().await,
             #[cfg(test)]
-            Self::Mock(client) => client.ping().await,
+            Self::Mock(client) => client.ping(),
         }
     }
 
@@ -271,7 +271,7 @@ impl ObsClientHandle {
         match self {
             Self::WebSocket(client) => client.close().await,
             #[cfg(test)]
-            Self::Mock(client) => client.close().await,
+            Self::Mock(client) => client.close(),
         }
     }
 }
@@ -295,7 +295,7 @@ impl MockObsClient {
         self.requests.lock().unwrap().clone()
     }
 
-    pub async fn send_request(
+    pub fn send_request(
         &mut self,
         request_type: &str,
         request_data: Value,
@@ -325,7 +325,7 @@ impl MockObsClient {
         Ok(Value::Null)
     }
 
-    pub async fn ping(&mut self) -> Result<(), ObsClientError> {
+    pub fn ping(&mut self) -> Result<(), ObsClientError> {
         if self.fail_ping {
             Err(ObsClientError::Protocol("mock ping failure".into()))
         } else {
@@ -333,7 +333,7 @@ impl MockObsClient {
         }
     }
 
-    pub async fn close(self) {}
+    pub fn close(self) {}
 }
 
 #[cfg(test)]

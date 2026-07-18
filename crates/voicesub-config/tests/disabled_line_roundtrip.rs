@@ -1,7 +1,7 @@
 use std::fs;
 
 use serde_json::json;
-use voicesub_config::{normalize_config_payload, ConfigStore};
+use voicesub_config::{ConfigStore, normalize_config_payload};
 
 #[test]
 fn preserves_disabled_translation_line_toml_roundtrip() {

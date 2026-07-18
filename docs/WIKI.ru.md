@@ -276,7 +276,7 @@
 - Провайдер TTS, голос, rate/pitch/volume.
 - **Громкость:** 0–**150%** (native `amplify` через IPC); слайдер и числовая подпись (`85%`, `150%`).
 - **Воспроизведение:** режим **Native** (cpal @ 1.0×) или **Sonic** (libsonic tempo stretch); отдельные WASAPI-устройства для speech и Twitch.
-- Планировщик речи от subtitle payload в Rust (`speech_pipeline.rs`); ручной sample test — `tts_speak_sample`; playback через IPC `tts_play_audio` (без HTMLAudio в браузере).
+- Планировщик речи от subtitle payload в Rust (`speech_pipeline.rs`); ручной sample test — `tts_speak_sample`; playback через in-process `PlaybackHub` (без HTMLAudio в браузере, без webview IPC для audio bytes).
 
 ### Элемент: Twitch
 - OAuth через system browser; implicit grant + poll token.

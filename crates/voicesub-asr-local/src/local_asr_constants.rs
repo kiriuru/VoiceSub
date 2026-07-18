@@ -2,28 +2,8 @@
 
 /// Typical Parakeet silence hallucinations (SST `SHORT_HALLUCINATION_TOKENS`).
 pub const SHORT_HALLUCINATION_TOKENS: &[&str] = &[
-    "yeah",
-    "yeah.",
-    "mm-hmm",
-    "mm-hmm.",
-    "mhm",
-    "mhm.",
-    "uh-huh",
-    "uh-huh.",
-    "okay",
-    "okay.",
-    "ok",
-    "ok.",
-    "hmm",
-    "hmm.",
-    "uh",
-    "uh.",
-    "ah",
-    "ah.",
-    "yep",
-    "yep.",
-    "nope",
-    "nope.",
+    "yeah", "yeah.", "mm-hmm", "mm-hmm.", "mhm", "mhm.", "uh-huh", "uh-huh.", "okay", "okay.",
+    "ok", "ok.", "hmm", "hmm.", "uh", "uh.", "ah", "ah.", "yep", "yep.", "nope", "nope.",
 ];
 
 #[cfg(test)]

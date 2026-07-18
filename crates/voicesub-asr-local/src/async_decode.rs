@@ -1,9 +1,9 @@
 //! Background ONNX decode worker — Parakeet TDT cumulative batch redecode.
 
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
-use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::Instant;
 
@@ -92,6 +92,7 @@ impl WorkerState {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_decode_worker(
     inference: Arc<InferenceEngine>,
     recognition: LocalAsrRecognitionConfig,
@@ -184,23 +185,15 @@ fn decode_batch_tdt(
             .map_err(|err| InferenceError::Runtime(err.to_string()))
     })?;
     let parakeet_us = parakeet_started.elapsed().as_micros() as u64;
-    let timing = DecodeTimingBreakdown::from_parts(
-        audio_samples,
-        prepare_us,
-        preprocess_us,
-        parakeet_us,
-    );
+    let timing =
+        DecodeTimingBreakdown::from_parts(audio_samples, prepare_us, preprocess_us, parakeet_us);
     last_decode_ms.store(timing.total_ms());
     inference.record_decode_timing(timing);
     Ok(non_empty_text(text))
 }
 
 fn non_empty_text(text: String) -> Option<String> {
-    if text.is_empty() {
-        None
-    } else {
-        Some(text)
-    }
+    if text.is_empty() { None } else { Some(text) }
 }
 
 #[cfg(test)]

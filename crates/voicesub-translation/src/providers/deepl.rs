@@ -147,10 +147,7 @@ mod tests {
 
     #[test]
     fn free_key_selects_free_url() {
-        assert_eq!(
-            resolve_deepl_api_url("abc:fx", ""),
-            DEEPL_FREE_API_URL
-        );
+        assert_eq!(resolve_deepl_api_url("abc:fx", ""), DEEPL_FREE_API_URL);
         assert_eq!(
             resolve_deepl_api_url("abc:fx", DEEPL_PRO_API_URL),
             DEEPL_FREE_API_URL

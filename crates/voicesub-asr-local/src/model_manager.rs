@@ -8,7 +8,7 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 use tracing::info;
 
-use crate::model_family::{hf_file_url, FamilyVariantSpec, ModelFamily};
+use crate::model_family::{FamilyVariantSpec, ModelFamily, hf_file_url};
 
 pub const MODEL_VARIANT_INT8: &str = "int8";
 pub const MODEL_VARIANT_FP32: &str = "fp32";
@@ -203,11 +203,7 @@ pub fn resolve_model_dir(
     }
 }
 
-pub fn is_model_installed_for(
-    model_dir: &Path,
-    family: ModelFamily,
-    variant: &str,
-) -> bool {
+pub fn is_model_installed_for(model_dir: &Path, family: ModelFamily, variant: &str) -> bool {
     let Some(spec) = family.parse_variant(variant) else {
         return false;
     };
@@ -237,10 +233,10 @@ fn model_dir_looks_complete(model_dir: &Path, spec: &FamilyVariantSpec) -> bool 
             return false;
         }
     }
-    if let Some(manifest) = load_manifest(model_dir) {
-        if !manifest_matches_spec(&manifest, spec) {
-            return false;
-        }
+    if let Some(manifest) = load_manifest(model_dir)
+        && !manifest_matches_spec(&manifest, spec)
+    {
+        return false;
     }
     true
 }
@@ -249,12 +245,9 @@ fn has_incomplete_part_files(model_dir: &Path) -> bool {
     let Ok(entries) = fs::read_dir(model_dir) else {
         return false;
     };
-    entries.flatten().any(|entry| {
-        entry
-            .file_name()
-            .to_string_lossy()
-            .ends_with(".part")
-    })
+    entries
+        .flatten()
+        .any(|entry| entry.file_name().to_string_lossy().ends_with(".part"))
 }
 
 fn required_file_min_bytes(name: &str) -> u64 {
@@ -324,8 +317,7 @@ pub fn build_all_model_catalogs(
     active_family_raw: &str,
     active_variant: &str,
 ) -> Vec<ModelCatalogEntry> {
-    let active_family =
-        ModelFamily::parse(active_family_raw).unwrap_or(ModelFamily::ParakeetTdt);
+    let active_family = ModelFamily::parse(active_family_raw).unwrap_or(ModelFamily::ParakeetTdt);
     let active_variant = active_variant.trim();
     ModelFamily::ParakeetTdt
         .variants()
@@ -547,10 +539,7 @@ pub fn load_manifest(module_dir: &Path) -> Option<ModelManifest> {
     serde_json::from_str(&raw).ok()
 }
 
-async fn hf_content_length(
-    client: &reqwest::Client,
-    url: &str,
-) -> Result<Option<u64>, ModelError> {
+async fn hf_content_length(client: &reqwest::Client, url: &str) -> Result<Option<u64>, ModelError> {
     let response = client
         .head(url)
         .send()
@@ -627,11 +616,7 @@ fn folder_digest(files: &[ModelManifestFile]) -> String {
 }
 
 fn hex_digest(bytes: impl AsRef<[u8]>) -> String {
-    bytes
-        .as_ref()
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect()
+    bytes.as_ref().iter().map(|b| format!("{b:02x}")).collect()
 }
 
 #[cfg(test)]
@@ -659,14 +644,23 @@ mod tests {
     #[test]
     fn smoothquant_variant_uses_olicorne_repo() {
         let variant = ModelVariant::Int8Smoothquant;
-        assert_eq!(variant.hf_repo(), "Olicorne/parakeet-tdt-0.6b-v3-smoothquant-onnx");
+        assert_eq!(
+            variant.hf_repo(),
+            "Olicorne/parakeet-tdt-0.6b-v3-smoothquant-onnx"
+        );
         assert_eq!(variant.source_author(), "Olicorne");
     }
 
     #[test]
     fn istupakov_variants_use_primary_repo() {
-        assert_eq!(ModelVariant::Int8.hf_repo(), "istupakov/parakeet-tdt-0.6b-v3-onnx");
-        assert_eq!(ModelVariant::Fp32.hf_repo(), "istupakov/parakeet-tdt-0.6b-v3-onnx");
+        assert_eq!(
+            ModelVariant::Int8.hf_repo(),
+            "istupakov/parakeet-tdt-0.6b-v3-onnx"
+        );
+        assert_eq!(
+            ModelVariant::Fp32.hf_repo(),
+            "istupakov/parakeet-tdt-0.6b-v3-onnx"
+        );
         assert_eq!(ModelVariant::Int8.source_author(), "istupakov");
     }
 
@@ -712,12 +706,16 @@ mod tests {
         let module = tempfile::tempdir().unwrap();
         let catalog = build_all_model_catalogs(module.path(), "parakeet_tdt", "int8");
         assert_eq!(catalog.len(), 3);
-        assert!(catalog
-            .iter()
-            .any(|e| e.family == "parakeet_tdt" && e.variant == "int8" && e.active));
-        assert!(catalog
-            .iter()
-            .any(|e| e.family == "parakeet_tdt" && e.variant == "fp32"));
+        assert!(
+            catalog
+                .iter()
+                .any(|e| e.family == "parakeet_tdt" && e.variant == "int8" && e.active)
+        );
+        assert!(
+            catalog
+                .iter()
+                .any(|e| e.family == "parakeet_tdt" && e.variant == "fp32")
+        );
         assert!(catalog.iter().all(|e| !e.installed));
     }
 
@@ -775,12 +773,14 @@ mod tests {
         fs::create_dir_all(&int8_dir).unwrap();
         write_stub_files(&int8_dir, ModelVariant::Int8.required_files());
         let catalog = build_model_catalog(dir.path(), ModelFamily::ParakeetTdt.as_str(), "int8");
-        assert!(catalog
-            .iter()
-            .any(|entry| entry.variant == "int8" && entry.installed && entry.family == "parakeet_tdt"));
-        assert!(catalog
-            .iter()
-            .any(|entry| entry.variant == "fp32" && !entry.installed));
+        assert!(catalog.iter().any(|entry| entry.variant == "int8"
+            && entry.installed
+            && entry.family == "parakeet_tdt"));
+        assert!(
+            catalog
+                .iter()
+                .any(|entry| entry.variant == "fp32" && !entry.installed)
+        );
     }
 
     #[test]
@@ -802,6 +802,10 @@ mod tests {
             module.path(),
         );
         assert_eq!(resolved, sq_dir);
-        assert!(is_model_installed_for(&resolved, family, "int8_smoothquant"));
+        assert!(is_model_installed_for(
+            &resolved,
+            family,
+            "int8_smoothquant"
+        ));
     }
 }

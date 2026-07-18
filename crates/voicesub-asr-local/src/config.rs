@@ -80,7 +80,10 @@ pub struct LocalAsrInferenceConfig {
     #[serde(default = "default_false", alias = "ortProfiling")]
     pub ort_profiling: bool,
     /// Auto-unload after this many successful ONNX decodes while profiling (keeps JSON small).
-    #[serde(default = "default_ort_profiling_max_decodes", alias = "ortProfilingMaxDecodes")]
+    #[serde(
+        default = "default_ort_profiling_max_decodes",
+        alias = "ortProfilingMaxDecodes"
+    )]
     pub ort_profiling_max_decodes: u32,
     #[serde(default = "default_false", alias = "keepModelLoaded")]
     pub keep_model_loaded: bool,
@@ -201,7 +204,10 @@ pub struct LocalAsrVadConfig {
     pub min_voiced_ratio: f32,
     #[serde(default = "default_speech_attack_frames", alias = "speechAttackFrames")]
     pub speech_attack_frames: u32,
-    #[serde(default = "default_speech_preroll_frames", alias = "speechPrerollFrames")]
+    #[serde(
+        default = "default_speech_preroll_frames",
+        alias = "speechPrerollFrames"
+    )]
     pub speech_preroll_frames: u32,
     #[serde(default, alias = "partialEmitIntervalMs")]
     pub partial_emit_interval_ms: Option<u32>,
@@ -300,9 +306,15 @@ pub struct LocalAsrRecognitionConfig {
     pub noise_gate_threshold: f32,
     #[serde(default = "default_true", alias = "hallucinationFilterEnabled")]
     pub hallucination_filter_enabled: bool,
-    #[serde(default = "default_hallucination_min_chars", alias = "hallucinationMinChars")]
+    #[serde(
+        default = "default_hallucination_min_chars",
+        alias = "hallucinationMinChars"
+    )]
     pub hallucination_min_chars: u32,
-    #[serde(default = "default_hallucination_cooldown_ms", alias = "hallucinationCooldownMs")]
+    #[serde(
+        default = "default_hallucination_cooldown_ms",
+        alias = "hallucinationCooldownMs"
+    )]
     pub hallucination_cooldown_ms: u32,
 }
 
@@ -418,7 +430,7 @@ pub struct LocalAsrSetupConfig {
     pub completed_at: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct LocalAsrConfig {
     #[serde(default)]
     pub model: LocalAsrModelConfig,
@@ -494,21 +506,6 @@ impl LocalAsrConfig {
     }
 }
 
-impl Default for LocalAsrConfig {
-    fn default() -> Self {
-        Self {
-            model: LocalAsrModelConfig::default(),
-            inference: LocalAsrInferenceConfig::default(),
-            realtime: LocalAsrRealtimeConfig::default(),
-            vad: LocalAsrVadConfig::default(),
-            recognition: LocalAsrRecognitionConfig::default(),
-            microphone: LocalAsrMicrophoneConfig::default(),
-            deps: LocalAsrDepsConfig::default(),
-            setup: LocalAsrSetupConfig::default(),
-        }
-    }
-}
-
 pub fn normalize_execution_provider(value: &str) -> String {
     match value.trim().to_ascii_lowercase().as_str() {
         EXECUTION_PROVIDER_CUDA => EXECUTION_PROVIDER_CUDA.into(),
@@ -550,8 +547,10 @@ impl LocalAsrConfigStore {
         config.inference.execution_provider =
             normalize_execution_provider(&config.inference.execution_provider);
         normalize_inference_session_options(&mut config.inference);
-        let (family, variant) =
-            crate::model_family::normalize_model_selection(&config.model.family, &config.model.variant);
+        let (family, variant) = crate::model_family::normalize_model_selection(
+            &config.model.family,
+            &config.model.variant,
+        );
         config.model.family = family;
         config.model.variant = variant;
         if config.model.target_lang.trim().is_empty() {
@@ -609,13 +608,17 @@ fn heal_model_path(config: &mut LocalAsrConfig, module_dir: &Path) {
         if config.model.path != next {
             config.model.path = next;
         }
-        if config.model.manifest_sha256.is_empty() {
-            if let Some(manifest) = load_manifest(&model_dir) {
-                config.model.manifest_sha256 = manifest.folder_sha256;
-            }
+        if config.model.manifest_sha256.is_empty()
+            && let Some(manifest) = load_manifest(&model_dir)
+        {
+            config.model.manifest_sha256 = manifest.folder_sha256;
         }
     } else if !config.model.path.trim().is_empty()
-        && !is_model_installed_for(Path::new(config.model.path.trim()), family, &config.model.variant)
+        && !is_model_installed_for(
+            Path::new(config.model.path.trim()),
+            family,
+            &config.model.variant,
+        )
     {
         config.model.path.clear();
         config.model.manifest_sha256.clear();
@@ -657,10 +660,12 @@ mod tests {
 
     #[test]
     fn normalizes_session_thread_bounds() {
-        let mut inf = LocalAsrInferenceConfig::default();
-        inf.intra_op_threads = 0;
-        inf.inter_op_threads = 99;
-        inf.graph_optimization_level = 9;
+        let mut inf = LocalAsrInferenceConfig {
+            intra_op_threads: 0,
+            inter_op_threads: 99,
+            graph_optimization_level: 9,
+            ..LocalAsrInferenceConfig::default()
+        };
         normalize_inference_session_options(&mut inf);
         assert_eq!(inf.intra_op_threads, 1);
         assert_eq!(inf.inter_op_threads, 64);
@@ -669,8 +674,14 @@ mod tests {
 
     #[test]
     fn normalizes_execution_provider() {
-        assert_eq!(normalize_execution_provider("CUDA"), EXECUTION_PROVIDER_CUDA);
-        assert_eq!(normalize_execution_provider("unknown"), EXECUTION_PROVIDER_CPU);
+        assert_eq!(
+            normalize_execution_provider("CUDA"),
+            EXECUTION_PROVIDER_CUDA
+        );
+        assert_eq!(
+            normalize_execution_provider("unknown"),
+            EXECUTION_PROVIDER_CPU
+        );
     }
 
     #[test]

@@ -196,11 +196,10 @@ impl VadEngine {
                 if self.silence_frames >= self.silence_hold_frames
                     && self.speech_frames.len() >= self.min_speech_frames as usize
                     && self.last_partial_frame_count != self.speech_frames.len()
+                    && let Some(partial) = self.build_segment(VadSegmentKind::Partial)
                 {
-                    if let Some(partial) = self.build_segment(VadSegmentKind::Partial) {
-                        segments.push(partial);
-                        self.last_partial_frame_count = self.speech_frames.len();
-                    }
+                    segments.push(partial);
+                    self.last_partial_frame_count = self.speech_frames.len();
                 }
                 if self.silence_frames >= self.finalization_hold_frames {
                     if let Some(final_segment) = self.build_segment(VadSegmentKind::Final) {
@@ -242,11 +241,13 @@ impl VadEngine {
 
     fn apply_config(&mut self, config: VadEngineConfig) {
         let mode = vad_mode_from_u8(config.mode);
-        let _ = self.vad.set_mode(mode);
+        self.vad.set_mode(mode);
         self.config = config;
         self.speech_attack_frames = self.config.speech_attack_frames.max(1);
         self.silence_hold_frames = ceil_frames(
-            self.config.silence_hold_ms.max(self.config.frame_duration_ms),
+            self.config
+                .silence_hold_ms
+                .max(self.config.frame_duration_ms),
             self.config.frame_duration_ms,
         )
         .max(1);
@@ -257,9 +258,12 @@ impl VadEngine {
             self.config.frame_duration_ms,
         )
         .max(1);
-        self.min_speech_frames = ceil_frames(self.config.min_speech_ms, self.config.frame_duration_ms);
+        self.min_speech_frames =
+            ceil_frames(self.config.min_speech_ms, self.config.frame_duration_ms);
         self.first_partial_min_speech_frames = ceil_frames(
-            self.config.first_partial_min_speech_ms.max(self.config.min_speech_ms),
+            self.config
+                .first_partial_min_speech_ms
+                .max(self.config.min_speech_ms),
             self.config.frame_duration_ms,
         );
         self.partial_interval_frames = ceil_frames(
@@ -270,7 +274,9 @@ impl VadEngine {
         )
         .max(1);
         self.max_segment_frames = ceil_frames(
-            self.config.max_segment_ms.max(self.config.frame_duration_ms),
+            self.config
+                .max_segment_ms
+                .max(self.config.frame_duration_ms),
             self.config.frame_duration_ms,
         )
         .max(1);
@@ -312,7 +318,12 @@ impl VadEngine {
         self.silence_frames = 0;
     }
 
-    fn append_voiced_frame(&mut self, frame: Vec<u8>, frame_rms: f32, segments: &mut Vec<VadSegment>) {
+    fn append_voiced_frame(
+        &mut self,
+        frame: Vec<u8>,
+        frame_rms: f32,
+        segments: &mut Vec<VadSegment>,
+    ) {
         self.speech_frames.push(frame);
         self.speech_rms_values.push(frame_rms);
         self.silence_frames = 0;
@@ -322,8 +333,10 @@ impl VadEngine {
     }
 
     fn try_grow_partial_or_finalize_max_segment(&mut self, segments: &mut Vec<VadSegment>) {
-        let frames_since_last_partial =
-            self.speech_frames.len().saturating_sub(self.last_partial_frame_count);
+        let frames_since_last_partial = self
+            .speech_frames
+            .len()
+            .saturating_sub(self.last_partial_frame_count);
         let target_partial_frames = if self.last_partial_frame_count == 0 {
             self.first_partial_min_speech_frames as usize
         } else {
@@ -331,11 +344,10 @@ impl VadEngine {
         };
         if self.speech_frames.len() >= self.min_speech_frames as usize
             && frames_since_last_partial >= target_partial_frames
+            && let Some(partial) = self.build_segment(VadSegmentKind::Partial)
         {
-            if let Some(partial) = self.build_segment(VadSegmentKind::Partial) {
-                segments.push(partial);
-                self.last_partial_frame_count = self.speech_frames.len();
-            }
+            segments.push(partial);
+            self.last_partial_frame_count = self.speech_frames.len();
         }
         if self.speech_frames.len() >= self.max_segment_frames as usize {
             if let Some(final_segment) = self.build_segment(VadSegmentKind::Final) {
@@ -380,10 +392,11 @@ impl VadEngine {
         {
             return false;
         }
-        if self.config.min_voiced_ratio > 0.0 && self.segment_total_frames > 0 {
-            if self.segment_voiced_ratio() < self.config.min_voiced_ratio {
-                return false;
-            }
+        if self.config.min_voiced_ratio > 0.0
+            && self.segment_total_frames > 0
+            && self.segment_voiced_ratio() < self.config.min_voiced_ratio
+        {
+            return false;
         }
         true
     }
@@ -422,7 +435,13 @@ impl VadEngine {
     }
 
     fn ambient_rms_floor(&self) -> f32 {
-        let median = median(self.ambient_rms_values.iter().copied().collect::<Vec<_>>().as_slice());
+        let median = median(
+            self.ambient_rms_values
+                .iter()
+                .copied()
+                .collect::<Vec<_>>()
+                .as_slice(),
+        );
         let ema = self.ambient_rms_ema;
         if median > 0.0 && ema > 0.0 {
             return median.max(ema * 0.98);
@@ -430,11 +449,7 @@ impl VadEngine {
         if median > 0.0 {
             return median;
         }
-        if ema > 0.0 {
-            ema
-        } else {
-            0.0
-        }
+        if ema > 0.0 { ema } else { 0.0 }
     }
 
     fn adaptive_pre_partial_rms_threshold(&self) -> f32 {

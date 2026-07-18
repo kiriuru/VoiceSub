@@ -273,10 +273,8 @@ mod tests {
 
     #[test]
     fn latin_only_faces_get_unicode_range_so_cyrillic_falls_through() {
-        let dir = std::env::temp_dir().join(format!(
-            "voicesub-fonts-range-test-{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("voicesub-fonts-range-test-{}", std::process::id()));
         let _ = std::fs::create_dir_all(&dir);
         // Minimal valid-enough TTF is not required — stylesheet only needs the filename.
         let font_path = dir.join("VT323-Regular.ttf");
@@ -295,10 +293,7 @@ mod tests {
         );
         // Cyrillic-capable Ubuntu Mono must NOT be range-limited.
         let ubuntu_idx = css.find("font-family: \"Ubuntu Mono Regular\"").unwrap();
-        let ubuntu_block_end = css[ubuntu_idx..]
-            .find('}')
-            .map(|i| ubuntu_idx + i)
-            .unwrap();
+        let ubuntu_block_end = css[ubuntu_idx..].find('}').map(|i| ubuntu_idx + i).unwrap();
         let ubuntu_block = &css[ubuntu_idx..ubuntu_block_end];
         assert!(
             !ubuntu_block.contains("unicode-range"),
@@ -310,10 +305,8 @@ mod tests {
 
     #[test]
     fn jetbrains_family_name_keeps_brand_split_from_filename() {
-        let dir = std::env::temp_dir().join(format!(
-            "voicesub-fonts-jb-test-{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("voicesub-fonts-jb-test-{}", std::process::id()));
         let _ = std::fs::create_dir_all(&dir);
         std::fs::write(dir.join("JetBrainsMono-Regular.ttf"), b"x").unwrap();
         let entries = list_project_font_entries(&dir);
@@ -333,10 +326,8 @@ mod tests {
             "IBM Plex Mono must stay unrestricted for Cyrillic in Film Noir"
         );
 
-        let dir = std::env::temp_dir().join(format!(
-            "voicesub-fonts-noir-test-{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("voicesub-fonts-noir-test-{}", std::process::id()));
         let _ = std::fs::create_dir_all(&dir);
         std::fs::write(dir.join("SpecialElite-Regular.ttf"), b"x").unwrap();
         std::fs::write(dir.join("IBMPlexMono-Medium.ttf"), b"x").unwrap();

@@ -1,3 +1,5 @@
+#[cfg(test)]
+mod acl_matrix;
 mod dashboard_nav;
 mod event_routing;
 mod ipc_pump;
@@ -42,11 +44,6 @@ struct AppState {
 }
 
 #[tauri::command]
-fn voicesub_version() -> String {
-    voicesub_types::PROJECT_VERSION.to_string()
-}
-
-#[tauri::command]
 fn set_dashboard_layout(window: WebviewWindow, compact: bool) -> Result<(), String> {
     // Called only when ui.layout actually changes (dashboard gates repeats).
     // Always apply size constraints for the mode, then center once.
@@ -86,17 +83,6 @@ async fn get_runtime_state_snapshot(
     state: State<'_, AppState>,
 ) -> Result<RuntimeStateSnapshot, String> {
     Ok(state.runtime.runtime_state_snapshot().await)
-}
-
-#[tauri::command]
-async fn launch_browser_worker(state: State<'_, AppState>) -> Result<String, String> {
-    let result = state
-        .runtime
-        .launch_browser_worker()
-        .await
-        .map_err(|err| err.to_string())?;
-    info!(pid = result.pid, %state.bind_addr, "browser worker launched via IPC");
-    Ok(format!("pid={}", result.pid))
 }
 
 async fn stop_runtime_session(bind_addr: SocketAddr, api_token: &str) {
@@ -147,8 +133,8 @@ pub fn run() {
     let oauth_bridge = Arc::new(TwitchOAuthBridge::default());
     let runtime_service = Arc::new(RuntimeService::with_config(
         &project_root,
-        config.clone(),
-        oauth_bridge.clone(),
+        config,
+        oauth_bridge,
     ));
 
     let http_runtime = tokio::runtime::Builder::new_multi_thread()
@@ -166,7 +152,7 @@ pub fn run() {
 
     let http_handle = http_runtime.handle().clone();
     let ws_publisher = runtime_service.ws_publisher();
-    let publisher_for_tts = ws_publisher.clone();
+    let publisher_for_tts = ws_publisher;
     // Twitch → desktop RuntimeEventBus. Chat is bus-only (OBS must not see it).
     // Connection updates also hit EventsHub so snapshot replay can restore TTS UI.
     let tts_broadcaster: voicesub_twitch::EventBroadcaster = Arc::new(move |message| {
@@ -197,7 +183,7 @@ pub fn run() {
         tts_service.clone(),
         playback_hub.clone(),
         paths.tts_module_dir(),
-        http_handle.clone(),
+        http_handle,
     ));
 
     runtime_service.set_subtitle_payload_listener(Arc::new({
@@ -212,21 +198,19 @@ pub fn run() {
             runtime: runtime_service,
             handle: Mutex::new(Some(handle)),
             bind_addr,
-            project_root: project_root.clone(),
+            project_root,
             _http_runtime: http_runtime,
         })
         .manage(local_asr::LocalAsrState { bind_addr })
         .manage(TtsState {
-            service: tts_service.clone(),
+            service: tts_service,
             bind_addr,
-            playback: playback_hub.clone(),
-            pipeline: speech_pipeline.clone(),
+            playback: playback_hub,
+            pipeline: speech_pipeline,
         })
         .manage(webview_memory)
         .invoke_handler(tauri::generate_handler![
-            voicesub_version,
             get_loopback_api_token,
-            launch_browser_worker,
             get_runtime_state_snapshot,
             set_dashboard_layout,
             tts::tts_get_config,
@@ -235,8 +219,6 @@ pub fn run() {
             tts::tts_set_audio_device,
             tts::tts_set_channel_audio_device,
             tts::tts_set_playback_mode,
-            tts::tts_play_audio,
-            tts::tts_stop_channel,
             tts::tts_list_output_devices,
             tts::tts_get_audio_routing,
             tts::tts_bind_window_audio,
@@ -302,7 +284,7 @@ pub fn run() {
                 pipeline_for_bus,
             ));
             let pipeline_for_playback = tts_state.pipeline.clone();
-            let app_for_playback = app_handle.clone();
+            let app_for_playback = app_handle;
             std::thread::Builder::new()
                 .name("voicesub-tts-playback-events".into())
                 .spawn(move || {

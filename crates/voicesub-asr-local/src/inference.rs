@@ -9,11 +9,11 @@ use thiserror::Error;
 use tracing::{info, warn};
 
 use crate::config::{
-    normalize_inference_session_options, LocalAsrConfig, LocalAsrInferenceConfig,
-    EXECUTION_PROVIDER_CPU, EXECUTION_PROVIDER_CUDA,
+    EXECUTION_PROVIDER_CPU, EXECUTION_PROVIDER_CUDA, LocalAsrConfig, LocalAsrInferenceConfig,
+    normalize_inference_session_options,
 };
 use crate::deps::{
-    env_check, ort_dll_path_for_provider, prepare_ort_runtime, validate_deps_for_provider, DepError,
+    DepError, env_check, ort_dll_path_for_provider, prepare_ort_runtime, validate_deps_for_provider,
 };
 use crate::model_family::ModelFamily;
 use crate::model_manager::{is_model_installed_for, resolve_model_dir};
@@ -86,6 +86,12 @@ pub struct InferenceEngine {
     session_meta: Mutex<Option<ActiveSessionMeta>>,
 }
 
+impl Default for InferenceEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl InferenceEngine {
     pub fn new() -> Self {
         Self {
@@ -97,7 +103,8 @@ impl InferenceEngine {
 
     pub fn ensure_ort_initialized(module_dir: &Path) -> Result<(), InferenceError> {
         static ORT_READY: OnceLock<Result<(), String>> = OnceLock::new();
-        let cached = ORT_READY.get_or_init(|| init_ort_environment(module_dir).map_err(|err| err.to_string()));
+        let cached = ORT_READY
+            .get_or_init(|| init_ort_environment(module_dir).map_err(|err| err.to_string()));
         match cached.as_ref() {
             Ok(()) => Ok(()),
             Err(msg) => Err(InferenceError::Runtime(msg.clone())),
@@ -235,41 +242,36 @@ impl InferenceEngine {
         self.unload();
 
         let started = Instant::now();
-        let (model, active_provider) = match try_load_tdt(
-            module_dir,
-            logs_dir,
-            config,
-            family,
-            &model_dir,
-            &requested,
-        ) {
-            Ok(model) => (model, requested.clone()),
-            Err(err)
-                if requested == EXECUTION_PROVIDER_CUDA && config.inference.cuda_fallback_to_cpu =>
-            {
-                warn!(
-                    target: "voicesub.asr_local.inference",
-                    error = %err,
-                    "CUDA warm load failed — retrying CPU EP"
-                );
-                let model = try_load_tdt(
-                    module_dir,
-                    logs_dir,
-                    config,
-                    family,
-                    &model_dir,
-                    EXECUTION_PROVIDER_CPU,
-                )?;
-                (model, EXECUTION_PROVIDER_CPU.into())
-            }
-            Err(err) => {
-                let mut snap = self.snapshot.lock();
-                snap.model_loaded = false;
-                snap.last_error = Some(err.to_string());
-                snap.ort_profiling_active = false;
-                return Err(err);
-            }
-        };
+        let (model, active_provider) =
+            match try_load_tdt(module_dir, logs_dir, config, family, &model_dir, &requested) {
+                Ok(model) => (model, requested.clone()),
+                Err(err)
+                    if requested == EXECUTION_PROVIDER_CUDA
+                        && config.inference.cuda_fallback_to_cpu =>
+                {
+                    warn!(
+                        target: "voicesub.asr_local.inference",
+                        error = %err,
+                        "CUDA warm load failed — retrying CPU EP"
+                    );
+                    let model = try_load_tdt(
+                        module_dir,
+                        logs_dir,
+                        config,
+                        family,
+                        &model_dir,
+                        EXECUTION_PROVIDER_CPU,
+                    )?;
+                    (model, EXECUTION_PROVIDER_CPU.into())
+                }
+                Err(err) => {
+                    let mut snap = self.snapshot.lock();
+                    snap.model_loaded = false;
+                    snap.last_error = Some(err.to_string());
+                    snap.ort_profiling_active = false;
+                    return Err(err);
+                }
+            };
         let load_ms = started.elapsed().as_millis() as u64;
         let profiling_prefix = if config.inference.ort_profiling {
             Some(ort_profile_prefix(logs_dir))

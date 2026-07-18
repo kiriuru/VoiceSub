@@ -9,6 +9,8 @@
   "permissions": [
     "allow-voicesub-local-asr-ipc",
     "core:default",
+    "core:event:deny-emit",
+    "core:event:deny-emit-to",
     "core:window:allow-show",
     "core:window:allow-set-focus"
   ]

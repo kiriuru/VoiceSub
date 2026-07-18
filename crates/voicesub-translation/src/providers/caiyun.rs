@@ -8,9 +8,7 @@ use std::sync::Arc;
 
 use super::{
     ProviderError, ProviderInfo, TranslateRequest, TranslationProvider, base_diagnostics, http,
-    http::SharedHttpClient,
-    lang_codes::caiyun_lang,
-    mask_secret, normalize_source_lang,
+    http::SharedHttpClient, lang_codes::caiyun_lang, mask_secret, normalize_source_lang,
 };
 
 pub struct CaiyunTranslatorProvider {
@@ -97,10 +95,7 @@ impl TranslationProvider for CaiyunTranslatorProvider {
         let mut diag = base_diagnostics(&self.info(), settings);
         if let Some(obj) = diag.as_object_mut() {
             obj.insert("token_present".into(), json!(!token.is_empty()));
-            obj.insert(
-                "token_masked_preview".into(),
-                json!(mask_secret(&token)),
-            );
+            obj.insert("token_masked_preview".into(), json!(mask_secret(&token)));
             obj.insert(
                 "status_message".into(),
                 json!("Caiyun Xiaoyi (彩云小译). Supports zh/en/ja. Token from https://fanyi.caiyunapp.com/."),

@@ -170,7 +170,7 @@ impl TranslationDispatcher {
     pub async fn start(self: &Arc<Self>) {
         let mut inner = self.inner.lock().await;
         inner.stopped = false;
-        self.ensure_worker_locked(&mut inner).await;
+        self.ensure_worker_locked(&mut inner);
     }
 
     pub fn engine_handle(self: &Arc<Self>) -> Arc<Mutex<TranslationEngine>> {
@@ -302,7 +302,7 @@ impl TranslationDispatcher {
             inner.last_runtime_reason = Some("cancelled:active_job_replaced".into());
         }
 
-        self.emit_metrics_locked(&mut inner).await;
+        self.emit_metrics_locked(&mut inner);
         drop(inner);
         if aborted > 0 {
             self.notify.notify_waiters();
@@ -342,7 +342,7 @@ impl TranslationDispatcher {
         drop(inner);
         self.enqueue_job(job, &translation).await;
         let mut inner = self.inner.lock().await;
-        self.ensure_worker_locked(&mut inner).await;
+        self.ensure_worker_locked(&mut inner);
         self.notify.notify_one();
     }
 
@@ -353,7 +353,7 @@ impl TranslationDispatcher {
                 let mut inner = self.inner.lock().await;
                 if inner.queue.len() < queue_max {
                     inner.queue.push_back(job);
-                    self.emit_metrics_locked(&mut inner).await;
+                    self.emit_metrics_locked(&mut inner);
                     return;
                 }
             }
@@ -409,7 +409,7 @@ impl TranslationDispatcher {
             )
             .await;
             let mut inner = self.inner.lock().await;
-            self.emit_metrics_locked(&mut inner).await;
+            self.emit_metrics_locked(&mut inner);
         }
     }
 
@@ -420,7 +420,7 @@ impl TranslationDispatcher {
         inner.provider_next_allowed_at.clear();
     }
 
-    async fn ensure_worker_locked(self: &Arc<Self>, inner: &mut DispatcherInner) {
+    fn ensure_worker_locked(self: &Arc<Self>, inner: &mut DispatcherInner) {
         if inner.worker.is_some() {
             return;
         }
@@ -485,7 +485,7 @@ impl TranslationDispatcher {
                     inner.active_jobs = inner.active_jobs.saturating_sub(1);
                     inner.active_tasks.retain(|task| task.job_id != job_id);
                 }
-                this.emit_metrics_locked(&mut inner).await;
+                this.emit_metrics_locked(&mut inner);
                 this.notify.notify_one();
             });
             {
@@ -518,7 +518,7 @@ impl TranslationDispatcher {
                 )
                 .await;
                 let mut inner = self.inner.lock().await;
-                self.emit_metrics_locked(&mut inner).await;
+                self.emit_metrics_locked(&mut inner);
             }
         }
     }
@@ -584,7 +584,7 @@ impl TranslationDispatcher {
             )
             .await;
             let mut inner = self.inner.lock().await;
-            self.emit_metrics_locked(&mut inner).await;
+            self.emit_metrics_locked(&mut inner);
             return;
         }
 
@@ -607,7 +607,7 @@ impl TranslationDispatcher {
             )
             .await;
             let mut inner = self.inner.lock().await;
-            self.emit_metrics_locked(&mut inner).await;
+            self.emit_metrics_locked(&mut inner);
             return;
         }
 
@@ -635,7 +635,7 @@ impl TranslationDispatcher {
             )
             .await;
             let mut inner = self.inner.lock().await;
-            self.emit_metrics_locked(&mut inner).await;
+            self.emit_metrics_locked(&mut inner);
             return;
         }
 
@@ -742,8 +742,7 @@ impl TranslationDispatcher {
                 continue;
             }
 
-            let line_timeout_ms =
-                Self::line_timeout_ms(&translation, result.item.local_provider);
+            let line_timeout_ms = Self::line_timeout_ms(&translation, result.item.local_provider);
             {
                 let mut inner = self.inner.lock().await;
                 inner.last_provider = Some(result.item.provider.clone());
@@ -755,7 +754,7 @@ impl TranslationDispatcher {
                     inner.last_runtime_reason =
                         result.reason.clone().or_else(|| result.item.error.clone());
                 }
-                self.emit_metrics_locked(&mut inner).await;
+                self.emit_metrics_locked(&mut inner);
             }
 
             let event_name = match result.outcome {
@@ -812,7 +811,7 @@ impl TranslationDispatcher {
                 )
                 .await;
                 let mut inner = self.inner.lock().await;
-                self.emit_metrics_locked(&mut inner).await;
+                self.emit_metrics_locked(&mut inner);
                 continue;
             }
 
@@ -832,7 +831,7 @@ impl TranslationDispatcher {
                 )
                 .await;
                 let mut inner = self.inner.lock().await;
-                self.emit_metrics_locked(&mut inner).await;
+                self.emit_metrics_locked(&mut inner);
                 continue;
             }
 
@@ -1091,9 +1090,10 @@ impl TranslationDispatcher {
             return Some(semaphore.clone());
         }
         let semaphore = Arc::new(Semaphore::new(max_concurrent));
-        inner
-            .provider_semaphores
-            .insert(provider_name.to_string(), (max_concurrent, semaphore.clone()));
+        inner.provider_semaphores.insert(
+            provider_name.to_string(),
+            (max_concurrent, semaphore.clone()),
+        );
         Some(semaphore)
     }
 
@@ -1171,7 +1171,7 @@ impl TranslationDispatcher {
         logger("translation_dispatcher", event, fields);
     }
 
-    async fn emit_metrics_locked(self: &Arc<Self>, inner: &mut DispatcherInner) {
+    fn emit_metrics_locked(self: &Arc<Self>, inner: &mut DispatcherInner) {
         let queue_depth = inner.queue.len() + inner.active_jobs;
         if let Some(ref logger) = self.callbacks.structured_log
             && inner.last_logged_queue_depth != queue_depth
@@ -1229,7 +1229,7 @@ impl TranslationDispatcher {
     fn line_timeout_ms(translation: &Value, local_provider: bool) -> u64 {
         let configured = Self::timeout_ms(translation);
         if local_provider {
-            configured.max(LOCAL_LLM_MIN_TIMEOUT_MS).min(MAX_TIMEOUT_MS)
+            configured.clamp(LOCAL_LLM_MIN_TIMEOUT_MS, MAX_TIMEOUT_MS)
         } else {
             configured
         }

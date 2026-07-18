@@ -1,9 +1,7 @@
 fn main() {
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
         tauri_build::AppManifest::new().commands(&[
-            "voicesub_version",
             "get_loopback_api_token",
-            "launch_browser_worker",
             "get_runtime_state_snapshot",
             "set_dashboard_layout",
             "tts_report_webview_activity",
@@ -13,8 +11,6 @@ fn main() {
             "tts_set_audio_device",
             "tts_set_channel_audio_device",
             "tts_set_playback_mode",
-            "tts_play_audio",
-            "tts_stop_channel",
             "tts_list_output_devices",
             "tts_get_audio_routing",
             "tts_bind_window_audio",

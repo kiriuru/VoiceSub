@@ -28,7 +28,6 @@ pub use loopback_auth::{LOOPBACK_TOKEN_HEADER, LoopbackAuth};
 pub use metrics::RuntimeMetricsCollector;
 pub use partial_emit::{PartialEmitCoordinator, partial_emit_settings_from_config};
 pub use router::build_router;
-pub(crate) use runtime::terminate_previous_browser_workers;
 pub use runtime::RuntimeOrchestrator;
 pub use runtime_state::{RuntimeStatusBroadcaster, spawn_runtime_heartbeat};
 pub use state::{HttpState, StylePresetsFn};

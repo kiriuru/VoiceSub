@@ -1,21 +1,17 @@
 //! `stream-sub-translator` `local_asr_pipeline.py` parity — WebRTC VAD segments → ASR queue → decode worker.
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
-use crate::decode::{prepare_decode_window, DecodePass};
-use crate::decode_pacing::{
-    adaptive_partial_decode_interval_ms, DecodePacer, LastDecodeMs,
-};
+use crate::decode::{DecodePass, prepare_decode_window};
+use crate::decode_pacing::{DecodePacer, LastDecodeMs, adaptive_partial_decode_interval_ms};
 use crate::decode_timing::DecodeTimingBreakdown;
 use crate::emit_policy::{dedupe_repeated_transcript, prefer_final_text};
 use parakeet_rs::Transcriber;
 use tracing::{debug, info};
-use voicesub_partial_emit::{
-    normalize_transcript_text, should_emit_partial, PartialEmitInput,
-};
+use voicesub_partial_emit::{PartialEmitInput, normalize_transcript_text, should_emit_partial};
 
 use crate::asr_segment_queue::{AsrSegmentQueue, AsrWorkItem, AsrWorkKind, RuntimeGeneration};
 use crate::config::LocalAsrConfig;
@@ -25,7 +21,7 @@ use crate::realtime_settings::ResolvedRealtimeSettings;
 use crate::recognition_processing::RecognitionProcessor;
 use crate::segment_enqueue::{clear_segment_audio_enqueue_state, slice_segment_audio_delta};
 use crate::segment_state::SegmentStateController;
-use crate::vad_engine::{f32_to_pcm_bytes, VadEngine, VadSegmentKind};
+use crate::vad_engine::{VadEngine, VadSegmentKind, f32_to_pcm_bytes};
 use crate::vad_tuning::vad_engine_from_config;
 
 pub const SAMPLE_RATE: u32 = crate::capture::PARAKEET_SAMPLE_RATE;
@@ -176,7 +172,10 @@ impl RealtimePipeline {
         self.vad.reset();
     }
 
-    pub fn finalize_on_stop(&mut self, inference: &InferenceEngine) -> Result<Vec<PipelineEmit>, InferenceError> {
+    pub fn finalize_on_stop(
+        &mut self,
+        inference: &InferenceEngine,
+    ) -> Result<Vec<PipelineEmit>, InferenceError> {
         let mut emits = Vec::new();
         if self.vad_enabled {
             for segment in self.vad.force_finalize() {
@@ -339,8 +338,9 @@ impl RealtimePipeline {
     }
 
     fn enqueue_disabled_final(&mut self) {
-        let (segment_id, revision, _, _) =
-            self.segment_state.assign_segment_tracking(Some(&self.disabled_segment_id));
+        let (segment_id, revision, _, _) = self
+            .segment_state
+            .assign_segment_tracking(Some(&self.disabled_segment_id));
         let prepared = std::mem::take(&mut self.disabled_vad_audio);
         let duration_ms = segment_duration_ms(prepared.len());
         let item = AsrWorkItem::new(
@@ -395,8 +395,7 @@ impl RealtimePipeline {
 
     #[cfg(test)]
     fn prime_active_segment(&mut self, segment_id: &str) {
-        self.segment_state
-            .assign_segment_tracking(Some(segment_id));
+        self.segment_state.assign_segment_tracking(Some(segment_id));
     }
 
     #[cfg(test)]
@@ -489,7 +488,11 @@ mod tests {
     use crate::decode::select_partial_window;
     use crate::emit_policy::prefer_final_text;
 
-    fn select_decode_window(cumulative: &[f32], chunk_window_ms: u32, sample_rate: u32) -> Vec<f32> {
+    fn select_decode_window(
+        cumulative: &[f32],
+        chunk_window_ms: u32,
+        sample_rate: u32,
+    ) -> Vec<f32> {
         select_partial_window(cumulative, chunk_window_ms, sample_rate).1
     }
 
@@ -567,7 +570,7 @@ mod tests {
         pipeline.enqueue_vad_capture_segment(
             crate::vad_engine::VadSegment {
                 kind: VadSegmentKind::Partial,
-                audio: audio_a.clone(),
+                audio: audio_a,
                 duration_ms: 100,
                 voiced_ratio: 1.0,
                 average_rms: 0.1,
@@ -661,9 +664,11 @@ mod tests {
             "segment-1".into(),
             1,
         );
-        assert!(!pipeline
-            .process_decode_result(partial_item, Some("hello".into()))
-            .is_empty());
+        assert!(
+            !pipeline
+                .process_decode_result(partial_item, Some("hello".into()))
+                .is_empty()
+        );
         let late_partial = AsrWorkItem::new(
             AsrWorkKind::Partial,
             vec![0.1; 150],
@@ -672,9 +677,11 @@ mod tests {
             "segment-1".into(),
             3,
         );
-        assert!(!pipeline
-            .process_decode_result(late_partial, Some("hello world".into()))
-            .is_empty());
+        assert!(
+            !pipeline
+                .process_decode_result(late_partial, Some("hello world".into()))
+                .is_empty()
+        );
         let final_item = AsrWorkItem::new(
             AsrWorkKind::Final,
             vec![0.1; 200],
@@ -683,9 +690,11 @@ mod tests {
             "segment-1".into(),
             2,
         );
-        assert!(!pipeline
-            .process_decode_result(final_item, Some("hello world".into()))
-            .is_empty());
+        assert!(
+            !pipeline
+                .process_decode_result(final_item, Some("hello world".into()))
+                .is_empty()
+        );
     }
 
     #[test]
@@ -702,9 +711,11 @@ mod tests {
             "segment-1".into(),
             2,
         );
-        assert!(!pipeline
-            .process_decode_result(final_item, Some("done".into()))
-            .is_empty());
+        assert!(
+            !pipeline
+                .process_decode_result(final_item, Some("done".into()))
+                .is_empty()
+        );
         let stale_partial = AsrWorkItem::new(
             AsrWorkKind::Partial,
             vec![0.1; 100],
@@ -713,9 +724,11 @@ mod tests {
             "segment-1".into(),
             1,
         );
-        assert!(!pipeline
-            .process_decode_result(stale_partial, Some("done".into()))
-            .is_empty());
+        assert!(
+            !pipeline
+                .process_decode_result(stale_partial, Some("done".into()))
+                .is_empty()
+        );
     }
 
     #[test]
@@ -726,23 +739,42 @@ mod tests {
         let mut pipeline = RealtimePipeline::new(&config, queue, generation);
         pipeline.prime_active_segment("seg-grow");
         let first = pipeline.process_decode_result(
-            AsrWorkItem::new(AsrWorkKind::Partial, vec![0.1; 100], 100, 1, "seg-grow".into(), 1),
+            AsrWorkItem::new(
+                AsrWorkKind::Partial,
+                vec![0.1; 100],
+                100,
+                1,
+                "seg-grow".into(),
+                1,
+            ),
             Some("hello".into()),
         );
         assert_eq!(first.len(), 1);
         assert!(!first[0].is_final);
         assert_eq!(first[0].text, "hello");
         let second = pipeline.process_decode_result(
-            AsrWorkItem::new(AsrWorkKind::Partial, vec![0.1; 200], 200, 1, "seg-grow".into(), 2),
+            AsrWorkItem::new(
+                AsrWorkKind::Partial,
+                vec![0.1; 200],
+                200,
+                1,
+                "seg-grow".into(),
+                2,
+            ),
             Some("hello world".into()),
         );
         assert_eq!(second.len(), 1);
         assert_eq!(second[0].text, "hello world");
         let final_emit = pipeline.process_decode_result(
-            AsrWorkItem::new(AsrWorkKind::Final, vec![0.1; 200], 200, 1, "seg-grow".into(), 3),
-            Some(
-                "hello world hello world".into(),
+            AsrWorkItem::new(
+                AsrWorkKind::Final,
+                vec![0.1; 200],
+                200,
+                1,
+                "seg-grow".into(),
+                3,
             ),
+            Some("hello world hello world".into()),
         );
         assert_eq!(final_emit.len(), 1);
         assert!(final_emit[0].is_final);
@@ -754,7 +786,7 @@ mod tests {
         let queue = AsrSegmentQueue::new(64);
         let generation = Arc::new(RuntimeGeneration::new(1));
         let config = LocalAsrConfig::default();
-        let mut pipeline = RealtimePipeline::new(&config, queue, generation.clone());
+        let mut pipeline = RealtimePipeline::new(&config, queue, generation);
         pipeline.invalidate_runtime_generation();
         let item = AsrWorkItem::new(
             AsrWorkKind::Partial,
@@ -764,8 +796,10 @@ mod tests {
             "segment-1".into(),
             1,
         );
-        assert!(pipeline
-            .process_decode_result(item, Some("hello".into()))
-            .is_empty());
+        assert!(
+            pipeline
+                .process_decode_result(item, Some("hello".into()))
+                .is_empty()
+        );
     }
 }

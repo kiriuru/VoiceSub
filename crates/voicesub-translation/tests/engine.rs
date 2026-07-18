@@ -537,14 +537,7 @@ async fn translate_targets_normalizes_source_lang_for_cache_lookup() {
     engine.seed_translation_cache("stub", "EN", "fr", "hello", "bonjour");
 
     let batch = engine
-        .translate_targets(
-            "hello",
-            "en",
-            "stub",
-            &HashMap::new(),
-            &["fr".into()],
-            0,
-        )
+        .translate_targets("hello", "en", "stub", &HashMap::new(), &["fr".into()], 0)
         .await;
 
     assert_eq!(batch.items.len(), 1);

@@ -9,9 +9,8 @@ use std::sync::Arc;
 
 use super::{
     ProviderError, ProviderInfo, TranslateRequest, TranslationProvider, base_diagnostics,
-    crypto_util::sha256_hex, http, http::SharedHttpClient,
-    lang_codes::youdao_lang,
-    mask_secret, normalize_source_lang,
+    crypto_util::sha256_hex, http, http::SharedHttpClient, lang_codes::youdao_lang, mask_secret,
+    normalize_source_lang,
 };
 
 pub struct YoudaoTranslateProvider {
@@ -29,7 +28,14 @@ impl YoudaoTranslateProvider {
             q.to_string()
         } else {
             let head: String = chars.iter().take(10).collect();
-            let tail: String = chars.iter().rev().take(10).collect::<Vec<_>>().into_iter().rev().collect();
+            let tail: String = chars
+                .iter()
+                .rev()
+                .take(10)
+                .collect::<Vec<_>>()
+                .into_iter()
+                .rev()
+                .collect();
             format!("{head}{}{tail}", chars.len())
         }
     }
@@ -68,9 +74,7 @@ impl TranslationProvider for YoudaoTranslateProvider {
         let salt = format!("{}{}", now.as_nanos(), request.text.len());
         let curtime = now.as_secs().to_string();
         let input = Self::input_for_sign(request.text);
-        let sign = sha256_hex(&format!(
-            "{app_key}{input}{salt}{curtime}{app_secret}"
-        ));
+        let sign = sha256_hex(&format!("{app_key}{input}{salt}{curtime}{app_secret}"));
 
         let form = [
             ("q", request.text),

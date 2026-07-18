@@ -5,16 +5,16 @@ use std::time::Duration;
 
 use serde::Deserialize;
 use serde_json::Value;
-use voicesub_asr_local::diagnostics::{assemble_local_asr_diagnostics, LocalAsrDiagnosticsInput};
+use voicesub_asr_local::diagnostics::{LocalAsrDiagnosticsInput, assemble_local_asr_diagnostics};
 use voicesub_asr_local::emit_policy::RealtimeEmitPolicy;
 use voicesub_asr_local::hallucination_filter::{
-    should_drop_short_hallucination, HallucinationFilter, HallucinationFilterConfig,
+    HallucinationFilter, HallucinationFilterConfig, should_drop_short_hallucination,
 };
 use voicesub_asr_local::recognition_processing::RecognitionProcessor;
 use voicesub_asr_local::segment_enqueue::SegmentAudioEnqueue;
 use voicesub_asr_local::{
-    env_check, InferenceSnapshot, LocalAsrConfig, LocalAsrModulePhase, LocalAsrRecognitionConfig,
-    PipelineEmit,
+    InferenceSnapshot, LocalAsrConfig, LocalAsrModulePhase, LocalAsrRecognitionConfig,
+    PipelineEmit, env_check,
 };
 
 fn golden_path(name: &str) -> PathBuf {
@@ -50,8 +50,7 @@ fn golden_segment_enqueue_delta() {
         fixture["min_buffer_ms"].as_u64().unwrap() as u32,
     );
     thread::sleep(Duration::from_millis(450));
-    let steps: Vec<EnqueueStep> =
-        serde_json::from_value(fixture["steps"].clone()).expect("steps");
+    let steps: Vec<EnqueueStep> = serde_json::from_value(fixture["steps"].clone()).expect("steps");
     for step in steps {
         queue.push_samples(step.push_samples);
         assert_eq!(
@@ -102,11 +101,7 @@ fn golden_short_hallucination_tokens() {
         serde_json::from_value(fixture["cases"].clone()).expect("cases");
     for case in cases {
         assert_eq!(
-            should_drop_short_hallucination(
-                &case.text,
-                case.duration_ms as u32,
-                case.is_final,
-            ),
+            should_drop_short_hallucination(&case.text, case.duration_ms as u32, case.is_final,),
             case.expect_drop,
             "text={:?} duration_ms={}",
             case.text,
@@ -234,8 +229,10 @@ fn golden_diagnostics_snapshot() {
 
 #[test]
 fn golden_vad_engine_partial_final() {
-    use voicesub_asr_local::vad_engine::{VadEngine, VadEngineConfig, VadSegmentKind, f32_to_pcm_bytes};
     use std::f32::consts::PI;
+    use voicesub_asr_local::vad_engine::{
+        VadEngine, VadEngineConfig, VadSegmentKind, f32_to_pcm_bytes,
+    };
 
     let fixture = load_fixture("vad_engine_partial_final.json");
     let cfg_raw = &fixture["config"];
@@ -274,7 +271,9 @@ fn golden_vad_engine_partial_final() {
     let finals = vad.force_finalize();
     assert_eq!(saw_partial, fixture["expect_partial"].as_bool().unwrap());
     assert_eq!(
-        finals.iter().any(|segment| segment.kind == VadSegmentKind::Final),
+        finals
+            .iter()
+            .any(|segment| segment.kind == VadSegmentKind::Final),
         fixture["expect_final"].as_bool().unwrap()
     );
 }

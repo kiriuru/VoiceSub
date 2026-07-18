@@ -987,5 +987,5 @@ fn should_sample_routine_cycle(state: &GatewayDiagnostics) -> bool {
     if rearm_count <= ROUTINE_LOG_VERBOSE_LIMIT {
         return true;
     }
-    rearm_count.is_multiple_of(ROUTINE_LOG_SAMPLE_EVERY)
+    rearm_count % ROUTINE_LOG_SAMPLE_EVERY == 0
 }

@@ -538,20 +538,21 @@ Payload enrichment: `event_sequence`, `created_at_ms`, `event_type` (`WsEventPub
 
 **Registration:** `src-tauri/src/lib.rs` → `tauri::generate_handler!`
 
-**Capabilities (per window):** `src-tauri/capabilities/default.json` (main — full `allow-voicesub-ipc`), `tts.json` (`allow-voicesub-tts-ipc`), `local-asr.json` (`allow-voicesub-local-asr-ipc`). `get_loopback_api_token` is allowlisted on all three.
+**Capabilities (per window):** `src-tauri/capabilities/default.json` (main — shell-only `allow-voicesub-ipc`), `tts.json` (`allow-voicesub-tts-ipc`), `local-asr.json` (`allow-voicesub-local-asr-ipc`). `get_loopback_api_token` is allowlisted on all three. All capabilities deny frontend `core:event` emit / emit-to (listen only). ACL matrix guarded by `src-tauri/src/acl_matrix.rs` tests.
 
-### Shell commands
+### Shell commands (`main` only)
 
 | Command | Purpose |
 | --- | --- |
-| `voicesub_version` | Returns `PROJECT_VERSION` |
 | `get_loopback_api_token` | Per-session token for protected `/api/*` (fallback when HTML injection unavailable) |
+| `get_runtime_state_snapshot` | Replay runtime/subtitle/overlay/translation/diagnostics for Tauri shell on connect |
 | `set_dashboard_layout` | Compact (390×844) vs standard (1280×900) window |
-| `launch_browser_worker` | Launch Chrome to worker URL without full runtime start |
+| `tts_open_window` | Open/focus `/tts` webview |
+| `local_asr_open_window` | Open/focus `/local-asr` webview |
 | `open_external_https_url` | Open allowlisted HTTPS URL in system browser (update banner, translation provider setup) |
 | `open_local_http_url` | Open validated loopback HTTP URL in system browser |
 
-### TTS commands (`src-tauri/src/tts.rs`)
+### TTS commands (`tts` window — `src-tauri/src/tts.rs`)
 
 | Command | Purpose |
 | --- | --- |
@@ -559,7 +560,6 @@ Payload enrichment: `event_sequence`, `created_at_ms`, `event_type` (`WsEventPub
 | `tts_set_provider` / `tts_set_enabled` | Provider toggle |
 | `tts_set_audio_device` / `tts_set_channel_audio_device` | Speech / Twitch audio output |
 | `tts_set_playback_mode` | `native` (cpal @ 1.0×) or `sonic` (libsonic); legacy `browser` → `sonic` on load |
-| `tts_play_audio` / `tts_stop_channel` | Native MP3 playback per channel |
 | `tts_list_output_devices` | WASAPI enumeration (label-first for native) |
 | `tts_get_audio_routing` / `tts_bind_window_audio` | Legacy WinAPI per-process routing (single device) |
 | `tts_update_speech_settings` / `tts_update_voice_settings` | Speech params |
@@ -569,17 +569,12 @@ Payload enrichment: `event_sequence`, `created_at_ms`, `event_type` (`WsEventPub
 | `tts_get_resource_telemetry` | Playback / queue resource metrics |
 | `tts_report_webview_activity` | TTS webview heartbeat → `WebviewMemoryManager` suspend policy |
 | `tts_twitch_*` | Twitch connect/disconnect/status/settings |
-| `tts_open_window` | Open/focus `/tts` webview |
 | `tts_open_system_url` | Open validated Twitch OAuth URL externally |
-| `get_runtime_state_snapshot` | Replay runtime/subtitle/overlay/translation/diagnostics for Tauri shell on connect |
+| `get_runtime_state_snapshot` | Snapshot replay for TTS window connect |
 
-### Local ASR commands (`src-tauri/src/local_asr.rs`)
+### Local ASR window (`local-asr` capability)
 
-| Command | Purpose |
-| --- | --- |
-| `local_asr_open_window` | Open/focus `/local-asr` webview |
-
-Module domain logic stays in `voicesub-asr-local` + HTTP; Tauri is window lifecycle only.
+Webview ACL: `get_loopback_api_token` + `open_external_https_url` only. Window open/focus is a **main**-shell command (`local_asr_open_window`). Module domain logic stays in `voicesub-asr-local` + HTTP.
 
 ### `src-tauri/` modules (shell only)
 
@@ -897,7 +892,7 @@ Two independent playback channels with separate Rust queues and WASAPI devices:
 | `speech` | `subtitle_payload` → `TtsSpeechPipeline` | `ChannelOrchestrator` (speech) | root `audio_output_device_*` |
 | `twitch` | IRC → `TwitchChatService` | `ChannelOrchestrator` (twitch) | `[twitch].audio_output_device_*` |
 
-Live path: plan → **`google_fetch.rs`** (HTTP + **`upstream_retry.rs`** 3× retry on transport/5xx/429/408) → enqueue → prefetch → `PlaybackHub` (`tts_play_audio`). Long text: `assemble_ordered_chunks` preserves chunk order after parallel fetch. TTS WebView — settings UI + manual sample test via `tts_speak_sample` (Rust orchestrator; no JS queue pump).
+Live path: plan → **`google_fetch.rs`** (HTTP + **`upstream_retry.rs`** 3× retry on transport/5xx/429/408) → enqueue → prefetch → in-process `PlaybackHub` (no webview IPC for audio bytes). Long text: `assemble_ordered_chunks` preserves chunk order after parallel fetch. TTS WebView — settings UI + manual sample test via `tts_speak_sample` (Rust orchestrator; no JS queue pump).
 
 **0.5.4 pipeline hardening:**
 
@@ -916,7 +911,7 @@ Live path: plan → **`google_fetch.rs`** (HTTP + **`upstream_retry.rs`** 3× re
 
 | Mode | Mechanism | When |
 | --- | --- | --- |
-| `native` (default) | `PlaybackHub` (cpal) @ 1.0×, IPC `tts_play_audio` | Lowest latency |
+| `native` (default) | `PlaybackHub` (cpal) @ 1.0× in-process | Lowest latency |
 | `sonic` | libsonic tempo stretch, pitch-preserving rate | Queue / rate boost |
 | `browser` (legacy) | — | **Migrates to `sonic`** on config load |
 
@@ -1220,6 +1215,8 @@ Config key: `ui.language` (empty = browser default).
 - **No new Rust module without tests** in the same task
 - Golden fixtures in `tests/golden/` — update when behavioral contracts change
 - `cargo test --workspace` required before done
+- CI: `cargo clippy --workspace --all-targets -- -D warnings`; workspace lints in root `Cargo.toml` (`unused_async`, `await_holding_lock` / `await_holding_refcell_ref`, `redundant_clone` deny — pedantic-light) + `clippy.toml` MSRV `1.85`
+- Hot-path async hygiene: Chrome / Local ASR process work and Local ASR zip extract via `spawn_blocking`; avoid holding orchestrator / translation controller locks across status broadcast or enqueue awaits
 
 ### Levels
 

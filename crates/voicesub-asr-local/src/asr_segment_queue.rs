@@ -225,7 +225,8 @@ impl AsrSegmentQueue {
             return None;
         }
         if let Some(index) = guard.items.iter().position(|item| {
-            item.kind == AsrWorkKind::Final && !Self::is_deferred_empty_delta_final(item, &guard.items)
+            item.kind == AsrWorkKind::Final
+                && !Self::is_deferred_empty_delta_final(item, &guard.items)
         }) {
             let item = guard.items.remove(index).expect("final index");
             guard.finals_prioritized_count += 1;
@@ -309,8 +310,16 @@ mod tests {
         let item = queue.pop(0).expect("merged partial");
         assert!(item.audio_is_delta);
         assert_eq!(item.audio.len(), 150);
-        assert!(item.audio[..100].iter().all(|s| (*s - 0.1).abs() < f32::EPSILON));
-        assert!(item.audio[100..].iter().all(|s| (*s - 0.2).abs() < f32::EPSILON));
+        assert!(
+            item.audio[..100]
+                .iter()
+                .all(|s| (*s - 0.1).abs() < f32::EPSILON)
+        );
+        assert!(
+            item.audio[100..]
+                .iter()
+                .all(|s| (*s - 0.2).abs() < f32::EPSILON)
+        );
     }
 
     #[test]

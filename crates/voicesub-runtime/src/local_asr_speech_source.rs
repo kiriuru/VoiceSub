@@ -51,14 +51,12 @@ impl SharedLocalAsrSpeechSource {
         self.local_asr.runtime_capture_running()
     }
 
-    pub async fn start(&self) -> Result<(), String> {
+    pub fn start(&self) -> Result<(), String> {
         if self.is_running() {
             return Ok(());
         }
         if !self.local_asr.inference_snapshot().model_loaded {
-            self.local_asr
-                .load_model()
-                .map_err(|err| err.to_string())?;
+            self.local_asr.load_model().map_err(|err| err.to_string())?;
         }
         let generation_id = self.generation.fetch_add(1, Ordering::SeqCst) + 1;
         let ingest = Arc::clone(&self.ordered_ingest);
@@ -69,7 +67,7 @@ impl SharedLocalAsrSpeechSource {
             .map_err(runtime_session_error_message)
     }
 
-    pub async fn stop(&self) -> Result<(), String> {
+    pub fn stop(&self) -> Result<(), String> {
         if self.is_running() {
             self.local_asr
                 .stop_runtime_capture()

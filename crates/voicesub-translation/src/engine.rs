@@ -141,7 +141,7 @@ impl TranslationEngine {
     pub fn new(client: reqwest::Client, cache_dir: Option<PathBuf>) -> Self {
         let transport = SharedHttpClient::new(client.clone());
         transport.bind(Arc::new({
-            let client = client.clone();
+            let client = client;
             move || client.clone()
         }));
         let providers = build_default_registry(transport.clone());
@@ -166,11 +166,11 @@ impl TranslationEngine {
     }
 
     pub fn new_stub(client: reqwest::Client) -> Self {
-        let transport = SharedHttpClient::new(client.clone());
+        let transport = SharedHttpClient::new(client);
         let mut providers = build_default_registry(transport.clone());
         providers.insert(
             "stub".into(),
-            Arc::new(StubTranslationProvider::new(transport.clone())),
+            Arc::new(StubTranslationProvider::new(transport)),
         );
         Self::with_providers(providers, None)
     }
@@ -521,12 +521,7 @@ impl TranslationEngine {
         let mut pending = Vec::new();
 
         for (index, target_lang) in clean_targets.iter().enumerate() {
-            let key = cache_key(
-                &provider_name,
-                &normalized_source,
-                target_lang,
-                source_text,
-            );
+            let key = cache_key(&provider_name, &normalized_source, target_lang, source_text);
             if self.cache.enabled()
                 && let Some(cached) = self.cache.get(&key)
             {

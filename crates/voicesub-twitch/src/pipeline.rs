@@ -106,7 +106,7 @@ pub fn process_chat_message(
             settings.strip_links,
         )
     } else {
-        fallback_lang.clone()
+        fallback_lang
     };
 
     if settings.detect_language && !language_allowed(&language, &settings.enabled_languages) {

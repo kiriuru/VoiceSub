@@ -26,7 +26,7 @@ impl ModelFamily {
     }
 
     pub fn variants(self) -> &'static [FamilyVariantSpec] {
-        &PARAKEET_TDT_VARIANTS
+        PARAKEET_TDT_VARIANTS
     }
 
     pub fn parse_variant(self, raw: &str) -> Option<&'static FamilyVariantSpec> {

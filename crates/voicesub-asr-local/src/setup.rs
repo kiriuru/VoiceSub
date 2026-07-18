@@ -3,7 +3,7 @@
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::config::{LocalAsrConfig, LocalAsrSetupConfig, EXECUTION_PROVIDER_CUDA};
+use crate::config::{EXECUTION_PROVIDER_CUDA, LocalAsrConfig, LocalAsrSetupConfig};
 use crate::deps::LocalAsrEnvCheck;
 use crate::status::model_is_installed;
 use crate::test_session::{TestBenchPhase, TestBenchSnapshot};

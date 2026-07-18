@@ -294,40 +294,6 @@ pub fn tts_set_playback_mode(
 }
 
 #[tauri::command]
-pub fn tts_play_audio(
-    state: State<'_, TtsState>,
-    channel: String,
-    item_id: String,
-    audio_bytes: Vec<u8>,
-    volume: f32,
-    rate: Option<f32>,
-) -> Result<(), String> {
-    let rate = rate.unwrap_or(1.0);
-    debug!(
-        target: "voicesub.tts.ipc",
-        channel = %channel,
-        item_id = %item_id,
-        bytes = audio_bytes.len(),
-        volume,
-        rate,
-        "tts_play_audio"
-    );
-    state
-        .playback
-        .play(&channel, item_id, audio_bytes, volume, rate)
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub fn tts_stop_channel(state: State<'_, TtsState>, channel: String) -> Result<(), String> {
-    info!(target: "voicesub.tts.ipc", channel = %channel, "tts_stop_channel");
-    state
-        .playback
-        .stop_channel(&channel)
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
 
 pub fn tts_list_output_devices() -> Result<Vec<voicesub_audio::AudioOutputDevice>, String> {
     debug!(target: "voicesub.tts.ipc", "tts_list_output_devices");
@@ -528,7 +494,9 @@ pub fn tts_open_system_url(url: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-
+// Must stay async on Windows: sync commands that call WebviewWindowBuilder::build
+// deadlock the UI thread (WebView2). See Tauri docs / wry#583.
+#[allow(clippy::unused_async)]
 pub async fn tts_open_window(
     app: AppHandle,
     state: State<'_, TtsState>,
@@ -537,6 +505,7 @@ pub async fn tts_open_window(
     open_tts_window(app, state.inner().clone(), memory.inner()).await
 }
 
+#[allow(clippy::unused_async)]
 async fn open_tts_window(
     app: AppHandle,
     state: TtsState,

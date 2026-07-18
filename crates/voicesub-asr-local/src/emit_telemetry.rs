@@ -1,7 +1,7 @@
 //! Live emit counters for Local ASR diagnostics (§4.8 C4).
 
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::pipeline::PipelineEmit;
 use voicesub_partial_emit::{normalize_transcript_text, split_words};
@@ -52,12 +52,7 @@ impl EmitTelemetry {
         }
     }
 
-    pub fn record_emit(
-        &self,
-        emit: &PipelineEmit,
-        previous_partial: &str,
-        segment_speech_ms: u32,
-    ) {
+    pub fn record_emit(&self, emit: &PipelineEmit, previous_partial: &str, segment_speech_ms: u32) {
         if emit.is_final {
             self.final_emits.fetch_add(1, Ordering::SeqCst);
             if segment_speech_ms > 0 {

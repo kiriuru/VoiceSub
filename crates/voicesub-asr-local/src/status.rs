@@ -88,7 +88,8 @@ pub fn build_status(
     let (phase, message, last_error) = if !env.vcruntime.ok {
         (
             LocalAsrModulePhase::DepsMissing,
-            "Install VC++ runtime (or use a system with Visual C++ 2015–2022 redistributable)".into(),
+            "Install VC++ runtime (or use a system with Visual C++ 2015–2022 redistributable)"
+                .into(),
             Some(format!("missing: {}", env.vcruntime.missing.join(", "))),
         )
     } else if !deps_ready {
@@ -133,7 +134,8 @@ pub fn build_status(
     let ready = setup_complete && deps_ready && model_installed;
     let cuda_ready = env.cuda_deps_ready
         && (inference.probe_cuda_ok == Some(true)
-            || (setup_complete && config.setup.validated_execution_provider == EXECUTION_PROVIDER_CUDA));
+            || (setup_complete
+                && config.setup.validated_execution_provider == EXECUTION_PROVIDER_CUDA));
 
     LocalAsrModuleStatus {
         phase,
@@ -158,11 +160,7 @@ pub fn build_status(
         last_decode_timing: inference.last_decode_timing.clone(),
         active_model_family: config.model.family.clone(),
         active_model_variant: config.model.variant.clone(),
-        models: build_all_model_catalogs(
-            module_dir,
-            &config.model.family,
-            &config.model.variant,
-        ),
+        models: build_all_model_catalogs(module_dir, &config.model.family, &config.model.variant),
         setup,
     }
 }
@@ -179,10 +177,10 @@ fn deps_missing_detail(env: &LocalAsrEnvCheck, provider: &str) -> Option<String>
         if !env.cuda_redist.ok {
             missing.extend(env.cuda_redist.missing.iter().cloned());
         }
-        if !env.cuda_toolkit.ok {
-            if let Some(message) = env.cuda_toolkit.message.as_ref() {
-                missing.push(message.clone());
-            }
+        if !env.cuda_toolkit.ok
+            && let Some(message) = env.cuda_toolkit.message.as_ref()
+        {
+            missing.push(message.clone());
         }
     } else if !env.ort_cpu.ok && !env.ort_gpu.ok {
         missing.extend(env.ort_cpu.missing.iter().cloned());

@@ -8,11 +8,11 @@ use parking_lot::Mutex;
 use thiserror::Error;
 use tracing::{info, warn};
 
-use crate::async_decode::AsyncDecodeWorker;
 use crate::asr_segment_queue::{AsrSegmentQueue, RuntimeGeneration};
+use crate::async_decode::AsyncDecodeWorker;
 use crate::capture::{self, CaptureError, MicStream};
 use crate::config::LocalAsrConfig;
-use crate::emit_policy::{dedupe_repeated_transcript, RealtimeEmitPolicy};
+use crate::emit_policy::{RealtimeEmitPolicy, dedupe_repeated_transcript};
 use crate::emit_telemetry::{EmitTelemetry, EmitTelemetrySnapshot};
 use crate::inference::{InferenceEngine, InferenceError};
 use crate::pipeline::{PipelineEmit, PipelineStopFlag, RealtimePipeline, SAMPLE_RATE};
@@ -128,7 +128,9 @@ impl Default for LocalAsrRuntimeSession {
     }
 }
 
-fn take_worker_and_mic(guard: &mut RuntimeSessionInner) -> (Option<JoinHandle<()>>, Option<MicStream>) {
+fn take_worker_and_mic(
+    guard: &mut RuntimeSessionInner,
+) -> (Option<JoinHandle<()>>, Option<MicStream>) {
     (guard.worker.take(), guard.mic.take())
 }
 
@@ -156,7 +158,10 @@ fn drain_decode_results(
                 forward_emits(emit_policy, emits, on_emit, telemetry, duration_ms);
             }
             Err(err) => {
-                if matches!(err, crate::inference::InferenceError::ProfilingBudgetReached) {
+                if matches!(
+                    err,
+                    crate::inference::InferenceError::ProfilingBudgetReached
+                ) {
                     info!(
                         target: "voicesub.asr_local.runtime",
                         "ORT profiling budget reached — profile flushed; further decodes skipped until reload"

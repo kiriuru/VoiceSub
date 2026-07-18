@@ -115,10 +115,11 @@ mod tests {
 
     #[test]
     fn allows_translation_provider_setup_urls() {
+        assert!(validate_external_https_url("https://platform.openai.com/api-keys").is_ok());
         assert!(
-            validate_external_https_url("https://platform.openai.com/api-keys").is_ok()
+            validate_external_https_url("https://console.cloud.google.com/apis/credentials")
+                .is_ok()
         );
-        assert!(validate_external_https_url("https://console.cloud.google.com/apis/credentials").is_ok());
         assert!(validate_external_https_url(
             "https://portal.azure.com/#view/Microsoft_Azure_ProjectOxford/CognitiveServicesHub/~/TextTranslation"
         )

@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
+use axum::Json;
 use axum::extract::State;
 use axum::response::{IntoResponse, Response};
-use axum::Json;
 use serde::Deserialize;
-use serde_json::{json, Value};
-use voicesub_asr_local::{DepDownloadKind, LocalAsrConfig, CUDA_TOOLKIT_URL, TransferProgress};
+use serde_json::{Value, json};
+use voicesub_asr_local::{CUDA_TOOLKIT_URL, DepDownloadKind, LocalAsrConfig, TransferProgress};
 
 use super::state::HttpState;
 
@@ -86,11 +86,7 @@ pub async fn local_asr_model_download(
             .map(|config| config.model.family)
             .unwrap_or_else(|_| "parakeet_tdt".into())
     });
-    match state
-        .local_asr
-        .download_model(&family, &body.variant)
-        .await
-    {
+    match state.local_asr.download_model(&family, &body.variant).await {
         Ok(status) => Json(json!({ "ok": true, "status": status })).into_response(),
         Err(err) => Json(json!({ "ok": false, "message": err.to_string() })).into_response(),
     }
@@ -187,7 +183,8 @@ pub async fn local_asr_deps_probe(
     let provider = body.provider.clone();
     match tokio::task::spawn_blocking(move || service.probe_provider(&provider)).await {
         Ok(Ok(probe)) => {
-            Json(json!({ "ok": true, "probe": probe, "status": refresh.refresh_status() })).into_response()
+            Json(json!({ "ok": true, "probe": probe, "status": refresh.refresh_status() }))
+                .into_response()
         }
         Ok(Err(err)) => Json(json!({ "ok": false, "message": err.to_string() })).into_response(),
         Err(err) => Json(json!({ "ok": false, "message": err.to_string() })).into_response(),
@@ -249,10 +246,8 @@ pub async fn local_asr_test_start(
     let service = Arc::clone(&state.local_asr);
     let duration_ms = body.duration_ms;
     let device_id = body.device_id.clone();
-    match tokio::task::spawn_blocking(move || {
-        service.start_test(duration_ms, device_id.as_deref())
-    })
-    .await
+    match tokio::task::spawn_blocking(move || service.start_test(duration_ms, device_id.as_deref()))
+        .await
     {
         Ok(Ok(test)) => Json(json!({ "ok": true, "test": test })).into_response(),
         Ok(Err(err)) => Json(json!({ "ok": false, "message": err.to_string() })).into_response(),

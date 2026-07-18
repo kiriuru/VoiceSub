@@ -4,11 +4,19 @@ use std::sync::{Arc, RwLock};
 use tracing::{info, warn};
 
 use crate::config::{LocalAsrConfig, LocalAsrConfigStore};
-use crate::deps::{DepDownloadKind, DepError, cleanup_pending_runtime_removals, delete_dependency, download_dependency, env_check, validate_deps_for_provider};
-use crate::diagnostics::{assemble_local_asr_diagnostics, LocalAsrDiagnosticsInput};
-use crate::inference::{InferenceEngine, InferenceError, InferenceSnapshot, LoadResult, ProbeResult};
+use crate::deps::{
+    DepDownloadKind, DepError, cleanup_pending_runtime_removals, delete_dependency,
+    download_dependency, env_check, validate_deps_for_provider,
+};
+use crate::diagnostics::{LocalAsrDiagnosticsInput, assemble_local_asr_diagnostics};
+use crate::inference::{
+    InferenceEngine, InferenceError, InferenceSnapshot, LoadResult, ProbeResult,
+};
 use crate::model_family::ModelFamily;
-use crate::model_manager::{self, delete_model_variant, download_model, is_model_installed_for, model_dir_for_family_variant, ModelError};
+use crate::model_manager::{
+    self, ModelError, delete_model_variant, download_model, is_model_installed_for,
+    model_dir_for_family_variant,
+};
 use crate::realtime_settings::{apply_latency_preset_to_config, normalize_latency_preset};
 use crate::runtime_session::{LocalAsrRuntimeSession, RuntimeEmitCallback, RuntimeSessionError};
 use crate::setup::{apply_test_bench_progress, clear_setup, try_finalize_setup};
@@ -121,15 +129,17 @@ impl LocalAsrModuleService {
         self.store.load()
     }
 
-    pub fn save_config(&self, config: &LocalAsrConfig) -> Result<(), crate::config::LocalAsrConfigError> {
+    pub fn save_config(
+        &self,
+        config: &LocalAsrConfig,
+    ) -> Result<(), crate::config::LocalAsrConfigError> {
         let mut merged = self.load_config().unwrap_or_default();
         let previous_provider = merged.inference.execution_provider.clone();
         let previous_session = session_options_fingerprint(&merged.inference);
         let previous_preset = merged.realtime.latency_preset.clone();
         merged.apply_tunable_from(config);
-        merged.inference.execution_provider = crate::config::normalize_execution_provider(
-            &merged.inference.execution_provider,
-        );
+        merged.inference.execution_provider =
+            crate::config::normalize_execution_provider(&merged.inference.execution_provider);
         crate::config::normalize_inference_session_options(&mut merged.inference);
         if normalize_latency_preset(&merged.realtime.latency_preset)
             != normalize_latency_preset(&previous_preset)
@@ -148,7 +158,9 @@ impl LocalAsrModuleService {
         Ok(())
     }
 
-    pub fn list_microphones(&self) -> Result<Vec<crate::capture::InputDeviceInfo>, crate::capture::CaptureError> {
+    pub fn list_microphones(
+        &self,
+    ) -> Result<Vec<crate::capture::InputDeviceInfo>, crate::capture::CaptureError> {
         crate::capture::list_input_devices()
     }
 
@@ -183,14 +195,27 @@ impl LocalAsrModuleService {
         self.transfer.snapshot()
     }
 
-    pub async fn download_deps(&self, kind: DepDownloadKind) -> Result<LocalAsrModuleStatus, DepError> {
+    pub async fn download_deps(
+        &self,
+        kind: DepDownloadKind,
+    ) -> Result<LocalAsrModuleStatus, DepError> {
         let mut reporter = self.transfer.reporter();
         match download_dependency(self.store.module_dir(), kind, &mut reporter).await {
             Ok(()) => {
-                self.inference.unload();
-                if matches!(kind, DepDownloadKind::OrtCpu | DepDownloadKind::OrtGpu) {
-                    let _ = InferenceEngine::ensure_ort_initialized(self.store.module_dir());
-                }
+                // ORT unload/init + env_check are blocking; keep them off the Tokio worker.
+                let inference = Arc::clone(&self.inference);
+                let module_dir = self.store.module_dir().to_path_buf();
+                let kind_for_init = kind;
+                let _ = tokio::task::spawn_blocking(move || {
+                    inference.unload();
+                    if matches!(
+                        kind_for_init,
+                        DepDownloadKind::OrtCpu | DepDownloadKind::OrtGpu
+                    ) {
+                        let _ = InferenceEngine::ensure_ort_initialized(&module_dir);
+                    }
+                })
+                .await;
                 self.invalidate_status_cache();
                 Ok(self.refresh_status())
             }
@@ -348,7 +373,9 @@ impl LocalAsrModuleService {
 
     pub fn load_model(&self) -> Result<LoadResult, InferenceError> {
         let config = self.load_config().unwrap_or_default();
-        let result = self.inference.load(self.store.module_dir(), &self.logs_dir, &config)?;
+        let result = self
+            .inference
+            .load(self.store.module_dir(), &self.logs_dir, &config)?;
         self.invalidate_status_cache();
         Ok(result)
     }
@@ -412,7 +439,11 @@ impl LocalAsrModuleService {
         self.runtime_session.stop()
     }
 
-    pub fn start_test(&self, duration_ms: u64, device_id: Option<&str>) -> Result<TestBenchSnapshot, TestBenchError> {
+    pub fn start_test(
+        &self,
+        duration_ms: u64,
+        device_id: Option<&str>,
+    ) -> Result<TestBenchSnapshot, TestBenchError> {
         if self.runtime_session.is_running() {
             return Err(TestBenchError::Inference(InferenceError::Runtime(
                 "stop runtime capture before running the test bench".into(),
@@ -426,8 +457,9 @@ impl LocalAsrModuleService {
         let mut config = self.load_config().unwrap_or_default();
         if let Some(id) = device_id {
             config.microphone.device_id = id.to_string();
-            self.save_config(&config)
-                .map_err(|err| TestBenchError::Inference(InferenceError::Runtime(err.to_string())))?;
+            self.save_config(&config).map_err(|err| {
+                TestBenchError::Inference(InferenceError::Runtime(err.to_string()))
+            })?;
         }
         let device_id = config.microphone.device_id.clone();
         let device_label = crate::capture::list_input_devices()
@@ -445,14 +477,10 @@ impl LocalAsrModuleService {
                     device_id.clone()
                 }
             });
-        let provider = self
-            .inference
-            .snapshot()
-            .active_execution_provider
-            .clone();
+        let provider = self.inference.snapshot().active_execution_provider;
         self.test_bench.start(
             Arc::clone(&self.inference),
-            config.clone(),
+            config,
             duration_ms,
             provider,
             device_id,
@@ -474,7 +502,10 @@ impl LocalAsrModuleService {
         Ok(snap)
     }
 
-    fn commit_setup_from_test(&self, snap: &TestBenchSnapshot) -> Result<(), crate::config::LocalAsrConfigError> {
+    fn commit_setup_from_test(
+        &self,
+        snap: &TestBenchSnapshot,
+    ) -> Result<(), crate::config::LocalAsrConfigError> {
         let previous = self.load_config().unwrap_or_default();
         let mut config = previous.clone();
         apply_test_bench_progress(&mut config, snap);
@@ -515,7 +546,7 @@ fn session_options_fingerprint(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model_manager::{ModelVariant, MODEL_VARIANT_INT8, MODEL_VARIANT_FP32};
+    use crate::model_manager::{MODEL_VARIANT_FP32, MODEL_VARIANT_INT8, ModelVariant};
 
     #[test]
     fn unload_after_runtime_stop_is_idempotent_when_unloaded() {
@@ -549,7 +580,8 @@ mod tests {
     fn select_model_updates_config_variant_and_catalog_active_flag() {
         let dir = tempfile::tempdir().unwrap();
         let service = LocalAsrModuleService::new(dir.path(), dir.path().join("logs"));
-        let int8_dir = model_manager::model_dir_for_variant(service.module_dir(), MODEL_VARIANT_INT8);
+        let int8_dir =
+            model_manager::model_dir_for_variant(service.module_dir(), MODEL_VARIANT_INT8);
         std::fs::create_dir_all(&int8_dir).unwrap();
         for name in ModelVariant::Int8.required_files() {
             let min = if name.ends_with(".onnx.data") {
@@ -562,19 +594,27 @@ mod tests {
             std::fs::write(int8_dir.join(name), vec![b'x'; min]).unwrap();
         }
 
-        let status = service.select_model("parakeet_tdt", MODEL_VARIANT_FP32).expect("select fp32");
+        let status = service
+            .select_model("parakeet_tdt", MODEL_VARIANT_FP32)
+            .expect("select fp32");
         assert_eq!(status.active_model_variant, MODEL_VARIANT_FP32);
         assert!(status.models.iter().any(|entry| {
             entry.family == "parakeet_tdt" && entry.variant == MODEL_VARIANT_FP32 && entry.active
         }));
 
-        let status = service.select_model("parakeet_tdt", MODEL_VARIANT_INT8).expect("select int8");
+        let status = service
+            .select_model("parakeet_tdt", MODEL_VARIANT_INT8)
+            .expect("select int8");
         assert_eq!(status.active_model_variant, MODEL_VARIANT_INT8);
         let config = service.load_config().expect("load config");
         assert_eq!(config.model.variant, MODEL_VARIANT_INT8);
         assert!(!config.model.path.is_empty());
         assert_eq!(
-            status.models.iter().filter(|entry| entry.family == "parakeet_tdt").count(),
+            status
+                .models
+                .iter()
+                .filter(|entry| entry.family == "parakeet_tdt")
+                .count(),
             3
         );
     }

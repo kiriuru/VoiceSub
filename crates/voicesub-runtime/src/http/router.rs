@@ -15,6 +15,13 @@ use voicesub_config::build_project_fonts_stylesheet;
 
 use super::devices::audio_inputs;
 use super::exports::{export_diagnostics, list_exports};
+use super::local_asr::{
+    local_asr_config_get, local_asr_config_save, local_asr_deps_check, local_asr_deps_delete,
+    local_asr_deps_download, local_asr_deps_probe, local_asr_driver_url, local_asr_mics_list,
+    local_asr_model_delete, local_asr_model_download, local_asr_model_load, local_asr_model_select,
+    local_asr_model_unload, local_asr_status, local_asr_test_start, local_asr_test_status,
+    local_asr_test_stop, local_asr_transfer, local_asr_transfer_cancel,
+};
 use super::logs::{logs_client_event, logs_ui_trace};
 use super::loopback_auth::{LoopbackAuth, loopback_auth_middleware};
 use super::openai::{list_models, recommended_models, usable_models};
@@ -25,16 +32,8 @@ use super::state::HttpState;
 use super::tts_proxy::google_tts_proxy;
 use super::tts_python::{python_tts_proxy, python_tts_status};
 use super::twitch_oauth::{twitch_oauth_complete, twitch_oauth_open, twitch_oauth_pending};
-use super::local_asr::{
-    local_asr_config_get, local_asr_config_save, local_asr_deps_check, local_asr_deps_delete,
-    local_asr_deps_download, local_asr_deps_probe, local_asr_driver_url, local_asr_mics_list,
-    local_asr_model_delete, local_asr_model_download, local_asr_model_load, local_asr_model_select,
-    local_asr_model_unload,
-    local_asr_status, local_asr_test_start, local_asr_test_status, local_asr_test_stop,
-    local_asr_transfer, local_asr_transfer_cancel,
-};
-use super::updates::{check_updates, version_info};
 use super::ui_sync::ui_sync;
+use super::updates::{check_updates, version_info};
 
 pub fn build_router(state: Arc<HttpState>) -> Router {
     let paths = state.paths.clone();
@@ -55,7 +54,7 @@ pub fn build_router(state: Arc<HttpState>) -> Router {
     let dashboard_assets = ServeDir::new(paths.dashboard_dist.join("assets"));
     let tts_static = ServeDir::new(paths.tts_dist.clone());
     let local_asr_static = ServeDir::new(paths.local_asr_dist.clone());
-    let project_fonts_static = ServeDir::new(paths.fonts_dir.clone());
+    let project_fonts_static = ServeDir::new(paths.fonts_dir);
 
     let protected_api = Router::new()
         .route("/api/health", get(health))
@@ -83,9 +82,15 @@ pub fn build_router(state: Arc<HttpState>) -> Router {
         .route("/api/asr/local/config", get(local_asr_config_get))
         .route("/api/asr/local/config/save", post(local_asr_config_save))
         .route("/api/asr/local/deps/check", post(local_asr_deps_check))
-        .route("/api/asr/local/deps/download", post(local_asr_deps_download))
+        .route(
+            "/api/asr/local/deps/download",
+            post(local_asr_deps_download),
+        )
         .route("/api/asr/local/deps/delete", post(local_asr_deps_delete))
-        .route("/api/asr/local/model/download", post(local_asr_model_download))
+        .route(
+            "/api/asr/local/model/download",
+            post(local_asr_model_download),
+        )
         .route("/api/asr/local/model/select", post(local_asr_model_select))
         .route("/api/asr/local/model/delete", post(local_asr_model_delete))
         .route("/api/asr/local/deps/probe", post(local_asr_deps_probe))
@@ -96,7 +101,10 @@ pub fn build_router(state: Arc<HttpState>) -> Router {
         .route("/api/asr/local/test/status", get(local_asr_test_status))
         .route("/api/asr/local/mics/list", get(local_asr_mics_list))
         .route("/api/asr/local/transfer", get(local_asr_transfer))
-        .route("/api/asr/local/transfer/cancel", post(local_asr_transfer_cancel))
+        .route(
+            "/api/asr/local/transfer/cancel",
+            post(local_asr_transfer_cancel),
+        )
         .route("/api/asr/local/driver-url", get(local_asr_driver_url))
         .route("/api/exports", get(list_exports))
         .route("/api/exports/diagnostics", get(export_diagnostics))

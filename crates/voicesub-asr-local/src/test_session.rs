@@ -7,11 +7,11 @@ use serde::Serialize;
 use thiserror::Error;
 use tracing::{info, warn};
 
-use crate::async_decode::AsyncDecodeWorker;
 use crate::asr_segment_queue::{AsrSegmentQueue, RuntimeGeneration};
+use crate::async_decode::AsyncDecodeWorker;
 use crate::capture::{self, CaptureError, MicStream};
 use crate::config::LocalAsrConfig;
-use crate::emit_policy::{dedupe_repeated_transcript, RealtimeEmitPolicy};
+use crate::emit_policy::{RealtimeEmitPolicy, dedupe_repeated_transcript};
 use crate::emit_telemetry::{EmitTelemetry, EmitTelemetrySnapshot};
 use crate::inference::{InferenceEngine, InferenceError};
 use crate::pipeline::{PipelineEmit, PipelineStopFlag, RealtimePipeline, SAMPLE_RATE};
@@ -153,7 +153,7 @@ impl TestBench {
             ),
             duration_ms,
             device_id: device_id.clone(),
-            device_label: device_label.clone(),
+            device_label,
             sample_rate: SAMPLE_RATE,
             ..TestBenchSnapshot::default()
         };
@@ -247,7 +247,7 @@ fn run_streaming_test_bench(
     let mut emit_policy = RealtimeEmitPolicy::default();
     let decode_worker = AsyncDecodeWorker::spawn_with_feedback(
         inference.clone(),
-        config.recognition.clone(),
+        config.recognition,
         queue,
         generation,
         pipeline.chunk_window_ms(),
@@ -425,7 +425,10 @@ fn run_streaming_test_bench(
     });
 }
 
-fn update_snapshot(shared: &Arc<Mutex<TestBenchInner>>, update: impl FnOnce(&mut TestBenchSnapshot)) {
+fn update_snapshot(
+    shared: &Arc<Mutex<TestBenchInner>>,
+    update: impl FnOnce(&mut TestBenchSnapshot),
+) {
     let mut guard = shared.lock();
     update(&mut guard.snapshot);
 }

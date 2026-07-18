@@ -7,7 +7,5 @@ mod policy;
 mod settings;
 
 pub use coordinator::PartialEmitCoordinator;
-pub use policy::{
-    normalize_transcript_text, should_emit_partial, split_words, PartialEmitInput,
-};
+pub use policy::{PartialEmitInput, normalize_transcript_text, should_emit_partial, split_words};
 pub use settings::{PartialEmitSettings, partial_emit_settings_from_config};

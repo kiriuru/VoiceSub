@@ -9,7 +9,8 @@ use std::sync::Arc;
 use super::{
     ProviderError, ProviderInfo, TranslateRequest, TranslationProvider, base_diagnostics,
     crypto_util::{hmac_sha256, hmac_sha256_hex, sha256_hex},
-    http, http::SharedHttpClient,
+    http,
+    http::SharedHttpClient,
     lang_codes::tencent_lang,
     mask_secret, normalize_source_lang,
 };
@@ -43,9 +44,8 @@ impl TencentTmtProvider {
             ACTION.to_ascii_lowercase()
         );
         let signed_headers = "content-type;host;x-tc-action";
-        let canonical_request = format!(
-            "POST\n/\n\n{canonical_headers}\n{signed_headers}\n{hashed_payload}"
-        );
+        let canonical_request =
+            format!("POST\n/\n\n{canonical_headers}\n{signed_headers}\n{hashed_payload}");
         let hashed_canonical = sha256_hex(&canonical_request);
         let string_to_sign =
             format!("{ALGORITHM}\n{timestamp}\n{credential_scope}\n{hashed_canonical}");

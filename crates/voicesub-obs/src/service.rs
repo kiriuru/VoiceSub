@@ -87,7 +87,7 @@ impl ObsCaptionService {
             config_getter: config_getter.clone(),
             inner: Arc::new(Inner {
                 config_getter,
-                log: log.clone(),
+                log,
                 queue: StdMutex::new(VecDeque::new()),
                 queue_notify: Notify::new(),
                 worker_task: Mutex::new(None),

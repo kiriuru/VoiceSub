@@ -29,10 +29,7 @@ fn required_fields(provider_name: &str) -> &'static [&'static str] {
     }
 }
 
-fn soft_warnings(
-    provider_name: &str,
-    settings: &HashMap<String, String>,
-) -> Vec<String> {
+fn soft_warnings(provider_name: &str, settings: &HashMap<String, String>) -> Vec<String> {
     let mut warnings = Vec::new();
     if provider_name == "azure_translator" {
         let region = settings.get("region").map(|s| s.trim()).unwrap_or("");
@@ -46,7 +43,8 @@ fn soft_warnings(
         let api_url = settings.get("api_url").map(|s| s.trim()).unwrap_or("");
         if api_url.contains("libretranslate.com") {
             warnings.push(
-                "Public libretranslate.com may require an API key or rate-limit anonymous use.".into(),
+                "Public libretranslate.com may require an API key or rate-limit anonymous use."
+                    .into(),
             );
         }
     }
@@ -96,14 +94,10 @@ fn provider_endpoint_summary(
             .get("api_url")
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty()),
-        "baidu_translate" => {
-            Some("https://fanyi-api.baidu.com/api/trans/vip/translate".into())
-        }
+        "baidu_translate" => Some("https://fanyi-api.baidu.com/api/trans/vip/translate".into()),
         "youdao_translate" => Some("https://openapi.youdao.com/api".into()),
         "tencent_tmt" => Some("https://tmt.tencentcloudapi.com".into()),
-        "caiyun_translator" => {
-            Some("https://api.interpreter.caiyunai.com/v1/translator".into())
-        }
+        "caiyun_translator" => Some("https://api.interpreter.caiyunai.com/v1/translator".into()),
         "openai" | "openrouter" | "lm_studio" | "ollama" => settings
             .get("base_url")
             .map(|s| s.trim().to_string())

@@ -92,6 +92,18 @@ impl TranslationRuntimeController {
         }
     }
 
+    /// Clone of the live dispatcher for callers that must drop the controller mutex
+    /// before awaiting enqueue / relevance work.
+    pub fn dispatcher_handle(&self) -> Option<Arc<TranslationDispatcher>> {
+        self.dispatcher.clone()
+    }
+
+    pub async fn ensure_started(&mut self, callbacks: DispatcherCallbacks) {
+        if self.dispatcher.is_none() {
+            self.start(callbacks).await;
+        }
+    }
+
     pub async fn submit_final(
         &mut self,
         sequence: u64,
@@ -99,9 +111,7 @@ impl TranslationRuntimeController {
         source_lang: &str,
         preview_lineage_key: Option<&str>,
     ) {
-        if self.dispatcher.is_none() {
-            self.start(DispatcherCallbacks::default()).await;
-        }
+        self.ensure_started(DispatcherCallbacks::default()).await;
         if let Some(dispatcher) = &self.dispatcher {
             dispatcher
                 .submit_final(sequence, source_text, source_lang, preview_lineage_key)

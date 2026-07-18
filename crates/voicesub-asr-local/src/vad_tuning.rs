@@ -50,7 +50,10 @@ fn effective_min_rms_for_recognition(vad: &LocalAsrVadConfig) -> f32 {
     vad.min_rms_for_recognition
 }
 
-pub fn vad_engine_from_config(config: &LocalAsrConfig, settings: &ResolvedRealtimeSettings) -> VadEngine {
+pub fn vad_engine_from_config(
+    config: &LocalAsrConfig,
+    settings: &ResolvedRealtimeSettings,
+) -> VadEngine {
     let mut engine = VadEngine::new(VadEngineConfig::default());
     apply_vad_tuning_from_settings(&mut engine, config, settings);
     engine

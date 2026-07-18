@@ -408,7 +408,7 @@ impl ChannelOrchestrator {
                 continue;
             }
 
-            let (volume, rate) = self.playback_settings().await;
+            let (volume, rate) = self.playback_settings();
             {
                 let mut state = self.state.lock().await;
                 if state.epoch != epoch || !state.enabled {
@@ -477,7 +477,7 @@ impl ChannelOrchestrator {
         }
     }
 
-    async fn playback_settings(self: &Arc<Self>) -> (f32, f32) {
+    fn playback_settings(self: &Arc<Self>) -> (f32, f32) {
         let config = self.service.load_config().unwrap_or_default();
         let waiting = self
             .service

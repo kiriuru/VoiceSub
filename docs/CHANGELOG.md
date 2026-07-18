@@ -14,10 +14,6 @@
 
 ## [Unreleased]
 
-### Fixed
-
-- Local ASR: `max_segment_ms` снова **5500** (как в UI / SST). Значение **120000** из пресетов/дефолта не давало force-final — партиклы росли минутами без Final при «липком» WebRTC VAD; при загрузке конфига ровно `120000` лечится обратно в `5500`.
-
 ## [0.6.0] - 2026-07-18
 
 ### Added
@@ -42,6 +38,8 @@
 
 ### Fixed
 
+- Окно TTS (и Local ASR): снова `async` Tauri-команды для `WebviewWindowBuilder::build` — sync IPC вешал всё приложение на Windows (WebView2).
+- Local ASR: `max_segment_ms` снова **5500** (как в UI / SST). Значение **120000** из пресетов/дефолта не давало force-final — партиклы росли минутами без Final при «липком» WebRTC VAD; при загрузке конфига ровно `120000` лечится обратно в `5500`.
 - Local ASR / runtime idle CPU: heartbeat больше не гоняет полный `env_check` (скан CUDA/DLL) на каждом тике — `diagnostics()` и `GET /api/asr/local/status` используют кэш статуса; поиск DLL индексирует каталог один раз; перечисление микрофонов в `spawn_blocking`; окно Local ASR откладывает mic list до первой отрисовки; dialog open/close без re-entrancy spin.
 - Local ASR: утечка памяти/CPU WebView2 при открытии модуля — `setLocale` стал идемпотентным (иначе `sst:locale-changed` + BroadcastChannel зацикливались); модуль больше не подключается к `/ws/events` для UI sync (хватит Tauri IPC).
 - TTS: то же — отключён `/ws/events` для UI sync (IPC уже шлёт `ui_config_sync`); locale sync идёт через `applyDashboardLocale` / идемпотентный `setLocale` (утечки как у Local ASR не было за счёт guard, но WS зря принимал overlay/runtime).
@@ -90,6 +88,8 @@
 
 ### Changed
 
+- Rust: workspace lints + `clippy.toml` (MSRV 1.85) — deny `unused_async` / `await_holding_lock` / `await_holding_refcell_ref` / `redundant_clone` (pedantic-light); CI `clippy -D warnings` снова зелёный.
+- Async hot paths: start/stop runtime — Chrome kill/launch и Local ASR start/stop через `spawn_blocking`; ошибка save config отпускает write-lock до status/broadcast; translation final отпускает mutex контроллера до enqueue; Local ASR unload/init ORT и zip extract — вне Tokio worker.
 - Панель стилей: компактная сетка числовых полей; выравнивание и эффект в одной строке.
 - Каталог built-in стилей пересобран (**20** пресетов): тематические dual-script стеки (Film Noir, Retro Terminal, Fallout, Anime Stream и др.); однотипные тёмные плашки сведены к **4 материалам** — Max Contrast, Podcast Subtle (пергамент), Glass Frost (молочный лёд ~44%), Twitch Lower-Third (`#9146FF` + Oswald). Удалены `sakura_soft`, `minimal_mono`, `editorial_news` (миграция → `meeting_soft` / `glass_frost` / `dark_cinema`).
 - **Retro Terminal**: кириллица через **IBM Plex Serif Regular**.
@@ -110,6 +110,10 @@
 - DeepL мапит UI-коды языков (`en`/`zh-cn`/`pt`, …) в API targets и выбирает Free vs Pro URL по ключу (`:fx` → free).
 - Google Cloud Translation v3 раскрывает короткие model id в full resource names; добавлены i18n-лейблы настроек Google v3.
 - Azure / LibreTranslate мапят китайские UI-коды (`zh-Hans`/`zh-Hant`, `zh`/`zt`); readiness показывает soft-warnings для пустого Azure region и публичного LibreTranslate.
+
+### Security
+
+- Tauri IPC ACL least-privilege: `main` — только shell (token, snapshot, layout, open module windows, URL openers); TTS-команды только у окна `tts`; убраны мёртвые `launch_browser_worker` / `voicesub_version` / `tts_play_audio` / `tts_stop_channel`; deny frontend `emit`/`emit-to`; без `create-webview-window` на dashboard.
 
 ## [0.5.5] - 2026-06-26
 

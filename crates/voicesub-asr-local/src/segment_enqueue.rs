@@ -83,10 +83,7 @@ pub fn slice_segment_audio_delta(
         queued_sample_len_by_segment.insert(key.to_string(), 0);
     }
 
-    let mut previous_len = queued_sample_len_by_segment
-        .get(key)
-        .copied()
-        .unwrap_or(0);
+    let mut previous_len = queued_sample_len_by_segment.get(key).copied().unwrap_or(0);
     let total_len = segment_audio.len();
     if previous_len > total_len {
         queued_sample_len_by_segment.insert(key.to_string(), 0);

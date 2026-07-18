@@ -9,9 +9,8 @@ use std::sync::Arc;
 
 use super::{
     ProviderError, ProviderInfo, TranslateRequest, TranslationProvider, base_diagnostics,
-    crypto_util::md5_hex, http, http::SharedHttpClient,
-    lang_codes::baidu_lang,
-    mask_secret, normalize_source_lang,
+    crypto_util::md5_hex, http, http::SharedHttpClient, lang_codes::baidu_lang, mask_secret,
+    normalize_source_lang,
 };
 
 pub struct BaiduTranslateProvider {

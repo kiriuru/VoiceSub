@@ -260,7 +260,10 @@ mod tests {
 
     #[test]
     fn normalize_collapses_space_before_punct() {
-        assert_eq!(normalize_transcript_text("hello  ,  world ?"), "hello, world?");
+        assert_eq!(
+            normalize_transcript_text("hello  ,  world ?"),
+            "hello, world?"
+        );
         assert_eq!(normalize_transcript_text("  a   b  "), "a b");
     }
 }

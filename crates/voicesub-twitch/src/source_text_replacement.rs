@@ -360,12 +360,12 @@ fn normalize_for_match(input: &str) -> NormalizedText {
             space_pending = Some((start, end));
             continue;
         }
-        if let Some((s, e)) = space_pending.take() {
-            if !text.is_empty() {
-                text.push(' ');
-                orig_byte_ranges.push((s, e));
-                last = Some(' ');
-            }
+        if let Some((s, e)) = space_pending.take()
+            && !text.is_empty()
+        {
+            text.push(' ');
+            orig_byte_ranges.push((s, e));
+            last = Some(' ');
         }
         if last == Some(ch) && ch.is_alphabetic() {
             // skip repeat; extend last range
@@ -452,7 +452,10 @@ pub fn effective_replacement_pairs(
     let mut by_key: std::collections::HashMap<String, (String, String)> =
         std::collections::HashMap::new();
     for (source, target) in normalize_custom_pairs(&settings.pairs) {
-        by_key.insert(dedupe_key(&source, settings.case_insensitive), (source, target));
+        by_key.insert(
+            dedupe_key(&source, settings.case_insensitive),
+            (source, target),
+        );
     }
     if settings.include_builtin {
         for pair in builtin_pairs_raw() {
@@ -460,9 +463,9 @@ pub fn effective_replacement_pairs(
             if source.is_empty() {
                 continue;
             }
-            by_key.entry(dedupe_key(source, settings.case_insensitive)).or_insert_with(|| {
-                (source.to_string(), pair.target.clone())
-            });
+            by_key
+                .entry(dedupe_key(source, settings.case_insensitive))
+                .or_insert_with(|| (source.to_string(), pair.target.clone()));
         }
     }
 
@@ -547,8 +550,7 @@ fn build_engine(settings: &SourceTextReplacementSettings) -> ReplacementEngine {
                 continue;
             }
             let key = dedupe_key(source, settings.case_insensitive);
-            if !seen.insert(key) || custom_overrides(source, &custom, settings.case_insensitive)
-            {
+            if !seen.insert(key) || custom_overrides(source, &custom, settings.case_insensitive) {
                 continue;
             }
             if is_multi_word_phrase(source) {
@@ -583,8 +585,11 @@ fn build_engine(settings: &SourceTextReplacementSettings) -> ReplacementEngine {
     }
 }
 
-fn engine_cache() -> &'static Mutex<Option<(EngineKey, Arc<ReplacementEngine>)>> {
-    static CACHE: OnceLock<Mutex<Option<(EngineKey, Arc<ReplacementEngine>)>>> = OnceLock::new();
+type EngineCacheEntry = Option<(EngineKey, Arc<ReplacementEngine>)>;
+type EngineCache = Mutex<EngineCacheEntry>;
+
+fn engine_cache() -> &'static EngineCache {
+    static CACHE: OnceLock<EngineCache> = OnceLock::new();
     CACHE.get_or_init(|| Mutex::new(None))
 }
 
@@ -595,13 +600,11 @@ fn engine_for(settings: &SourceTextReplacementSettings) -> Arc<ReplacementEngine
         whole_words: settings.whole_words,
         pairs: normalize_custom_pairs(&settings.pairs),
     };
-    let mut guard = engine_cache()
-        .lock()
-        .unwrap_or_else(|e| e.into_inner());
-    if let Some((cached_key, engine)) = guard.as_ref() {
-        if cached_key == &key {
-            return Arc::clone(engine);
-        }
+    let mut guard = engine_cache().lock().unwrap_or_else(|e| e.into_inner());
+    if let Some((cached_key, engine)) = guard.as_ref()
+        && cached_key == &key
+    {
+        return Arc::clone(engine);
     }
     let engine = Arc::new(build_engine(settings));
     *guard = Some((key, Arc::clone(&engine)));
@@ -622,7 +625,11 @@ fn apply_compiled_pairs(text: &str, pairs: &[CompiledPair]) -> String {
     result
 }
 
-fn norm_index_to_orig_bytes(norm: &NormalizedText, start: usize, end: usize) -> Option<(usize, usize)> {
+fn norm_index_to_orig_bytes(
+    norm: &NormalizedText,
+    start: usize,
+    end: usize,
+) -> Option<(usize, usize)> {
     if start >= end || end > norm.orig_byte_ranges.len() {
         return None;
     }
@@ -1081,10 +1088,7 @@ mod tests {
             apply_source_text_replacement("sh1t happens", &settings),
             "s*1t happens"
         );
-        assert_eq!(
-            apply_source_text_replacement("х у й", &settings),
-            "х*й"
-        );
+        assert_eq!(apply_source_text_replacement("х у й", &settings), "х*й");
         assert_eq!(
             apply_source_text_replacement("суууука", &settings),
             "с*ууука"
@@ -1098,10 +1102,7 @@ mod tests {
         let _ = apply_source_text_replacement("warmup fuck", &settings);
         let t0 = Instant::now();
         for _ in 0..200 {
-            let _ = apply_source_text_replacement(
-                "what the fuck bad word hello world",
-                &settings,
-            );
+            let _ = apply_source_text_replacement("what the fuck bad word hello world", &settings);
         }
         let elapsed = t0.elapsed();
         // Debug builds are slower; release is ~10× faster. Guard against regex-per-call regression.

@@ -1,8 +1,7 @@
 [[permission]]
 identifier = "allow-voicesub-tts-ipc"
-description = "TTS module webview IPC — playback, Twitch, snapshot, loopback token, allowlisted URLs."
+description = "TTS module webview IPC — config, playback control, Twitch, snapshot, loopback token, Twitch OAuth URL."
 commands.allow = [
-  "voicesub_version",
   "get_loopback_api_token",
   "get_runtime_state_snapshot",
   "tts_get_config",
@@ -11,8 +10,6 @@ commands.allow = [
   "tts_set_audio_device",
   "tts_set_channel_audio_device",
   "tts_set_playback_mode",
-  "tts_play_audio",
-  "tts_stop_channel",
   "tts_list_output_devices",
   "tts_get_audio_routing",
   "tts_bind_window_audio",
@@ -29,6 +26,4 @@ commands.allow = [
   "tts_update_twitch_settings",
   "tts_open_system_url",
   "tts_report_webview_activity",
-  "open_external_https_url",
-  "open_local_http_url",
 ]

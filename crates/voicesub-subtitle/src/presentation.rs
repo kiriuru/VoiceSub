@@ -624,7 +624,7 @@ impl SubtitlePresentation {
             payload.sequence = active_partial_sequence.unwrap_or(payload.sequence);
             payload.source_text = active_partial_text.clone();
             payload.source_lang = active_source_lang;
-            payload.provider = source_item.provider.clone();
+            payload.provider = source_item.provider;
             payload.display_order = display_order;
             payload.show_source = show_source;
             payload.show_translations = show_translations;

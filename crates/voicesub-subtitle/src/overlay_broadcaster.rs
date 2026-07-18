@@ -217,7 +217,7 @@ mod tests {
         let messages = Arc::new(Mutex::new(Vec::new()));
         let messages_cb = messages.clone();
         let tick = Arc::new(AtomicU64::new(0));
-        let tick_cb = tick.clone();
+        let tick_cb = tick;
         let start = Instant::now();
         let broadcaster = OverlayBroadcaster::with_clocks(
             Arc::new(move |message| {
@@ -243,9 +243,9 @@ mod tests {
         let messages = Arc::new(Mutex::new(Vec::new()));
         let messages_cb = messages.clone();
         let tick = Arc::new(AtomicU64::new(0));
-        let tick_cb = tick.clone();
+        let tick_cb = tick;
         let wall_clock = Arc::new(AtomicU64::new(1_700_000_000_000));
-        let wall_clock_cb = wall_clock.clone();
+        let wall_clock_cb = wall_clock;
         let start = Instant::now();
         let broadcaster = OverlayBroadcaster::with_clocks(
             Arc::new(move |message| {
@@ -275,7 +275,7 @@ mod tests {
         let messages = Arc::new(Mutex::new(Vec::new()));
         let messages_cb = messages.clone();
         let tick = Arc::new(AtomicU64::new(0));
-        let tick_cb = tick.clone();
+        let tick_cb = tick;
         let start = Instant::now();
         let broadcaster = OverlayBroadcaster::with_clocks(
             Arc::new(move |message| {
@@ -306,7 +306,7 @@ mod tests {
         let messages = Arc::new(Mutex::new(Vec::new()));
         let messages_cb = messages.clone();
         let tick = Arc::new(AtomicU64::new(0));
-        let tick_cb = tick.clone();
+        let tick_cb = tick;
         let start = Instant::now();
         let broadcaster = OverlayBroadcaster::with_clocks(
             Arc::new(move |message| {

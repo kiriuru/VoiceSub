@@ -14,10 +14,6 @@ This file covers the desktop line: **VoiceSub** (from `0.5.0`) and earlier **SST
 
 ## [Unreleased]
 
-### Fixed
-
-- Local ASR: restore `max_segment_ms` to **5500** (UI / SST parity). The **120000** preset/default disabled force-final — partials could grow for minutes without a Final when WebRTC VAD stayed sticky; loading a config with exactly `120000` heals it back to `5500`.
-
 ## [0.6.0] - 2026-07-18
 
 ### Added
@@ -42,6 +38,8 @@ This file covers the desktop line: **VoiceSub** (from `0.5.0`) and earlier **SST
 
 ### Fixed
 
+- TTS (and Local ASR) module window open: restore `async` Tauri commands for `WebviewWindowBuilder::build` — sync IPC deadlocked the whole app on Windows (WebView2).
+- Local ASR: restore `max_segment_ms` to **5500** (UI / SST parity). The **120000** preset/default disabled force-final — partials could grow for minutes without a Final when WebRTC VAD stayed sticky; loading a config with exactly `120000` heals it back to `5500`.
 - Local ASR / runtime idle CPU: heartbeat no longer runs a full `env_check` (CUDA/DLL scan) every tick — `diagnostics()` and `GET /api/asr/local/status` use the status cache; DLL lookup indexes each directory once; mic enumeration runs in `spawn_blocking`; Local ASR window defers mic list until after first paint; dialog open/close avoids re-entrancy spin.
 - Local ASR: WebView2 memory/CPU blow-up on module open — `setLocale` is idempotent (stops `sst:locale-changed` + BroadcastChannel feedback loops); module no longer connects to `/ws/events` for UI sync (Tauri IPC is enough).
 - TTS: same — disable `/ws/events` for UI sync (IPC already delivers `ui_config_sync`); locale sync uses `applyDashboardLocale` / idempotent `setLocale` (no Local-ASR-style leak thanks to the existing guard, but WS was still receiving overlay/runtime frames).
@@ -90,6 +88,8 @@ This file covers the desktop line: **VoiceSub** (from `0.5.0`) and earlier **SST
 
 ### Changed
 
+- Rust: workspace lints + `clippy.toml` (MSRV 1.85) — deny `unused_async` / `await_holding_lock` / `await_holding_refcell_ref` / `redundant_clone` (pedantic-light); CI `clippy -D warnings` green again.
+- Async hot paths: runtime start/stop moves Chrome kill/launch and Local ASR start/stop to `spawn_blocking`; config-save error path drops the write lock before status/broadcast; translation finals release the controller mutex before enqueue; Local ASR ORT unload/init and zip extract run off the Tokio worker.
 - Style panel: compact numeric field grid; text align and effect on one row.
 - Built-in style catalog rebuilt (**20** presets): themed dual-script stacks (Film Noir, Retro Terminal, Fallout, Anime Stream, and others); near-identical dark plates collapsed to **4 materials** — Max Contrast, Podcast Subtle (parchment), Glass Frost (milky ice ~44%), Twitch Lower-Third (`#9146FF` + Oswald). Removed `sakura_soft`, `minimal_mono`, `editorial_news` (migrate → `meeting_soft` / `glass_frost` / `dark_cinema`).
 - **Retro Terminal**: Cyrillic via **IBM Plex Serif Regular**.
@@ -110,6 +110,10 @@ This file covers the desktop line: **VoiceSub** (from `0.5.0`) and earlier **SST
 - DeepL maps UI language codes (`en`/`zh-cn`/`pt`, …) to API targets and auto-selects Free vs Pro URL from the API key (`:fx` → free).
 - Google Cloud Translation v3 expands short model ids to full resource names; Google v3 settings labels i18n added.
 - Azure / LibreTranslate map Chinese UI codes (`zh-Hans`/`zh-Hant`, `zh`/`zt`); readiness surfaces soft warnings for empty Azure region and public LibreTranslate.
+
+### Security
+
+- Tauri IPC ACL least-privilege: `main` is shell-only (token, snapshot, layout, open module windows, URL openers); TTS commands only on the `tts` window; removed dead `launch_browser_worker` / `voicesub_version` / `tts_play_audio` / `tts_stop_channel`; deny frontend `emit`/`emit-to`; no dashboard `create-webview-window`.
 
 ## [0.5.5] - 2026-06-26
 

@@ -129,7 +129,7 @@ impl TwitchChatService {
         }
         let emotes = self.emotes.clone();
         let client_id = settings.resolve_client_id();
-        let oauth_token = settings.oauth_token.clone();
+        let oauth_token = settings.oauth_token;
         self.runtime.spawn(async move {
             if let Err(err) = emotes
                 .refresh_all(&logins, &client_id, &oauth_token, &sources)

@@ -8,11 +8,9 @@ use tracing::{info, warn};
 
 pub const ORT_VERSION: &str = "1.24.2";
 
-pub const ORT_CPU_ZIP_URL: &str =
-    "https://github.com/microsoft/onnxruntime/releases/download/v1.24.2/onnxruntime-win-x64-1.24.2.zip";
+pub const ORT_CPU_ZIP_URL: &str = "https://github.com/microsoft/onnxruntime/releases/download/v1.24.2/onnxruntime-win-x64-1.24.2.zip";
 
-pub const ORT_GPU_ZIP_URL: &str =
-    "https://github.com/microsoft/onnxruntime/releases/download/v1.24.2/onnxruntime-win-x64-gpu_cuda13-1.24.2.zip";
+pub const ORT_GPU_ZIP_URL: &str = "https://github.com/microsoft/onnxruntime/releases/download/v1.24.2/onnxruntime-win-x64-gpu_cuda13-1.24.2.zip";
 
 /// CPU ORT package ships shared provider glue alongside the core DLL.
 pub const ORT_CPU_DLLS: &[&str] = &["onnxruntime.dll", "onnxruntime_providers_shared.dll"];
@@ -75,8 +73,7 @@ pub const ORT_GPU_DOWNLOAD_MB: u64 = 180;
 
 /// Official CUDA Toolkit 13.x download page (Windows x64 installer).
 /// ORT GPU package is the `cuda13` build; Toolkit 12 is not compatible.
-pub const CUDA_TOOLKIT_URL: &str =
-    "https://developer.nvidia.com/cuda-13-0-0-download-archive?target_os=Windows&target_arch=x86_64&target_type=exe_local";
+pub const CUDA_TOOLKIT_URL: &str = "https://developer.nvidia.com/cuda-13-0-0-download-archive?target_os=Windows&target_arch=x86_64&target_type=exe_local";
 
 /// Marker that a CUDA 13.x toolkit `bin` directory is present.
 pub const CUDA13_MARKER_DLL: &str = "cudart64_13.dll";
@@ -258,12 +255,10 @@ fn cuda13_toolkit_bin_dirs() -> Vec<PathBuf> {
     }
     for root in ["ProgramFiles", "ProgramW6432"]
         .iter()
-        .filter_map(|name| std::env::var_os(name))
+        .filter_map(std::env::var_os)
         .map(PathBuf::from)
     {
-        let cuda_root = root
-            .join("NVIDIA GPU Computing Toolkit")
-            .join("CUDA");
+        let cuda_root = root.join("NVIDIA GPU Computing Toolkit").join("CUDA");
         if !cuda_root.is_dir() {
             continue;
         }
@@ -321,14 +316,25 @@ fn prepend_path_dir(dir: &Path) {
 pub fn env_check(module_dir: &Path) -> LocalAsrEnvCheck {
     let layout = runtime_layout(module_dir);
     let vcruntime = check_vcruntime(&layout);
-    let ort_cpu = check_group(ORT_CPU_DLLS, &[layout.cpu.clone()], ORT_CPU_DOWNLOAD_MB);
-    let ort_gpu = check_group(ORT_GPU_DLLS, &[layout.gpu.clone()], ORT_GPU_DOWNLOAD_MB);
-    let cuda_redist = check_group(CUDA_REDIST_DLLS, &[layout.cuda.clone()], CUDA_DOWNLOAD_MB);
+    let ort_cpu = check_group(
+        ORT_CPU_DLLS,
+        std::slice::from_ref(&layout.cpu),
+        ORT_CPU_DOWNLOAD_MB,
+    );
+    let ort_gpu = check_group(
+        ORT_GPU_DLLS,
+        std::slice::from_ref(&layout.gpu),
+        ORT_GPU_DOWNLOAD_MB,
+    );
+    let cuda_redist = check_group(
+        CUDA_REDIST_DLLS,
+        std::slice::from_ref(&layout.cuda),
+        CUDA_DOWNLOAD_MB,
+    );
     let cuda_toolkit = check_cuda_toolkit_13();
     // GPU ORT build still supports CPU EP — either package satisfies the CPU path.
     let cpu_deps_ready = vcruntime.ok && (ort_cpu.ok || ort_gpu.ok);
-    let cuda_deps_ready =
-        vcruntime.ok && ort_gpu.ok && cuda_redist.ok && cuda_toolkit.ok;
+    let cuda_deps_ready = vcruntime.ok && ort_gpu.ok && cuda_redist.ok && cuda_toolkit.ok;
     LocalAsrEnvCheck {
         vcruntime,
         ort_cpu,
@@ -447,7 +453,7 @@ fn check_cuda_toolkit_13_in(bin_dirs: &[PathBuf]) -> CudaToolkitStatus {
             let version = cuda13_version_from_path(&marker);
             return CudaToolkitStatus {
                 ok: true,
-                version: version.clone(),
+                version,
                 message: Some("CUDA Toolkit 13 found".into()),
             };
         }
@@ -474,10 +480,10 @@ fn cuda13_version_from_path(marker: &Path) -> Option<String> {
     for component in marker.components().rev() {
         let name = component.as_os_str().to_string_lossy();
         let lower = name.to_ascii_lowercase();
-        if let Some(rest) = lower.strip_prefix('v') {
-            if rest.starts_with("13") {
-                return Some(format!("v{rest}"));
-            }
+        if let Some(rest) = lower.strip_prefix('v')
+            && rest.starts_with("13")
+        {
+            return Some(format!("v{rest}"));
         }
     }
     None
@@ -590,7 +596,11 @@ async fn download_ort_zip(
     } else {
         ORT_CPU_DLLS
     };
-    extract_zip_lib_dlls(&bytes, &dest_dir, dlls)?;
+    // Zip inflate + DLL writes are CPU/disk bound — keep them off the Tokio worker.
+    let extract_dest = dest_dir.clone();
+    tokio::task::spawn_blocking(move || extract_zip_lib_dlls(&bytes, &extract_dest, dlls))
+        .await
+        .map_err(|e| DepError::Archive(format!("extract task failed: {e}")))??;
     reporter.finish_ok();
     info!(
         target: "voicesub.asr_local.deps",
@@ -601,35 +611,41 @@ async fn download_ort_zip(
     Ok(())
 }
 
-async fn download_cuda_redist(module_dir: &Path, reporter: &mut TransferReporter) -> Result<(), DepError> {
+async fn download_cuda_redist(
+    module_dir: &Path,
+    reporter: &mut TransferReporter,
+) -> Result<(), DepError> {
     let layout = runtime_layout(module_dir);
     fs::create_dir_all(&layout.cuda)?;
     reporter.register_cleanup_dir(layout.cuda.clone());
 
-    let need_cudart = find_dll("cudart64_13.dll", &[layout.cuda.clone()]).is_none();
-    let need_cublas = find_dll("cublas64_13.dll", &[layout.cuda.clone()]).is_none()
-        || find_dll("cublasLt64_13.dll", &[layout.cuda.clone()]).is_none();
-    let need_cudnn = find_dll("cudnn64_9.dll", &[layout.cuda.clone()]).is_none();
+    let need_cudart = find_dll("cudart64_13.dll", std::slice::from_ref(&layout.cuda)).is_none();
+    let need_cublas = find_dll("cublas64_13.dll", std::slice::from_ref(&layout.cuda)).is_none()
+        || find_dll("cublasLt64_13.dll", std::slice::from_ref(&layout.cuda)).is_none();
+    let need_cudnn = find_dll("cudnn64_9.dll", std::slice::from_ref(&layout.cuda)).is_none();
 
     let mut planned_total = 0u64;
     let mut fallback_total = 0u64;
     if need_cudart {
         fallback_total = fallback_total.saturating_add(CUDART_WHEEL_BYTES);
-        planned_total = planned_total.saturating_add(
-            resolve_wheel_bytes(fetch_content_length(CUDART_WHEEL_URL).await, CUDART_WHEEL_BYTES),
-        );
+        planned_total = planned_total.saturating_add(resolve_wheel_bytes(
+            fetch_content_length(CUDART_WHEEL_URL).await,
+            CUDART_WHEEL_BYTES,
+        ));
     }
     if need_cublas {
         fallback_total = fallback_total.saturating_add(CUBLAS_WHEEL_BYTES);
-        planned_total = planned_total.saturating_add(
-            resolve_wheel_bytes(fetch_content_length(CUBLAS_WHEEL_URL).await, CUBLAS_WHEEL_BYTES),
-        );
+        planned_total = planned_total.saturating_add(resolve_wheel_bytes(
+            fetch_content_length(CUBLAS_WHEEL_URL).await,
+            CUBLAS_WHEEL_BYTES,
+        ));
     }
     if need_cudnn {
         fallback_total = fallback_total.saturating_add(CUDNN_WHEEL_BYTES);
-        planned_total = planned_total.saturating_add(
-            resolve_wheel_bytes(fetch_content_length(CUDNN_WHEEL_URL).await, CUDNN_WHEEL_BYTES),
-        );
+        planned_total = planned_total.saturating_add(resolve_wheel_bytes(
+            fetch_content_length(CUDNN_WHEEL_URL).await,
+            CUDNN_WHEEL_BYTES,
+        ));
     }
     if planned_total == 0 {
         planned_total = fallback_total;
@@ -760,8 +776,7 @@ fn extract_zip_lib_dlls(bytes: &[u8], dest_dir: &Path, dll_names: &[&str]) -> Re
     use std::collections::HashSet;
 
     let reader = std::io::Cursor::new(bytes);
-    let mut archive =
-        zip::ZipArchive::new(reader).map_err(|e| DepError::Archive(e.to_string()))?;
+    let mut archive = zip::ZipArchive::new(reader).map_err(|e| DepError::Archive(e.to_string()))?;
     let targets: HashSet<String> = dll_names
         .iter()
         .map(|name| name.to_ascii_lowercase())
@@ -819,10 +834,14 @@ fn extract_zip_lib_dlls(bytes: &[u8], dest_dir: &Path, dll_names: &[&str]) -> Re
 #[allow(dead_code)]
 fn extract_zip_entry_suffix(bytes: &[u8], suffix: &str, dest: &Path) -> Result<(), DepError> {
     let reader = std::io::Cursor::new(bytes);
-    let mut archive =
-        zip::ZipArchive::new(reader).map_err(|e| DepError::Archive(e.to_string()))?;
+    let mut archive = zip::ZipArchive::new(reader).map_err(|e| DepError::Archive(e.to_string()))?;
     let entry_name = (0..archive.len())
-        .filter_map(|i| archive.by_index(i).ok().map(|f| f.name().replace('\\', "/")))
+        .filter_map(|i| {
+            archive
+                .by_index(i)
+                .ok()
+                .map(|f| f.name().replace('\\', "/"))
+        })
         .find(|name| name.ends_with(suffix))
         .ok_or_else(|| DepError::Archive(format!("{suffix} missing in archive")))?;
     let mut entry = archive
@@ -832,14 +851,13 @@ fn extract_zip_entry_suffix(bytes: &[u8], suffix: &str, dest: &Path) -> Result<(
     if let Some(parent) = tmp.parent() {
         fs::create_dir_all(parent)?;
     }
-    let mut out =
-        fs::File::create(&tmp).map_err(|e| DepError::Io(e))?;
-    std::io::copy(&mut entry, &mut out).map_err(|e| DepError::Io(e))?;
+    let mut out = fs::File::create(&tmp).map_err(DepError::Io)?;
+    std::io::copy(&mut entry, &mut out).map_err(DepError::Io)?;
     out.flush().ok();
     if dest.exists() {
         fs::remove_file(dest).ok();
     }
-    fs::rename(&tmp, dest).map_err(|e| DepError::Io(e))?;
+    fs::rename(&tmp, dest).map_err(DepError::Io)?;
     Ok(())
 }
 
@@ -853,34 +871,47 @@ async fn extract_wheel_dlls(
     let bytes = http_get_bytes(url, reporter, total_policy).await?;
     reporter.check_cancelled()?;
     reporter.set_phase(TransferPhase::Extracting);
+    let dest_dir = dest_dir.to_path_buf();
+    let dll_names: Vec<String> = dll_names.iter().map(|n| (*n).to_string()).collect();
+    let url = url.to_string();
+    tokio::task::spawn_blocking(move || {
+        extract_wheel_dlls_sync(&bytes, &dest_dir, &dll_names, &url)
+    })
+    .await
+    .map_err(|e| DepError::Archive(format!("extract task failed: {e}")))?
+}
+
+fn extract_wheel_dlls_sync(
+    bytes: &[u8],
+    dest_dir: &Path,
+    dll_names: &[String],
+    url: &str,
+) -> Result<(), DepError> {
     let reader = std::io::Cursor::new(bytes);
-    let mut archive =
-        zip::ZipArchive::new(reader).map_err(|e| DepError::Archive(e.to_string()))?;
-    let targets: Vec<String> = dll_names
-        .iter()
-        .map(|n| n.to_ascii_lowercase())
-        .collect();
+    let mut archive = zip::ZipArchive::new(reader).map_err(|e| DepError::Archive(e.to_string()))?;
+    let targets: Vec<String> = dll_names.iter().map(|n| n.to_ascii_lowercase()).collect();
     let mut written = 0usize;
     for i in 0..archive.len() {
-        reporter.check_cancelled()?;
         let mut file = archive
             .by_index(i)
             .map_err(|e| DepError::Archive(e.to_string()))?;
         let name = file.name().replace('\\', "/");
-        let base = name.rsplit('/').next().unwrap_or(&name).to_ascii_lowercase();
+        let base = name
+            .rsplit('/')
+            .next()
+            .unwrap_or(&name)
+            .to_ascii_lowercase();
         if !targets.contains(&base) {
             continue;
         }
-        let out_path = dest_dir.join(
-            dll_names
-                .iter()
-                .find(|n| n.eq_ignore_ascii_case(&base))
-                .copied()
-                .unwrap_or(base.as_str()),
-        );
-        let mut out =
-            fs::File::create(&out_path).map_err(|e| DepError::Io(e))?;
-        std::io::copy(&mut file, &mut out).map_err(|e| DepError::Io(e))?;
+        let out_name = dll_names
+            .iter()
+            .find(|n| n.eq_ignore_ascii_case(&base))
+            .map(String::as_str)
+            .unwrap_or(base.as_str());
+        let out_path = dest_dir.join(out_name);
+        let mut out = fs::File::create(&out_path).map_err(DepError::Io)?;
+        std::io::copy(&mut file, &mut out).map_err(DepError::Io)?;
         written += 1;
     }
     if written == 0 {
@@ -942,8 +973,14 @@ mod tests {
 
     #[test]
     fn dep_kind_parse() {
-        assert_eq!(DepDownloadKind::parse("ort_cpu"), Some(DepDownloadKind::OrtCpu));
-        assert_eq!(DepDownloadKind::parse("cuda_redist"), Some(DepDownloadKind::CudaRedist));
+        assert_eq!(
+            DepDownloadKind::parse("ort_cpu"),
+            Some(DepDownloadKind::OrtCpu)
+        );
+        assert_eq!(
+            DepDownloadKind::parse("cuda_redist"),
+            Some(DepDownloadKind::CudaRedist)
+        );
         assert_eq!(DepDownloadKind::parse("nope"), None);
     }
 
@@ -997,11 +1034,13 @@ mod tests {
         fs::write(layout.gpu.join("onnxruntime.dll"), b"fake").unwrap();
         let check = env_check(dir.path());
         assert!(!check.ort_gpu.ok);
-        assert!(check
-            .ort_gpu
-            .missing
-            .iter()
-            .any(|name| name.contains("providers_cuda")));
+        assert!(
+            check
+                .ort_gpu
+                .missing
+                .iter()
+                .any(|name| name.contains("providers_cuda"))
+        );
     }
 
     #[test]
@@ -1026,11 +1065,13 @@ mod tests {
         }
         let check = env_check(dir.path());
         assert!(!check.cuda_redist.ok);
-        assert!(check
-            .cuda_redist
-            .missing
-            .iter()
-            .any(|name| name.contains("cudnn64_9")));
+        assert!(
+            check
+                .cuda_redist
+                .missing
+                .iter()
+                .any(|name| name.contains("cudnn64_9"))
+        );
     }
 
     #[test]
@@ -1040,10 +1081,7 @@ mod tests {
             CUDNN_WHEEL_BYTES
         );
         assert_eq!(
-            resolve_wheel_bytes(
-                Err(DepError::Download("missing".into())),
-                CUDNN_WHEEL_BYTES,
-            ),
+            resolve_wheel_bytes(Err(DepError::Download("missing".into())), CUDNN_WHEEL_BYTES,),
             CUDNN_WHEEL_BYTES
         );
         assert_eq!(resolve_wheel_bytes(Ok(123), CUDNN_WHEEL_BYTES), 123);
@@ -1093,10 +1131,12 @@ mod tests {
         let status = check_cuda_toolkit_13_in(&[bin]);
         assert!(status.ok);
         assert_eq!(status.version.as_deref(), Some("v13.3"));
-        assert!(status
-            .message
-            .as_deref()
-            .is_some_and(|m| m == "CUDA Toolkit 13 found"));
+        assert!(
+            status
+                .message
+                .as_deref()
+                .is_some_and(|m| m == "CUDA Toolkit 13 found")
+        );
     }
 
     #[test]

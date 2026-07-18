@@ -76,8 +76,8 @@ pub(crate) fn spawn_subtitle_actor(
     let (source_tx, source_rx) = mpsc::channel(256);
     let (translation_tx, translation_rx) = mpsc::channel(512);
 
-    let stale_cb = stale_count.clone();
-    let mismatch_cb = mismatch_count.clone();
+    let stale_cb = stale_count;
+    let mismatch_cb = mismatch_count;
     let log_for_stale = log.clone();
     let log_for_mismatch = log.clone();
 
@@ -125,7 +125,7 @@ pub(crate) fn spawn_subtitle_actor(
     };
 
     let handles = SubtitleActorHandles {
-        source_tx: source_tx.clone(),
+        source_tx,
         translation_tx,
     };
 
@@ -144,7 +144,7 @@ async fn run_actor(
 
     loop {
         while let Ok(command) = source_rx.try_recv() {
-            process_source(&mut translation_rx, &mut inner, &publish, command).await;
+            process_source(&mut translation_rx, &mut inner, &publish, command);
         }
 
         let translation_recv = async {
@@ -160,7 +160,7 @@ async fn run_actor(
             command = source_rx.recv() => {
                 match command {
                     Some(command) => {
-                        process_source(&mut translation_rx, &mut inner, &publish, command).await
+                        process_source(&mut translation_rx, &mut inner, &publish, command)
                     }
                     None => break,
                 }
@@ -169,7 +169,7 @@ async fn run_actor(
             command = translation_recv => {
                 match command {
                     Some(TranslationCommand::Translation { event, processed }) => {
-                        process_translation_command(&mut inner, &publish, event, processed).await;
+                        process_translation_command(&mut inner, &publish, event, processed);
                     }
                     None => {
                         translation_rx = None;
@@ -181,25 +181,25 @@ async fn run_actor(
 
     if let Some(mut rx) = translation_rx {
         while let Some(TranslationCommand::Translation { event, processed }) = rx.recv().await {
-            process_translation_command(&mut inner, &publish, event, processed).await;
+            process_translation_command(&mut inner, &publish, event, processed);
         }
     }
 }
 
-async fn process_translation_command(
+fn process_translation_command(
     inner: &mut RouterInner,
     publish: &PublishCallback,
     event: TranslationEvent,
     processed: Option<oneshot::Sender<()>>,
 ) {
-    apply_translation(inner, event).await;
-    schedule_overlay_publish(inner, publish).await;
+    apply_translation(inner, event);
+    schedule_overlay_publish(inner, publish);
     if let Some(processed) = processed {
         let _ = processed.send(());
     }
 }
 
-async fn drain_translation_queue(
+fn drain_translation_queue(
     translation_rx: &mut Option<mpsc::Receiver<TranslationCommand>>,
     inner: &mut RouterInner,
     publish: &PublishCallback,
@@ -210,12 +210,12 @@ async fn drain_translation_queue(
     let mut drained = false;
     while let Ok(TranslationCommand::Translation { event, processed }) = rx.try_recv() {
         drained = true;
-        process_translation_command(inner, publish, event, processed).await;
+        process_translation_command(inner, publish, event, processed);
     }
     drained
 }
 
-async fn process_source(
+fn process_source(
     translation_rx: &mut Option<mpsc::Receiver<TranslationCommand>>,
     inner: &mut RouterInner,
     publish: &PublishCallback,
@@ -223,8 +223,8 @@ async fn process_source(
 ) {
     match command {
         SourceCommand::Transcript { event, processed } => {
-            apply_transcript(inner, event).await;
-            schedule_overlay_publish(inner, publish).await;
+            apply_transcript(inner, event);
+            schedule_overlay_publish(inner, publish);
             if let Some(processed) = processed {
                 let _ = processed.send(());
             }
@@ -232,33 +232,31 @@ async fn process_source(
         SourceCommand::ExpiryTick(sequence) => {
             inner
                 .lifecycle
-                .on_expiry_tick(sequence, &inner.presentation)
-                .await;
-            schedule_overlay_publish(inner, publish).await;
+                .on_expiry_tick(sequence, &inner.presentation);
+            schedule_overlay_publish(inner, publish);
         }
         SourceCommand::ClearPartial => {
             inner.lifecycle.clear_active_partial();
-            schedule_overlay_publish(inner, publish).await;
+            schedule_overlay_publish(inner, publish);
         }
         SourceCommand::Reset(reply) => {
-            inner.lifecycle.reset().await;
+            inner.lifecycle.reset();
             inner.next_sequence = 0;
-            schedule_overlay_publish(inner, publish).await;
-            flush_overlay_publish(inner, publish).await;
+            schedule_overlay_publish(inner, publish);
+            flush_overlay_publish(inner, publish);
             let _ = reply.send(());
         }
         SourceCommand::Republish(reply) => {
-            schedule_overlay_publish(inner, publish).await;
+            schedule_overlay_publish(inner, publish);
             let _ = reply.send(());
         }
         SourceCommand::FlushPublish(reply) => {
-            let drained_translations =
-                drain_translation_queue(translation_rx, inner, publish).await;
+            let drained_translations = drain_translation_queue(translation_rx, inner, publish);
             if drained_translations
                 || inner.overlay_publish_pending
                 || inner.overlay_publish_in_flight
             {
-                schedule_overlay_publish(inner, publish).await;
+                schedule_overlay_publish(inner, publish);
             }
             let _ = reply.send(());
         }
@@ -269,9 +267,9 @@ async fn process_source(
             provider,
             reply,
         } => {
-            let sequence = ingest_browser_text(inner, &text, is_final, source_lang, provider).await;
-            schedule_overlay_publish(inner, publish).await;
-            flush_overlay_publish(inner, publish).await;
+            let sequence = ingest_browser_text(inner, &text, is_final, source_lang, provider);
+            schedule_overlay_publish(inner, publish);
+            flush_overlay_publish(inner, publish);
             let _ = reply.send(sequence);
         }
         SourceCommand::QueryTranslationRelevance { sequence, reply } => {
@@ -292,21 +290,19 @@ async fn process_source(
     }
 }
 
-async fn apply_transcript(inner: &mut RouterInner, event: TranscriptEvent) {
+fn apply_transcript(inner: &mut RouterInner, event: TranscriptEvent) {
     inner
         .lifecycle
-        .handle_transcript(event, &inner.presentation)
-        .await;
+        .handle_transcript(event, &inner.presentation);
 }
 
-async fn apply_translation(inner: &mut RouterInner, event: TranslationEvent) {
+fn apply_translation(inner: &mut RouterInner, event: TranslationEvent) {
     inner
         .lifecycle
-        .handle_translation(event, &inner.presentation)
-        .await;
+        .handle_translation(event, &inner.presentation);
 }
 
-async fn ingest_browser_text(
+fn ingest_browser_text(
     inner: &mut RouterInner,
     text: &str,
     is_final: bool,
@@ -344,11 +340,11 @@ async fn ingest_browser_text(
             end_ms: None,
         }),
     };
-    apply_transcript(inner, event).await;
+    apply_transcript(inner, event);
     sequence
 }
 
-async fn schedule_overlay_publish(inner: &mut RouterInner, publish: &PublishCallback) {
+fn schedule_overlay_publish(inner: &mut RouterInner, publish: &PublishCallback) {
     if inner.overlay_publish_in_flight {
         inner.overlay_publish_pending = true;
         return;
@@ -366,9 +362,9 @@ async fn schedule_overlay_publish(inner: &mut RouterInner, publish: &PublishCall
     }
 }
 
-async fn flush_overlay_publish(inner: &mut RouterInner, publish: &PublishCallback) {
+fn flush_overlay_publish(inner: &mut RouterInner, publish: &PublishCallback) {
     inner.overlay_publish_pending = false;
-    schedule_overlay_publish(inner, publish).await;
+    schedule_overlay_publish(inner, publish);
 }
 
 fn publish_current(inner: &mut RouterInner, publish: &PublishCallback) {
@@ -398,7 +394,7 @@ mod tests {
             payloads_for_publish
                 .lock()
                 .unwrap()
-                .push(payload.active_partial_text.clone());
+                .push(payload.active_partial_text);
         });
 
         let log = SubtitleLog::new(None);

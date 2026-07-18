@@ -135,7 +135,7 @@ impl SubtitleLifecycleCore {
         self.records.get(&sequence).cloned()
     }
 
-    pub async fn reset(&mut self) {
+    pub fn reset(&mut self) {
         if let Some(task) = self.expiry_task.take() {
             task.abort();
         }
@@ -155,7 +155,7 @@ impl SubtitleLifecycleCore {
         self.active_partial = None;
     }
 
-    pub async fn handle_transcript(
+    pub fn handle_transcript(
         &mut self,
         event: TranscriptEvent,
         presentation: &SubtitlePresentation,
@@ -236,7 +236,7 @@ impl SubtitleLifecycleCore {
         self.promote_or_defer(event.sequence, presentation);
     }
 
-    pub async fn handle_translation(
+    pub fn handle_translation(
         &mut self,
         event: TranslationEvent,
         presentation: &SubtitlePresentation,
@@ -448,7 +448,7 @@ impl SubtitleLifecycleCore {
         })
     }
 
-    pub async fn on_expiry_tick(&mut self, sequence: u64, presentation: &SubtitlePresentation) {
+    pub fn on_expiry_tick(&mut self, sequence: u64, presentation: &SubtitlePresentation) {
         if self.completed_sequence != Some(sequence) {
             return;
         }

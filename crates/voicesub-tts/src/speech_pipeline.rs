@@ -58,7 +58,7 @@ impl TtsSpeechPipeline {
         let twitch = ChannelOrchestrator::new(
             CHANNEL_TWITCH,
             service.clone(),
-            playback.clone(),
+            playback,
             module_dir,
             completion_waiter.clone(),
             runtime,

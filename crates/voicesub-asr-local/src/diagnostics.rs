@@ -39,7 +39,9 @@ pub fn assemble_local_asr_diagnostics(input: LocalAsrDiagnosticsInput<'_>) -> Va
         || (provider == "cuda" && input.inference.probe_cuda_ok == Some(false));
     let tel = input.emit_telemetry;
     let partial_emits = tel.map(|t| t.partial_emits).unwrap_or(input.decode_count);
-    let final_emits = tel.map(|t| t.final_emits).unwrap_or(input.finalized_segments);
+    let final_emits = tel
+        .map(|t| t.final_emits)
+        .unwrap_or(input.finalized_segments);
 
     json!({
         "mode": "local_parakeet",

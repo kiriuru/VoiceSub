@@ -4,8 +4,8 @@
 //! audio length. Fixed 200–280 ms intervals waste ORT once the phrase is multi-second.
 //! Finals are never paced.
 
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 /// Shared last successful decode wall time (ms) — written by decode worker, read by pacer.

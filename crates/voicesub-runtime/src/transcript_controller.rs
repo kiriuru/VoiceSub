@@ -170,20 +170,30 @@ impl TranscriptController {
                 self.publish_transcript(&event).await;
             }
         }
-        self.publish_source_event(&event).await;
+        self.publish_source_event(&event);
 
         if event.event == TranscriptKind::Final {
             let source_lang = self.event_source_lang(&event);
             let preview_lineage_key = preview_lineage_key_from_segment(event.segment.as_ref());
-            let mut controller = self.translation.lock().await;
-            controller
-                .submit_final(
-                    event.sequence,
-                    &event.text,
-                    &source_lang,
-                    preview_lineage_key.as_deref(),
-                )
-                .await;
+            // Start under the controller mutex, then drop it before submit_final's
+            // relevance/await loops so status/settings are not blocked.
+            let dispatcher = {
+                let mut controller = self.translation.lock().await;
+                controller
+                    .ensure_started(voicesub_translation::DispatcherCallbacks::default())
+                    .await;
+                controller.dispatcher_handle()
+            };
+            if let Some(dispatcher) = dispatcher {
+                dispatcher
+                    .submit_final(
+                        event.sequence,
+                        &event.text,
+                        &source_lang,
+                        preview_lineage_key.as_deref(),
+                    )
+                    .await;
+            }
             self.pipeline_log.asr_ingest_published(
                 true,
                 event.sequence,
@@ -228,7 +238,7 @@ impl TranscriptController {
             .await;
     }
 
-    async fn publish_source_event(&self, event: &TranscriptEvent) {
+    fn publish_source_event(&self, event: &TranscriptEvent) {
         let is_final = event.event == TranscriptKind::Final;
         self.obs.publish_source(&event.text, is_final);
     }

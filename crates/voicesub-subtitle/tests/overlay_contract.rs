@@ -259,7 +259,11 @@ fn overlay_fragment_effects_css_supports_transforms_and_new_effects() {
         ".subtitle-fragment-fresh:not(.effect-none)",
         "animated fresh fragments need non-inline box for transforms",
     );
-    assert_contains(&css, "display: inline-block", "inline-block for fragment transforms");
+    assert_contains(
+        &css,
+        "display: inline-block",
+        "inline-block for fragment transforms",
+    );
     assert_contains(&css, "prefers-reduced-motion", "a11y motion preference");
     assert_contains(&css, "subtitle-pulse", "pulse keyframes");
     assert_contains(&css, "subtitle-reveal", "reveal keyframes");

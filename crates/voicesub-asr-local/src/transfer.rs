@@ -79,18 +79,18 @@ impl TransferControl {
     }
 
     fn register_cleanup_dir(&self, path: PathBuf) {
-        if let Ok(mut dirs) = self.cleanup_dirs.lock() {
-            if !dirs.iter().any(|entry| entry == &path) {
-                dirs.push(path);
-            }
+        if let Ok(mut dirs) = self.cleanup_dirs.lock()
+            && !dirs.iter().any(|entry| entry == &path)
+        {
+            dirs.push(path);
         }
     }
 
     fn register_cleanup_file(&self, path: PathBuf) {
-        if let Ok(mut files) = self.cleanup_files.lock() {
-            if !files.iter().any(|entry| entry == &path) {
-                files.push(path);
-            }
+        if let Ok(mut files) = self.cleanup_files.lock()
+            && !files.iter().any(|entry| entry == &path)
+        {
+            files.push(path);
         }
     }
 
@@ -156,11 +156,7 @@ impl TransferTracker {
     }
 
     pub fn request_cancel(&self) -> bool {
-        let active = self
-            .inner
-            .read()
-            .map(|guard| guard.active)
-            .unwrap_or(false);
+        let active = self.inner.read().map(|guard| guard.active).unwrap_or(false);
         if !active {
             return false;
         }

@@ -538,20 +538,21 @@ Payload enrichment: `event_sequence`, `created_at_ms`, `event_type` (`WsEventPub
 
 **Регистрация:** `src-tauri/src/lib.rs` → `tauri::generate_handler!`
 
-**Capabilities (per window):** `src-tauri/capabilities/default.json` (main — полный `allow-voicesub-ipc`), `tts.json` (`allow-voicesub-tts-ipc`), `local-asr.json` (`allow-voicesub-local-asr-ipc`). `get_loopback_api_token` allowlisted на всех трёх.
+**Capabilities (per window):** `src-tauri/capabilities/default.json` (main — shell-only `allow-voicesub-ipc`), `tts.json` (`allow-voicesub-tts-ipc`), `local-asr.json` (`allow-voicesub-local-asr-ipc`). `get_loopback_api_token` allowlisted на всех трёх. Все capabilities deny frontend `core:event` emit / emit-to (только listen). ACL matrix — тесты `src-tauri/src/acl_matrix.rs`.
 
-### Shell commands
+### Shell commands (`main` only)
 
 | Command | Назначение |
 | --- | --- |
-| `voicesub_version` | Returns `PROJECT_VERSION` |
 | `get_loopback_api_token` | Per-session token для protected `/api/*` (fallback без HTML injection) |
+| `get_runtime_state_snapshot` | Replay runtime/subtitle/overlay/translation/diagnostics for Tauri shell on connect |
 | `set_dashboard_layout` | Compact (390×844) vs standard (1280×900) window |
-| `launch_browser_worker` | Launch Chrome to worker URL without full runtime start |
+| `tts_open_window` | Open/focus `/tts` webview |
+| `local_asr_open_window` | Open/focus `/local-asr` webview |
 | `open_external_https_url` | Открыть allowlisted HTTPS URL в system browser (update banner, setup-ссылки провайдеров перевода) |
 | `open_local_http_url` | Открыть validated loopback HTTP URL в system browser |
 
-### TTS commands (`src-tauri/src/tts.rs`)
+### TTS commands (`tts` window — `src-tauri/src/tts.rs`)
 
 | Command | Назначение |
 | --- | --- |
@@ -559,7 +560,6 @@ Payload enrichment: `event_sequence`, `created_at_ms`, `event_type` (`WsEventPub
 | `tts_set_provider` / `tts_set_enabled` | Provider toggle |
 | `tts_set_audio_device` / `tts_set_channel_audio_device` | Speech / Twitch audio output |
 | `tts_set_playback_mode` | `native` (cpal @ 1.0×) или `sonic` (libsonic); legacy `browser` → `sonic` при load |
-| `tts_play_audio` / `tts_stop_channel` | Native MP3 playback per channel |
 | `tts_list_output_devices` | WASAPI enumeration (label-first for native) |
 | `tts_get_audio_routing` / `tts_bind_window_audio` | Legacy WinAPI per-process routing (single device) |
 | `tts_update_speech_settings` / `tts_update_voice_settings` | Speech params |
@@ -569,10 +569,12 @@ Payload enrichment: `event_sequence`, `created_at_ms`, `event_type` (`WsEventPub
 | `tts_get_resource_telemetry` | Playback / queue resource metrics |
 | `tts_report_webview_activity` | TTS webview heartbeat → `WebviewMemoryManager` suspend policy |
 | `tts_twitch_*` | Twitch connect/disconnect/status/settings |
-| `tts_open_window` | Open/focus `/tts` webview |
-| `local_asr_open_window` | Open/focus `/local-asr` webview |
 | `tts_open_system_url` | Open validated Twitch OAuth URL externally |
-| `get_runtime_state_snapshot` | Replay runtime/subtitle/overlay/translation/diagnostics for Tauri shell on connect |
+| `get_runtime_state_snapshot` | Snapshot replay для TTS window on connect |
+
+### Local ASR window (`local-asr` capability)
+
+Webview ACL: только `get_loopback_api_token` + `open_external_https_url`. Open/focus окна — shell-команда **main** (`local_asr_open_window`). Доменная логика — в `voicesub-asr-local` + HTTP.
 
 ### `src-tauri/` modules (shell only)
 
@@ -890,7 +892,7 @@ Shipped as **module** under `bin/modules/tts/` + Svelte UI at `/tts`.
 | `speech` | `subtitle_payload` → `TtsSpeechPipeline` | `ChannelOrchestrator` (speech) | root `audio_output_device_*` |
 | `twitch` | IRC → `TwitchChatService` | `ChannelOrchestrator` (twitch) | `[twitch].audio_output_device_*` |
 
-Live path: plan → **`google_fetch.rs`** (HTTP + **`upstream_retry.rs`** 3× retry на transport/5xx/429/408) → enqueue → prefetch → `PlaybackHub` (`tts_play_audio`). Длинный текст: `assemble_ordered_chunks` сохраняет порядок чанков после parallel fetch. TTS WebView — настройки + ручной sample test через `tts_speak_sample` (Rust orchestrator; без JS pump).
+Live path: plan → **`google_fetch.rs`** (HTTP + **`upstream_retry.rs`** 3× retry на transport/5xx/429/408) → enqueue → prefetch → in-process `PlaybackHub` (без webview IPC для audio bytes). Длинный текст: `assemble_ordered_chunks` сохраняет порядок чанков после parallel fetch. TTS WebView — настройки + ручной sample test через `tts_speak_sample` (Rust orchestrator; без JS pump).
 
 **0.5.4 pipeline hardening:**
 
@@ -909,7 +911,7 @@ Live path: plan → **`google_fetch.rs`** (HTTP + **`upstream_retry.rs`** 3× re
 
 | Mode | Механизм | Когда |
 | --- | --- | --- |
-| `native` (default) | `PlaybackHub` (cpal) @ 1.0×, IPC `tts_play_audio` | Минимальная задержка |
+| `native` (default) | `PlaybackHub` (cpal) @ 1.0× in-process | Минимальная задержка |
 | `sonic` | libsonic tempo stretch, pitch-preserving rate | Очередь / rate boost |
 | `browser` (legacy) | — | **Мигрирует в `sonic`** при загрузке config |
 
@@ -1213,6 +1215,8 @@ Config key: `ui.language` (empty = browser default).
 - **No new Rust module without tests** in same task
 - Golden fixtures in `tests/golden/` — update when behavioral contracts change
 - `cargo test --workspace` required before done
+- CI: `cargo clippy --workspace --all-targets -- -D warnings`; workspace lints в корневом `Cargo.toml` (`unused_async`, `await_holding_lock` / `await_holding_refcell_ref`, `redundant_clone` = deny — pedantic-light) + `clippy.toml` MSRV `1.85`
+- Hot-path async hygiene: Chrome / Local ASR process work и zip extract Local ASR через `spawn_blocking`; не держать locks оркестратора / translation controller across status broadcast или enqueue awaits
 
 ### Levels
 

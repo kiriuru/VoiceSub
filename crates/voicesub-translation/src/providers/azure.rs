@@ -8,9 +8,7 @@ use std::sync::Arc;
 
 use super::{
     ProviderError, ProviderInfo, TranslateRequest, TranslationProvider, base_diagnostics, http,
-    http::SharedHttpClient,
-    lang_codes::azure_lang,
-    normalize_source_lang,
+    http::SharedHttpClient, lang_codes::azure_lang, normalize_source_lang,
 };
 
 pub struct AzureTranslatorProvider {
@@ -114,10 +112,7 @@ impl TranslationProvider for AzureTranslatorProvider {
         let endpoint = http::setting(settings, "endpoint");
         let mut diag = base_diagnostics(&self.info(), settings);
         if let Some(obj) = diag.as_object_mut() {
-            obj.insert(
-                "region_present".into(),
-                json!(!region.trim().is_empty()),
-            );
+            obj.insert("region_present".into(), json!(!region.trim().is_empty()));
             if region.trim().is_empty() {
                 obj.insert(
                     "status_message".into(),

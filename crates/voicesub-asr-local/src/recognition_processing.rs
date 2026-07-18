@@ -60,11 +60,7 @@ impl From<&LocalAsrRecognitionConfig> for RecognitionProcessor {
 }
 
 pub fn preemphasis_prev_before_index(segment: &[f32], index: usize) -> f32 {
-    if index == 0 {
-        0.0
-    } else {
-        segment[index - 1]
-    }
+    if index == 0 { 0.0 } else { segment[index - 1] }
 }
 
 fn apply_preemphasis(samples: &mut [f32], coeff: f32, prev: &mut f32) {

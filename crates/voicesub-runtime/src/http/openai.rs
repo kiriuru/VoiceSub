@@ -66,7 +66,9 @@ pub async fn usable_models(body: Json<OpenAiModelsRequest>) -> Response {
     list_models(body).await
 }
 
-async fn fetch_compatible_models(body: &OpenAiModelsRequest) -> Result<Value, (StatusCode, String)> {
+async fn fetch_compatible_models(
+    body: &OpenAiModelsRequest,
+) -> Result<Value, (StatusCode, String)> {
     let base_url = normalize_base_url(body.base_url.as_deref());
     let official_openai = is_official_openai_host(&base_url);
     let api_key = body.api_key.trim();
@@ -167,9 +169,7 @@ fn normalize_base_url(raw: Option<&str>) -> String {
 }
 
 fn is_official_openai_host(base_url: &str) -> bool {
-    base_url
-        .to_ascii_lowercase()
-        .contains("api.openai.com")
+    base_url.to_ascii_lowercase().contains("api.openai.com")
 }
 
 fn extract_model_ids(payload: &Value) -> Vec<String> {
@@ -202,8 +202,7 @@ fn extract_model_ids(payload: &Value) -> Vec<String> {
 }
 
 fn recommended_present_in(available: &[String]) -> Vec<String> {
-    let set: std::collections::HashSet<&str> =
-        available.iter().map(String::as_str).collect();
+    let set: std::collections::HashSet<&str> = available.iter().map(String::as_str).collect();
     RECOMMENDED_OPENAI_CHAT_MODELS
         .iter()
         .filter(|id| set.contains(**id))
@@ -308,7 +307,10 @@ mod tests {
         });
         assert_eq!(
             extract_model_ids(&payload),
-            vec!["gpt-4o-mini".to_string(), "text-embedding-3-small".to_string()]
+            vec![
+                "gpt-4o-mini".to_string(),
+                "text-embedding-3-small".to_string()
+            ]
         );
     }
 }

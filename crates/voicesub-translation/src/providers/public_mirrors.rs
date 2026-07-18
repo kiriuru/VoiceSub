@@ -8,9 +8,7 @@ use std::sync::Arc;
 
 use super::{
     ProviderError, ProviderInfo, TranslateRequest, TranslationProvider, base_diagnostics, http,
-    http::SharedHttpClient,
-    lang_codes::libretranslate_lang,
-    normalize_source_lang,
+    http::SharedHttpClient, lang_codes::libretranslate_lang, normalize_source_lang,
 };
 
 pub struct PublicLibreTranslateMirrorProvider {

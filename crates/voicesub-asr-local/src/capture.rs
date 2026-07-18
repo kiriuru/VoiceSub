@@ -1,11 +1,11 @@
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver};
-use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
-use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::SampleFormat;
+use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use serde::Serialize;
 use thiserror::Error;
 use tracing::warn;
@@ -59,7 +59,9 @@ pub fn list_input_devices() -> Result<Vec<InputDeviceInfo>, CaptureError> {
         devices.push(InputDeviceInfo {
             id: name.clone(),
             label: name.clone(),
-            is_default: default_name.as_ref().is_some_and(|default| default == &name),
+            is_default: default_name
+                .as_ref()
+                .is_some_and(|default| default == &name),
         });
     }
     Ok(devices)
@@ -110,13 +112,13 @@ pub fn record_input(
     device_id: &str,
 ) -> Result<(Vec<f32>, u32, String), CaptureError> {
     let device = resolve_input_device(device_id)?;
-    let device_label = device
-        .name()
-        .unwrap_or_else(|_| if device_id.trim().is_empty() {
+    let device_label = device.name().unwrap_or_else(|_| {
+        if device_id.trim().is_empty() {
             "Default".into()
         } else {
             device_id.to_string()
-        });
+        }
+    });
     let config = device
         .default_input_config()
         .map_err(|e| CaptureError::Cpal(e.to_string()))?;
@@ -201,17 +203,17 @@ impl Drop for MicStream {
     }
 }
 
-pub fn start_mic_stream(
-    device_id: &str,
-) -> Result<(MicStream, Receiver<Vec<f32>>, u32, String), CaptureError> {
+type MicStreamStart = (MicStream, Receiver<Vec<f32>>, u32, String);
+
+pub fn start_mic_stream(device_id: &str) -> Result<MicStreamStart, CaptureError> {
     let device = resolve_input_device(device_id)?;
-    let device_label = device
-        .name()
-        .unwrap_or_else(|_| if device_id.trim().is_empty() {
+    let device_label = device.name().unwrap_or_else(|_| {
+        if device_id.trim().is_empty() {
             "Default".into()
         } else {
             device_id.to_string()
-        });
+        }
+    });
     let config = device
         .default_input_config()
         .map_err(|e| CaptureError::Cpal(e.to_string()))?;
@@ -239,10 +241,9 @@ pub fn start_mic_stream(
             SampleFormat::I16 => device_for_thread.build_input_stream(
                 &stream_config,
                 move |data: &[i16], _| {
-                    writer.lock().extend(
-                        data.iter()
-                            .map(|sample| *sample as f32 / i16::MAX as f32),
-                    );
+                    writer
+                        .lock()
+                        .extend(data.iter().map(|sample| *sample as f32 / i16::MAX as f32));
                 },
                 err_fn,
                 None,
@@ -250,10 +251,9 @@ pub fn start_mic_stream(
             SampleFormat::I32 => device_for_thread.build_input_stream(
                 &stream_config,
                 move |data: &[i32], _| {
-                    writer.lock().extend(
-                        data.iter()
-                            .map(|sample| *sample as f32 / i32::MAX as f32),
-                    );
+                    writer
+                        .lock()
+                        .extend(data.iter().map(|sample| *sample as f32 / i32::MAX as f32));
                 },
                 err_fn,
                 None,
@@ -380,7 +380,9 @@ mod tests {
     fn list_input_devices_includes_default_row() {
         let devices = list_input_devices().unwrap_or_default();
         assert!(
-            devices.first().is_some_and(|entry| entry.is_default && entry.id.is_empty()),
+            devices
+                .first()
+                .is_some_and(|entry| entry.is_default && entry.id.is_empty()),
             "expected synthetic default row"
         );
     }

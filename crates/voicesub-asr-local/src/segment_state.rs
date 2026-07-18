@@ -32,7 +32,8 @@ impl SegmentStateController {
             return;
         };
         self.last_partial_text_by_segment.remove(segment_id);
-        self.last_partial_emit_monotonic_by_segment.remove(segment_id);
+        self.last_partial_emit_monotonic_by_segment
+            .remove(segment_id);
     }
 
     pub fn mark_partial_emitted(&mut self, segment_id: &str, text: &str) {

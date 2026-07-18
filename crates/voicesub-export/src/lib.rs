@@ -77,7 +77,7 @@ impl ExportService {
                 let name = path.file_name()?.to_str()?.to_string();
                 let metadata = path.metadata().ok()?;
                 Some(ExportFileInfo {
-                    name: name.clone(),
+                    name,
                     size_bytes: metadata.len(),
                     modified_utc: metadata
                         .modified()
@@ -159,9 +159,7 @@ impl ExportService {
         let diagnostics: Vec<&ExportFileInfo> = list
             .files
             .iter()
-            .filter(|file| {
-                file.name.starts_with("diagnostics-") && file.name.ends_with(".zip")
-            })
+            .filter(|file| file.name.starts_with("diagnostics-") && file.name.ends_with(".zip"))
             .collect();
         for file in diagnostics.into_iter().skip(MAX_DIAGNOSTICS_EXPORTS) {
             let _ = fs::remove_file(self.export_dir.join(&file.name));

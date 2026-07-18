@@ -654,7 +654,13 @@ mod tests {
 
     #[test]
     fn stroke_width_accepts_numeric_strings_including_zero() {
-        for (raw, expected) in [("0", 0.0), ("1.2", 1.2), ("1.25", 1.3), ("4.5", 4.0), ("12", 4.0)] {
+        for (raw, expected) in [
+            ("0", 0.0),
+            ("1.2", 1.2),
+            ("1.25", 1.3),
+            ("4.5", 4.0),
+            ("12", 4.0),
+        ] {
             let payload = json!({
                 "preset": "clean_default",
                 "base": { "stroke_width_px": raw }
@@ -800,14 +806,20 @@ mod tests {
         assert_ne!(twitch_bg.to_ascii_lowercase(), "#000000");
         assert_ne!(podcast_bg, glass_bg);
         assert_ne!(glass_bg, twitch_bg);
-        assert_eq!(
-            catalog["twitch_lower_third"]["base"]["text_align"],
-            "left"
-        );
+        assert_eq!(catalog["twitch_lower_third"]["base"]["text_align"], "left");
         // Light translucent materials — not dark charcoal boxes.
-        assert_eq!(catalog["meeting_soft"]["base"]["background_color"], "#f4e8d6");
-        assert_eq!(catalog["glass_frost"]["base"]["background_color"], "#eef7ff");
-        assert_eq!(catalog["twitch_lower_third"]["base"]["background_color"], "#9146ff");
+        assert_eq!(
+            catalog["meeting_soft"]["base"]["background_color"],
+            "#f4e8d6"
+        );
+        assert_eq!(
+            catalog["glass_frost"]["base"]["background_color"],
+            "#eef7ff"
+        );
+        assert_eq!(
+            catalog["twitch_lower_third"]["base"]["background_color"],
+            "#9146ff"
+        );
         let glass_op = catalog["glass_frost"]["base"]["background_opacity"]
             .as_i64()
             .unwrap_or(100);
@@ -902,7 +914,13 @@ mod tests {
                 cyr_at > primary_at,
                 "{preset}: {cyr_face} must follow {primary} in {family}"
             );
-            for system in ["Consolas", "Segoe UI", "Courier New", "sans-serif", "monospace"] {
+            for system in [
+                "Consolas",
+                "Segoe UI",
+                "Courier New",
+                "sans-serif",
+                "monospace",
+            ] {
                 if let Some(sys_at) = family.find(system) {
                     assert!(
                         cyr_at < sys_at,
@@ -925,7 +943,10 @@ mod tests {
             (noir.find("Special Elite Regular").unwrap())
                 < (noir.find("IBM Plex Mono Medium").unwrap())
         );
-        assert_eq!(catalog["noir_typewriter"]["base"]["background_radius_px"], 0);
+        assert_eq!(
+            catalog["noir_typewriter"]["base"]["background_radius_px"],
+            0
+        );
         assert!(
             catalog["noir_typewriter"]["base"]["letter_spacing_em"]
                 .as_f64()
@@ -962,7 +983,10 @@ mod tests {
             .unwrap_or("");
         assert!(family.contains("Mochiy Pop One"), "latin/jp face");
         assert!(family.contains("Comfortaa Bold"), "cyrillic-matching face");
-        assert!(family.contains("Comic Relief Bold"), "cyrillic comic fallback");
+        assert!(
+            family.contains("Comic Relief Bold"),
+            "cyrillic comic fallback"
+        );
         assert!(
             !family.contains("Noto Sans"),
             "Noto must not steal anime Cyrillic fallback styling"
@@ -1090,7 +1114,10 @@ mod tests {
                 "preset {preset} expected font token {token} in {family}"
             );
         }
-        assert_eq!(catalog["dual_caption_modern"]["line_slots"]["source"]["enabled"], true);
+        assert_eq!(
+            catalog["dual_caption_modern"]["line_slots"]["source"]["enabled"],
+            true
+        );
         assert_eq!(
             catalog["dual_caption_modern"]["line_slots"]["translation_1"]["enabled"],
             true

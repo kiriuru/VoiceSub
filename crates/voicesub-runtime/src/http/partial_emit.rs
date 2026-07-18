@@ -1,7 +1,7 @@
 //! Browser/runtime partial emit — delegates policy to `voicesub-partial-emit`.
 
 pub use voicesub_partial_emit::{
-    partial_emit_settings_from_config, should_emit_partial, PartialEmitInput, PartialEmitSettings,
+    PartialEmitInput, PartialEmitSettings, partial_emit_settings_from_config, should_emit_partial,
 };
 
 use std::time::Instant;

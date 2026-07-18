@@ -59,7 +59,7 @@ impl RealtimeEmitPolicy {
 pub fn dedupe_repeated_transcript(text: &str) -> String {
     let norm = normalize_transcript_text(text);
     let words: Vec<&str> = norm.split(' ').filter(|w| !w.is_empty()).collect();
-    if words.len() >= 2 && words.len().is_multiple_of(2) {
+    if words.len() >= 2 && words.len() % 2 == 0 {
         let mid = words.len() / 2;
         if words[..mid] == words[mid..] {
             return words[..mid].join(" ");

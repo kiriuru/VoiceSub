@@ -61,6 +61,17 @@ async-trait = "0.1"
 urlencoding = "2"
 zip = "2"
 
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "warn"
+unused_must_use = "deny"
+
+[workspace.lints.clippy]
+unused_async = "deny"
+await_holding_lock = "deny"
+await_holding_refcell_ref = "deny"
+# Pedantic light — curated subset (full `pedantic` is ~1.4k warnings in this tree)
+redundant_clone = "deny"
+
 # Dev incremental compilation + Tauri multi crate-type (lib/cdylib) leaves orphaned
 # hash directories under target/*/incremental/ (~0.7 GiB each). Disable globally.
 [profile.dev]

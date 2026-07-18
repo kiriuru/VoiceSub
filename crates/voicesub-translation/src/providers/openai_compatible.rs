@@ -254,14 +254,16 @@ impl TranslationProvider for OpenAICompatibleChatProvider {
             );
             obj.insert(
                 "override_prompt".into(),
-                json!(!custom_prompt.is_empty()
-                    || matches!(
-                        http::setting(settings, "override_prompt")
-                            .trim()
-                            .to_ascii_lowercase()
-                            .as_str(),
-                        "true" | "1" | "yes" | "on"
-                    )),
+                json!(
+                    !custom_prompt.is_empty()
+                        || matches!(
+                            http::setting(settings, "override_prompt")
+                                .trim()
+                                .to_ascii_lowercase()
+                                .as_str(),
+                            "true" | "1" | "yes" | "on"
+                        )
+                ),
             );
         }
         diag

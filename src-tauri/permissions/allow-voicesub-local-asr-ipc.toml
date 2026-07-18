@@ -2,7 +2,6 @@
 identifier = "allow-voicesub-local-asr-ipc"
 description = "Local ASR module webview IPC — loopback token and allowlisted external URLs only."
 commands.allow = [
-  "voicesub_version",
   "get_loopback_api_token",
   "open_external_https_url",
 ]

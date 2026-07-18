@@ -17,8 +17,7 @@ use tokio::sync::RwLock;
 use tracing::{info, instrument};
 
 use voicesub_browser::{
-    BrowserAsrGateway, BrowserAsrService, BrowserWorkerLauncher, StatusCallback,
-    WorkerLifecycleCallback,
+    BrowserAsrGateway, BrowserAsrService, StatusCallback, WorkerLifecycleCallback,
     structured_log_from_runtime_logger as browser_structured_log_from_runtime_logger,
 };
 
@@ -26,13 +25,9 @@ use crate::http::{
     BackgroundTaskRegistry, HttpState, LoopbackAuth, PartialEmitCoordinator,
     RuntimeMetricsCollector, RuntimeOrchestrator, RuntimeStatusBroadcaster, StylePresetsFn,
     build_router, spawn_runtime_heartbeat, spawn_startup_check,
-    terminate_previous_browser_workers,
 };
 use voicesub_config::read_full_logging_enabled;
-use voicesub_config::{
-    AppConfig, ConfigStore, ProjectPaths, base_url_from_socket, default_config_payload,
-    worker_url_for_payload,
-};
+use voicesub_config::{AppConfig, ConfigStore, ProjectPaths, default_config_payload};
 use voicesub_export::ExportService;
 use voicesub_logging::{
     SessionLogManager, StructuredRuntimeLogger, apply_logging_preferences, ensure_logs_dir,
@@ -421,7 +416,7 @@ impl RuntimeService {
         let last_subtitle_payload_for_publish = last_subtitle_payload.clone();
         let overlay_broadcaster = Arc::new(OverlayBroadcaster::new(
             Arc::new({
-                let publisher = publisher_for_overlay.clone();
+                let publisher = publisher_for_overlay;
                 move |message| {
                     let channel = message
                         .get("type")
@@ -441,7 +436,7 @@ impl RuntimeService {
         // (review §6). Order is preserved by the single-consumer channel.
         let subtitle_payload_forwarder =
             SubtitlePayloadForwarder::new(subtitle_payload_listener.clone());
-        let forwarder_for_publish = subtitle_payload_forwarder.clone();
+        let forwarder_for_publish = subtitle_payload_forwarder;
         let publish: PublishCallback = Arc::new(move |payload| {
             let overlay = overlay_broadcaster_for_publish.clone();
             let subtitle_body = serde_json::to_value(&payload).unwrap_or_default();
@@ -575,7 +570,7 @@ impl RuntimeService {
             }
         });
 
-        let gateway_for_disconnect = browser_asr_gateway.clone();
+        let gateway_for_disconnect = browser_asr_gateway;
         let subtitle_for_disconnect = subtitle.clone();
         let partial_emit_for_disconnect = partial_emit.clone();
         let on_worker_disconnected: WorkerLifecycleCallback = Arc::new(move || {
@@ -884,42 +879,6 @@ impl RuntimeService {
 
             background_tasks: Some(self.background_tasks.clone()),
         })
-    }
-
-    pub async fn launch_browser_worker(
-        &self,
-    ) -> Result<voicesub_browser::LaunchResult, voicesub_browser::BrowserLaunchError> {
-        let base = if let Some(addr) = *self.bind_addr.read().await {
-            base_url_from_socket(addr)
-        } else {
-            self.config.http.base_url()
-        };
-
-        let store = self.config_store.read().await;
-        let payload = store.payload().clone();
-        let url = worker_url_for_payload(&base, &payload);
-        let chrome_launch = voicesub_browser::chrome_launch_from_config(&payload);
-        drop(store);
-
-        let previous_worker_pid = self.orchestrator.tracked_worker_pid().await;
-        terminate_previous_browser_workers(&self.paths.user_data_dir, previous_worker_pid);
-
-        let launcher = BrowserWorkerLauncher::new(&self.paths.user_data_dir);
-        let result = launcher.launch_worker(&url, &chrome_launch)?;
-        let tracked_pid = if result.pid == 0 {
-            None
-        } else {
-            Some(result.pid)
-        };
-        self.orchestrator
-            .set_tracked_worker_pid(tracked_pid)
-            .await;
-        // Persist the PID so a crash before graceful stop can reap this worker on the next
-        // startup, matching the HTTP `/api/runtime/start` path.
-        if let Some(pid) = tracked_pid {
-            voicesub_browser::record_worker_pid(&self.paths.user_data_dir, pid);
-        }
-        Ok(result)
     }
 }
 

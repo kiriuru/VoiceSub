@@ -138,7 +138,7 @@ impl ProjectPaths {
 pub fn ensure_runtime_data_dirs(paths: &ProjectPaths) -> std::io::Result<()> {
     std::fs::create_dir_all(&paths.user_data_dir)?;
     std::fs::create_dir_all(&paths.logs_dir)?;
-    std::fs::create_dir_all(&paths.local_asr_user_module_dir())?;
+    std::fs::create_dir_all(paths.local_asr_user_module_dir())?;
     Ok(())
 }
 

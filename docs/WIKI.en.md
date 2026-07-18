@@ -276,7 +276,7 @@ Technical architecture: `docs/TECHNICAL_ARCHITECTURE.en.md`. SST `0.4.4` is a fr
 - TTS provider, voice, rate/pitch/volume.
 - **Volume:** 0–**150%** (native `amplify` via IPC); slider with live numeric label (`85%`, `150%`).
 - **Playback:** **Native** mode (cpal @ 1.0×) or **Sonic** (libsonic tempo stretch); separate WASAPI devices for speech and Twitch.
-- Subtitle-driven planner runs in Rust (`speech_pipeline.rs`); manual sample test via `tts_speak_sample`; playback via IPC `tts_play_audio` (no browser HTMLAudio).
+- Subtitle-driven planner runs in Rust (`speech_pipeline.rs`); manual sample test via `tts_speak_sample`; playback via in-process `PlaybackHub` (no browser HTMLAudio, no webview IPC for audio bytes).
 
 ### Element: Twitch
 - OAuth via system browser; implicit grant + token poll.

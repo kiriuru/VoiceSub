@@ -38,3 +38,6 @@ reqwest = { workspace = true, features = ["json"] }
 serde_json = { workspace = true }
 voicesub-tts = { workspace = true }
 tempfile = "3"
+
+[lints]
+workspace = true

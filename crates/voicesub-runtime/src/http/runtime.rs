@@ -20,7 +20,7 @@ use super::local_asr::local_asr_module_json;
 use super::partial_emit::partial_emit_settings_from_config;
 use super::state::HttpState;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct OrchestratorInner {
     running: bool,
     phase: &'static str,
@@ -67,18 +67,29 @@ impl RuntimeOrchestrator {
         }
 
         if let Some(payload) = config_payload {
-            let snapshot_payload = {
+            // Apply under write lock, then drop before any status/broadcast await
+            // (Tokio RwLock is not reentrant — holding write across config.read deadlocks).
+            let save_result = {
                 let mut store = state.config.write().await;
-                if let Err(err) = store.apply_save_payload(&payload) {
-                    let mut inner = self.inner.lock().await;
-                    inner.phase = "error";
-                    inner.last_error = Some(err.to_string());
-                    inner.running = false;
-                    let response = runtime_action_response("start", &inner, state).await;
+                match store.apply_save_payload(&payload) {
+                    Ok(()) => Ok(store.payload().clone()),
+                    Err(err) => Err(err.to_string()),
+                }
+            };
+            let snapshot_payload = match save_result {
+                Ok(payload) => payload,
+                Err(err) => {
+                    let snapshot = {
+                        let mut inner = self.inner.lock().await;
+                        inner.phase = "error";
+                        inner.last_error = Some(err);
+                        inner.running = false;
+                        inner.clone()
+                    };
+                    let response = runtime_action_response("start", &snapshot, state).await;
                     state.runtime_broadcaster.broadcast_preflight(false).await;
                     return response;
                 }
-                store.payload().clone()
             };
             if let Ok(mut snapshot) = state.config_snapshot.write() {
                 *snapshot = snapshot_payload.clone();
@@ -110,9 +121,9 @@ impl RuntimeOrchestrator {
                 inner.status_message = None;
                 drop(inner);
                 state.runtime_broadcaster.broadcast_preflight(false).await;
-                let inner = self.inner.lock().await;
-                let response = runtime_action_response("start", &inner, state).await;
-                broadcast_runtime_update(state, &inner, true).await;
+                let snapshot = self.inner.lock().await.clone();
+                let response = runtime_action_response("start", &snapshot, state).await;
+                broadcast_runtime_update(state, &snapshot, true).await;
                 return response;
             }
         }
@@ -149,8 +160,8 @@ impl RuntimeOrchestrator {
                 inner.status_message = Some(local_asr_startup_message(&module_status));
             }
             {
-                let inner = self.inner.lock().await;
-                broadcast_runtime_update(state, &inner, true).await;
+                let snapshot = self.inner.lock().await.clone();
+                broadcast_runtime_update(state, &snapshot, true).await;
             }
 
             // Local ASR does not use Chrome; reap any leftover browser worker first.
@@ -158,48 +169,61 @@ impl RuntimeOrchestrator {
                 let inner = self.inner.lock().await;
                 inner.worker_pid
             };
-            terminate_previous_browser_workers(&state.paths.user_data_dir, previous_worker_pid);
-            let browser_still_live = previous_worker_pid
-                .filter(|pid| voicesub_browser::is_live_worker_pid(*pid))
-                .or_else(|| {
-                    voicesub_browser::read_persisted_pid(&state.paths.user_data_dir)
-                        .filter(|pid| voicesub_browser::is_live_worker_pid(*pid))
-                });
-            if browser_still_live.is_none() {
-                voicesub_browser::clear_worker_pid(&state.paths.user_data_dir);
-            }
+            let user_data_dir = state.paths.user_data_dir.clone();
+            let browser_still_live = tokio::task::spawn_blocking(move || {
+                terminate_previous_browser_workers(&user_data_dir, previous_worker_pid);
+                let still_live = previous_worker_pid
+                    .filter(|pid| voicesub_browser::is_live_worker_pid(*pid))
+                    .or_else(|| {
+                        voicesub_browser::read_persisted_pid(&user_data_dir)
+                            .filter(|pid| voicesub_browser::is_live_worker_pid(*pid))
+                    });
+                if still_live.is_none() {
+                    voicesub_browser::clear_worker_pid(&user_data_dir);
+                }
+                still_live
+            })
+            .await
+            .unwrap_or(None);
 
-            match state.local_asr_speech.start().await {
+            let speech = Arc::clone(&state.local_asr_speech);
+            match tokio::task::spawn_blocking(move || speech.start())
+                .await
+                .unwrap_or_else(|e| Err(e.to_string()))
+            {
                 Ok(()) => {
-                    let mut inner = self.inner.lock().await;
-                    // Keep PID only if Chrome survived taskkill (retry on next stop/start).
-                    inner.worker_pid = browser_still_live;
-                    inner.running = true;
-                    inner.phase = "listening";
-                    inner.started_at_utc = Some(started_at);
-                    inner.status_message = None;
-                    state.pipeline_log.state_changed(
-                        &previous.0,
-                        inner.phase,
-                        previous.1,
-                        inner.running,
-                        None,
-                    );
-                    state.pipeline_log.start_complete(inner.phase, None);
-                    drop(inner);
-                    let inner = self.inner.lock().await;
-                    let response = runtime_action_response("start", &inner, state).await;
-                    broadcast_runtime_update(state, &inner, true).await;
+                    let snapshot = {
+                        let mut inner = self.inner.lock().await;
+                        // Keep PID only if Chrome survived taskkill (retry on next stop/start).
+                        inner.worker_pid = browser_still_live;
+                        inner.running = true;
+                        inner.phase = "listening";
+                        inner.started_at_utc = Some(started_at);
+                        inner.status_message = None;
+                        state.pipeline_log.state_changed(
+                            &previous.0,
+                            inner.phase,
+                            previous.1,
+                            inner.running,
+                            None,
+                        );
+                        state.pipeline_log.start_complete(inner.phase, None);
+                        inner.clone()
+                    };
+                    let response = runtime_action_response("start", &snapshot, state).await;
+                    broadcast_runtime_update(state, &snapshot, true).await;
                     return response;
                 }
                 Err(err) => {
-                    let _ = state.local_asr_speech.stop().await;
-                    let mut inner = self.inner.lock().await;
-                    inner.phase = "error";
-                    inner.last_error = Some(err.clone());
-                    inner.running = false;
-                    inner.status_message = None;
-                    drop(inner);
+                    let speech = Arc::clone(&state.local_asr_speech);
+                    let _ = tokio::task::spawn_blocking(move || speech.stop()).await;
+                    {
+                        let mut inner = self.inner.lock().await;
+                        inner.phase = "error";
+                        inner.last_error = Some(err.clone());
+                        inner.running = false;
+                        inner.status_message = None;
+                    }
                     state
                         .runtime_running
                         .store(false, std::sync::atomic::Ordering::Relaxed);
@@ -210,9 +234,9 @@ impl RuntimeOrchestrator {
                         let mut partial_emit = state.partial_emit.lock().await;
                         partial_emit.reset();
                     }
-                    let inner = self.inner.lock().await;
-                    let response = runtime_action_response("start", &inner, state).await;
-                    broadcast_runtime_update(state, &inner, true).await;
+                    let snapshot = self.inner.lock().await.clone();
+                    let response = runtime_action_response("start", &snapshot, state).await;
+                    broadcast_runtime_update(state, &snapshot, true).await;
                     state.runtime_broadcaster.broadcast_preflight(false).await;
                     return response;
                 }
@@ -225,59 +249,79 @@ impl RuntimeOrchestrator {
         let worker_target = worker_url_for_payload(&base, &payload);
         let chrome_launch = voicesub_browser::chrome_launch_from_config(&payload);
         drop(config_payload);
-        let launcher = BrowserWorkerLauncher::new(&state.paths.user_data_dir);
 
         let previous_worker_pid = {
             let inner = self.inner.lock().await;
             inner.worker_pid
         };
-        terminate_previous_browser_workers(&state.paths.user_data_dir, previous_worker_pid);
+        let user_data_dir = state.paths.user_data_dir.clone();
+        let launch_user_data = user_data_dir.clone();
+        let launch_target = worker_target.clone();
+        let launch_chrome = chrome_launch.clone();
+        let launch_result = tokio::task::spawn_blocking(move || {
+            terminate_previous_browser_workers(&launch_user_data, previous_worker_pid);
+            let launcher = BrowserWorkerLauncher::new(&launch_user_data);
+            launcher.launch_worker(&launch_target, &launch_chrome)
+        })
+        .await
+        .unwrap_or_else(|e| {
+            Err(voicesub_browser::BrowserLaunchError::Spawn(
+                std::io::Error::other(e.to_string()),
+            ))
+        });
 
-        let launch_result = launcher.launch_worker(&worker_target, &chrome_launch);
-        let mut inner = self.inner.lock().await;
         match launch_result {
             Ok(result) => {
-                inner.worker_pid = if result.pid == 0 {
-                    None
-                } else {
-                    Some(result.pid)
+                let snapshot = {
+                    let mut inner = self.inner.lock().await;
+                    inner.worker_pid = if result.pid == 0 {
+                        None
+                    } else {
+                        Some(result.pid)
+                    };
+                    // Persist the live worker PID so a crash before graceful stop can reap the
+                    // leftover high-priority Chrome on next startup (review §8).
+                    if let Some(pid) = inner.worker_pid {
+                        voicesub_browser::record_worker_pid(&user_data_dir, pid);
+                    }
+                    inner.running = true;
+                    inner.phase = "listening";
+                    inner.started_at_utc = Some(started_at);
+                    state.pipeline_log.state_changed(
+                        &previous.0,
+                        inner.phase,
+                        previous.1,
+                        inner.running,
+                        None,
+                    );
+                    state
+                        .pipeline_log
+                        .start_complete(inner.phase, inner.worker_pid);
+                    inner.clone()
                 };
-                // Persist the live worker PID so a crash before graceful stop can reap the
-                // leftover high-priority Chrome on next startup (review §8).
-                if let Some(pid) = inner.worker_pid {
-                    voicesub_browser::record_worker_pid(&state.paths.user_data_dir, pid);
-                }
-                inner.running = true;
-                inner.phase = "listening";
-                inner.started_at_utc = Some(started_at);
-                state.pipeline_log.state_changed(
-                    &previous.0,
-                    inner.phase,
-                    previous.1,
-                    inner.running,
-                    None,
-                );
-                state
-                    .pipeline_log
-                    .start_complete(inner.phase, inner.worker_pid);
+                let response = runtime_action_response("start", &snapshot, state).await;
+                broadcast_runtime_update(state, &snapshot, true).await;
+                response
             }
             Err(err) => {
-                inner.phase = "error";
-                inner.last_error = Some(err.to_string());
-                inner.running = false;
-                // Keep tracking only if a previous Chrome worker is still alive after the
-                // failed relaunch; otherwise clear a stale/dead pid file.
-                let still_live = previous_worker_pid
-                    .filter(|pid| voicesub_browser::is_live_worker_pid(*pid))
-                    .or_else(|| {
-                        voicesub_browser::read_persisted_pid(&state.paths.user_data_dir)
-                            .filter(|pid| voicesub_browser::is_live_worker_pid(*pid))
-                    });
-                inner.worker_pid = still_live;
-                if still_live.is_none() {
-                    voicesub_browser::clear_worker_pid(&state.paths.user_data_dir);
+                {
+                    let mut inner = self.inner.lock().await;
+                    inner.phase = "error";
+                    inner.last_error = Some(err.to_string());
+                    inner.running = false;
+                    // Keep tracking only if a previous Chrome worker is still alive after the
+                    // failed relaunch; otherwise clear a stale/dead pid file.
+                    let still_live = previous_worker_pid
+                        .filter(|pid| voicesub_browser::is_live_worker_pid(*pid))
+                        .or_else(|| {
+                            voicesub_browser::read_persisted_pid(&user_data_dir)
+                                .filter(|pid| voicesub_browser::is_live_worker_pid(*pid))
+                        });
+                    inner.worker_pid = still_live;
+                    if still_live.is_none() {
+                        voicesub_browser::clear_worker_pid(&user_data_dir);
+                    }
                 }
-                drop(inner);
                 state
                     .runtime_running
                     .store(false, std::sync::atomic::Ordering::Relaxed);
@@ -288,19 +332,13 @@ impl RuntimeOrchestrator {
                     let mut partial_emit = state.partial_emit.lock().await;
                     partial_emit.reset();
                 }
-                let inner = self.inner.lock().await;
-                let response = runtime_action_response("start", &inner, state).await;
-                broadcast_runtime_update(state, &inner, true).await;
+                let snapshot = self.inner.lock().await.clone();
+                let response = runtime_action_response("start", &snapshot, state).await;
+                broadcast_runtime_update(state, &snapshot, true).await;
                 state.runtime_broadcaster.broadcast_preflight(false).await;
-                return response;
+                response
             }
         }
-        drop(inner);
-
-        let inner = self.inner.lock().await;
-        let response = runtime_action_response("start", &inner, state).await;
-        broadcast_runtime_update(state, &inner, true).await;
-        response
     }
 
     pub async fn stop(&self, state: &HttpState) -> Value {
@@ -311,8 +349,11 @@ impl RuntimeOrchestrator {
             inner.worker_pid
         };
 
-        if let Err(err) = state.local_asr_speech.stop().await {
-            tracing::warn!(error = %err, "local ASR runtime capture stop failed");
+        {
+            let speech = Arc::clone(&state.local_asr_speech);
+            if let Ok(Err(err)) = tokio::task::spawn_blocking(move || speech.stop()).await {
+                tracing::warn!(error = %err, "local ASR runtime capture stop failed");
+            }
         }
 
         let _ = state
@@ -322,37 +363,40 @@ impl RuntimeOrchestrator {
 
         // Clear PID tracking when the worker is gone. Keep it only if Chrome is still live
         // after a failed taskkill (so the next start / orphan reap can retry).
-        let worker_terminated = match worker_pid.or_else(|| {
-            voicesub_browser::read_persisted_pid(&state.paths.user_data_dir)
-        }) {
-            Some(pid) => {
-                let killed = BrowserWorkerLauncher::terminate_worker(pid);
-                let still_live = voicesub_browser::is_live_worker_pid(pid);
-                if killed {
-                    tracing::info!(pid, "browser worker process terminated");
-                } else if still_live {
-                    tracing::warn!(
-                        pid,
-                        "failed to terminate browser worker; keeping pid for orphan reap"
-                    );
-                } else {
-                    tracing::info!(
-                        pid,
-                        "browser worker pid no longer live; clearing pid tracking"
-                    );
+        let user_data_dir = state.paths.user_data_dir.clone();
+        let worker_terminated = tokio::task::spawn_blocking(move || {
+            match worker_pid.or_else(|| voicesub_browser::read_persisted_pid(&user_data_dir)) {
+                Some(pid) => {
+                    let killed = BrowserWorkerLauncher::terminate_worker(pid);
+                    let still_live = voicesub_browser::is_live_worker_pid(pid);
+                    if killed {
+                        tracing::info!(pid, "browser worker process terminated");
+                    } else if still_live {
+                        tracing::warn!(
+                            pid,
+                            "failed to terminate browser worker; keeping pid for orphan reap"
+                        );
+                    } else {
+                        tracing::info!(
+                            pid,
+                            "browser worker pid no longer live; clearing pid tracking"
+                        );
+                    }
+                    if !still_live {
+                        voicesub_browser::clear_worker_pid(&user_data_dir);
+                        true
+                    } else {
+                        false
+                    }
                 }
-                if !still_live {
-                    voicesub_browser::clear_worker_pid(&state.paths.user_data_dir);
+                None => {
+                    voicesub_browser::clear_worker_pid(&user_data_dir);
                     true
-                } else {
-                    false
                 }
             }
-            None => {
-                voicesub_browser::clear_worker_pid(&state.paths.user_data_dir);
-                true
-            }
-        };
+        })
+        .await
+        .unwrap_or(true);
 
         state.subtitle.reset().await;
         state.flush_overlay_presentations_to_clients().await;
@@ -389,14 +433,17 @@ impl RuntimeOrchestrator {
             inner.last_error.as_deref(),
         );
         state.pipeline_log.stop_complete();
-        let response = runtime_action_response("stop", &inner, state).await;
-        broadcast_runtime_update(state, &inner, true).await;
+        let snapshot = inner.clone();
+        drop(inner);
+        let response = runtime_action_response("stop", &snapshot, state).await;
+        broadcast_runtime_update(state, &snapshot, true).await;
         response
     }
 
     pub async fn status(&self, state: &HttpState) -> Value {
-        let inner = self.inner.lock().await;
-        build_runtime_status(&inner, state).await
+        // Snapshot under the mutex, then await diagnostics without holding it.
+        let snapshot = self.inner.lock().await.clone();
+        build_runtime_status(&snapshot, state).await
     }
 }
 
@@ -491,7 +538,7 @@ async fn build_runtime_status(inner: &OrchestratorInner, state: &HttpState) -> V
         "connected": obs_diag.get("connected").cloned().unwrap_or(json!(false)),
         "connection_state": obs_diag.get("connection_state").cloned().unwrap_or(json!("disabled")),
         "output_mode": obs_diag.get("output_mode").cloned().unwrap_or(json!("disabled")),
-        "diagnostics": obs_diag.clone(),
+        "diagnostics": obs_diag,
     });
     let subtitle_router_counters = state.subtitle.diagnostic_counters();
     let browser_lang = payload

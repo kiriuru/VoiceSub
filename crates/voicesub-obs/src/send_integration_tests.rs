@@ -180,10 +180,7 @@ fn stream_caption_texts(
 
 fn make_service(config: serde_json::Value) -> Arc<ObsCaptionService> {
     let config = Arc::new(RwLock::new(config));
-    let getter: ConfigGetter = {
-        let config = config.clone();
-        Arc::new(move || config.read().unwrap().clone())
-    };
+    let getter: ConfigGetter = Arc::new(move || config.read().unwrap().clone());
     ObsCaptionService::new(getter, None)
 }
 

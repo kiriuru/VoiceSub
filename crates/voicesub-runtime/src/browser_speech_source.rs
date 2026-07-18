@@ -104,7 +104,7 @@ impl BrowserSpeechSource {
         }
     }
 
-    pub async fn start(&mut self) {
+    pub fn start(&mut self) {
         self.session = SessionGenerationState::default();
         self.sequence_watermark.clear();
         if let Ok(mut gateway) = self.gateway.lock() {
@@ -112,8 +112,8 @@ impl BrowserSpeechSource {
         }
     }
 
-    pub async fn stop(&mut self) {
-        self.start().await;
+    pub fn stop(&mut self) {
+        self.start();
     }
 
     fn seq_key(session_id: Option<&str>, generation_id: u64) -> String {
@@ -349,9 +349,7 @@ impl OrderedBrowserSpeechIngest {
         handle.spawn(async move {
             while let Some(update) = tokio_rx.recv().await {
                 let speech = speech.clone();
-                if let Err(err) =
-                    tokio::spawn(async move { speech.ingest(update).await }).await
-                {
+                if let Err(err) = tokio::spawn(async move { speech.ingest(update).await }).await {
                     tracing::error!(error = %err, "browser speech ingest task failed; continuing");
                 }
             }
@@ -388,11 +386,11 @@ impl SharedBrowserSpeechSource {
     }
 
     pub async fn start(&self) {
-        self.inner.lock().await.start().await;
+        self.inner.lock().await.start();
     }
 
     pub async fn stop(&self) {
-        self.inner.lock().await.stop().await;
+        self.inner.lock().await.stop();
     }
 }
 
