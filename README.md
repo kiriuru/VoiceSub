@@ -19,6 +19,26 @@ VoiceSub is a Windows desktop app that turns speech into real-time subtitles wit
 
 Successor to SST Desktop `0.4.4`. First VoiceSub release: **`0.5.0`**. Current line: **`0.6.0`**.
 
+<p align="center">
+  <img src="./Images/Live_window.jpg" alt="VoiceSub Live — recognition status, transcript, and subtitle preview" width="880">
+</p>
+
+<p align="center">
+  <img src="./Images/Translation_window.jpg" alt="Translation" width="280">
+  &nbsp;
+  <img src="./Images/Subtitles_window.jpg" alt="Subtitles" width="280">
+  &nbsp;
+  <img src="./Images/modules_window.jpg" alt="Modules — TTS and Local ASR" width="280">
+</p>
+
+<p align="center">
+  <img src="./Images/OBS_window.jpg" alt="OBS overlay and Closed Captions" width="280">
+  &nbsp;
+  <img src="./Images/Local_ASR_window.jpg" alt="Local ASR module" width="280">
+  &nbsp;
+  <img src="./Images/TTS_window.jpg" alt="TTS module" width="280">
+</p>
+
 ---
 
 ## Features

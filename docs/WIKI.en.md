@@ -39,6 +39,10 @@ Technical architecture: `docs/TECHNICAL_ARCHITECTURE.en.md`. SST `0.4.4` is a fr
 
 ## 1. Quick start
 
+<p align="center">
+  <img src="../Images/Live_window.jpg" alt="Live tab — Start/Stop, transcript, subtitle preview" width="820">
+</p>
+
 ### Element: first run
 1. Launch **VoiceSub.exe**.
 2. Dashboard opens in the Tauri main window (`http://127.0.0.1:8765/`).
@@ -108,9 +112,28 @@ Technical architecture: `docs/TECHNICAL_ARCHITECTURE.en.md`. SST `0.4.4` is a fr
 
 **Command palette** (header search / `Ctrl+K`): quick navigation, Start/Stop, Save, export diagnostics.
 
+<p align="center">
+  <img src="../Images/Translation_window.jpg" alt="Translation" width="260">
+  &nbsp;
+  <img src="../Images/Subtitles_window.jpg" alt="Subtitles" width="260">
+  &nbsp;
+  <img src="../Images/Subtitle_Style_window.jpg" alt="Subtitle style" width="260">
+</p>
+<p align="center">
+  <img src="../Images/UI_Theme_window.jpg" alt="UI theme" width="260">
+  &nbsp;
+  <img src="../Images/OBS_window.jpg" alt="OBS" width="260">
+  &nbsp;
+  <img src="../Images/Word_replacement_window.jpg" alt="Word replace" width="260">
+</p>
+
 ---
 
 ## 4. Recognition (Browser Speech)
+
+<p align="center">
+  <img src="../Images/Web_Speech_Window.jpg" alt="Web Speech settings and browser worker" width="820">
+</p>
 
 ### Element: sole production mode in core 0.5.0
 - **`browser_google`** — Web Speech in a separate Chrome window.
@@ -149,6 +172,15 @@ Technical architecture: `docs/TECHNICAL_ARCHITECTURE.en.md`. SST `0.4.4` is a fr
 
 ## 4a. Local ASR module (Parakeet)
 
+<p align="center">
+  <img src="../Images/modules_window.jpg" alt="Modules — open TTS and Local ASR" width="400">
+  &nbsp;
+  <img src="../Images/Local_ASR_window.jpg" alt="Local ASR module window" width="400">
+</p>
+<p align="center">
+  <img src="../Images/Local_ASR_components_window.jpg" alt="Local ASR components — ORT, model, CUDA" width="720">
+</p>
+
 ### Element: `/local-asr` window
 - Separate module UI (like TTS): deps check, model download, CPU/CUDA EP, realtime presets, mic test bench.
 - Open from **Modules** or Tauri IPC `local_asr_open_window`.
@@ -167,6 +199,10 @@ Technical architecture: `docs/TECHNICAL_ARCHITECTURE.en.md`. SST `0.4.4` is a fr
 ---
 
 ## 5. Translation
+
+<p align="center">
+  <img src="../Images/Translation_window.jpg" alt="Translation — providers and lines" width="820">
+</p>
 
 ### 5.1 Main toggles
 
@@ -205,6 +241,10 @@ Technical architecture: `docs/TECHNICAL_ARCHITECTURE.en.md`. SST `0.4.4` is a fr
 
 ## 6. Subtitle output (Subtitles)
 
+<p align="center">
+  <img src="../Images/Subtitles_window.jpg" alt="Subtitles — preset, visibility, TTL" width="820">
+</p>
+
 ### Element: overlay preset
 - `single`, `dual-line`, `stacked`, `compact`.
 - Query override: `?preset=…&compact=1`.
@@ -225,6 +265,10 @@ Technical architecture: `docs/TECHNICAL_ARCHITECTURE.en.md`. SST `0.4.4` is a fr
 
 ## 7. Subtitle style (Style)
 
+<p align="center">
+  <img src="../Images/Subtitle_Style_window.jpg" alt="Subtitle style — fonts, colors, effects" width="820">
+</p>
+
 - Built-in and custom presets.
 - Base controls: font, size, weight, color, outline, shadow, background, alignment, spacing.
 - Effects: `none`, `fade`, `subtle_pop`, `slide_up`, `zoom_in`, `blur_in`, `glow`.
@@ -236,6 +280,10 @@ Technical architecture: `docs/TECHNICAL_ARCHITECTURE.en.md`. SST `0.4.4` is a fr
 
 ## 8. UI theme (Theme)
 
+<p align="center">
+  <img src="../Images/UI_Theme_window.jpg" alt="UI theme — dark/light and accent palette" width="820">
+</p>
+
 - Dark / light mode.
 - Accent palette gradients.
 - Affects dashboard chrome only; OBS overlay uses subtitle-style config.
@@ -243,6 +291,10 @@ Technical architecture: `docs/TECHNICAL_ARCHITECTURE.en.md`. SST `0.4.4` is a fr
 ---
 
 ## 9. OBS
+
+<p align="center">
+  <img src="../Images/OBS_window.jpg" alt="OBS — overlay URL and Closed Captions" width="820">
+</p>
 
 ### Element: overlay URL
 - Copied from **OBS** tab (`GET /api/obs/url`).
@@ -259,6 +311,10 @@ Technical architecture: `docs/TECHNICAL_ARCHITECTURE.en.md`. SST `0.4.4` is a fr
 
 ## 10. Word replacement
 
+<p align="center">
+  <img src="../Images/Word_replacement_window.jpg" alt="Word replacement rules" width="820">
+</p>
+
 - Find/replace applied **before** translation and display (`TranscriptController`).
 - Built-in lists + **stems** (en/ru) and obfuscation normalization (leet, separators, letter repeats).
 - Case-insensitive / whole words (CJK uses substring match, not `\b`).
@@ -267,6 +323,10 @@ Technical architecture: `docs/TECHNICAL_ARCHITECTURE.en.md`. SST `0.4.4` is a fr
 ---
 
 ## 11. TTS module
+
+<p align="center">
+  <img src="../Images/TTS_window.jpg" alt="TTS module — Speech and Twitch" width="820">
+</p>
 
 ### Element: `/tts` window
 - Separate UI: **Speech** and **Twitch** tabs.
@@ -297,6 +357,10 @@ Technical architecture: `docs/TECHNICAL_ARCHITECTURE.en.md`. SST `0.4.4` is a fr
 
 ## 12. Tools & Data
 
+<p align="center">
+  <img src="../Images/Tools%26Data_window.jpg" alt="Tools & Data — profiles and diagnostics" width="820">
+</p>
+
 ### Element: Runtime Diagnostics
 - Phase, worker connected, translation queue, OBS CC state, metrics.
 - Log paths: `logs/core.log`, `runtime-events.log`, `session-latest.jsonl`.
@@ -317,6 +381,10 @@ Technical architecture: `docs/TECHNICAL_ARCHITECTURE.en.md`. SST `0.4.4` is a fr
 
 ## 13. Settings
 
+<p align="center">
+  <img src="../Images/Settings_window.jpg" alt="Settings — language, layout, Web Speech advanced" width="820">
+</p>
+
 ### Element: UI language (EN / RU / JA / KO / ZH)
 - Svelte i18n: `src/lib/i18n/locales/*.json` (generated from `scripts/i18n-source/locales/*.js`).
 - Saved in `ui.language` → Save config.
@@ -335,6 +403,10 @@ Technical architecture: `docs/TECHNICAL_ARCHITECTURE.en.md`. SST `0.4.4` is a fr
 ---
 
 ## 14. Help
+
+<p align="center">
+  <img src="../Images/Help_window.jpg" alt="Built-in Help topics" width="820">
+</p>
 
 Built-in topics: overview, recognition, translation, subtitles/style, OBS, tools.
 

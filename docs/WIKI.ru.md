@@ -39,6 +39,10 @@
 
 ## 1. Быстрый старт
 
+<p align="center">
+  <img src="../Images/Live_window.jpg" alt="Вкладка Live — Start/Stop, транскрипт, превью субтитров" width="820">
+</p>
+
 ### Элемент: первый запуск
 1. Запустите **VoiceSub.exe**.
 2. Dashboard откроется в главном окне Tauri (`http://127.0.0.1:8765/`).
@@ -108,9 +112,28 @@
 
 **Command palette** (`Ctrl+K` / поиск в header): быстрый переход, Start/Stop, Save, export diagnostics.
 
+<p align="center">
+  <img src="../Images/Translation_window.jpg" alt="Перевод" width="260">
+  &nbsp;
+  <img src="../Images/Subtitles_window.jpg" alt="Субтитры" width="260">
+  &nbsp;
+  <img src="../Images/Subtitle_Style_window.jpg" alt="Стиль субтитров" width="260">
+</p>
+<p align="center">
+  <img src="../Images/UI_Theme_window.jpg" alt="Тема UI" width="260">
+  &nbsp;
+  <img src="../Images/OBS_window.jpg" alt="OBS" width="260">
+  &nbsp;
+  <img src="../Images/Word_replacement_window.jpg" alt="Замена слов" width="260">
+</p>
+
 ---
 
 ## 4. Распознавание (Browser Speech)
+
+<p align="center">
+  <img src="../Images/Web_Speech_Window.jpg" alt="Настройки Web Speech и browser worker" width="820">
+</p>
 
 ### Элемент: единственный production-режим core 0.5.0
 - **`browser_google`** — Web Speech в отдельном окне Chrome.
@@ -149,6 +172,15 @@
 
 ## 4a. Модуль Local ASR (Parakeet)
 
+<p align="center">
+  <img src="../Images/modules_window.jpg" alt="Модули — открытие TTS и Local ASR" width="400">
+  &nbsp;
+  <img src="../Images/Local_ASR_window.jpg" alt="Окно модуля Local ASR" width="400">
+</p>
+<p align="center">
+  <img src="../Images/Local_ASR_components_window.jpg" alt="Компоненты Local ASR — ORT, модель, CUDA" width="720">
+</p>
+
 ### Элемент: окно `/local-asr`
 - Отдельный UI модуля (как TTS): проверка deps, download модели, EP CPU/CUDA, realtime-пресеты, mic test bench.
 - Открытие: **Модули** или Tauri IPC `local_asr_open_window`.
@@ -167,6 +199,10 @@
 ---
 
 ## 5. Перевод
+
+<p align="center">
+  <img src="../Images/Translation_window.jpg" alt="Перевод — провайдеры и линии" width="820">
+</p>
 
 ### 5.1 Основные переключатели
 
@@ -205,6 +241,10 @@
 
 ## 6. Вывод субтитров (Subtitles)
 
+<p align="center">
+  <img src="../Images/Subtitles_window.jpg" alt="Субтитры — пресет, видимость, TTL" width="820">
+</p>
+
 ### Элемент: пресет overlay
 - `single`, `dual-line`, `stacked`, `compact`.
 - Query override: `?preset=…&compact=1`.
@@ -225,6 +265,10 @@
 
 ## 7. Стиль субтитров (Style)
 
+<p align="center">
+  <img src="../Images/Subtitle_Style_window.jpg" alt="Стиль субтитров — шрифты, цвета, эффекты" width="820">
+</p>
+
 - Built-in и custom presets.
 - Base controls: font, size, weight, color, outline, shadow, background, alignment, spacing.
 - Effects: `none`, `fade`, `subtle_pop`, `slide_up`, `zoom_in`, `blur_in`, `glow`.
@@ -236,6 +280,10 @@
 
 ## 8. Тема UI (Theme)
 
+<p align="center">
+  <img src="../Images/UI_Theme_window.jpg" alt="Тема UI — dark/light и accent palette" width="820">
+</p>
+
 - Dark / light mode.
 - Accent palette (primary, secondary, tertiary gradients).
 - Влияет только на dashboard chrome, не на OBS overlay (overlay — subtitle-style config).
@@ -243,6 +291,10 @@
 ---
 
 ## 9. OBS
+
+<p align="center">
+  <img src="../Images/OBS_window.jpg" alt="OBS — overlay URL и Closed Captions" width="820">
+</p>
 
 ### Элемент: overlay URL
 - Копируется из вкладки **OBS** (`GET /api/obs/url`).
@@ -259,6 +311,10 @@
 
 ## 10. Замена слов (Word Replace)
 
+<p align="center">
+  <img src="../Images/Word_replacement_window.jpg" alt="Правила замены слов" width="820">
+</p>
+
 - Правила find/replace **до** перевода и вывода (`TranscriptController`).
 - Built-in списки + **корни** (en/ru) и нормализация обходов (leet, разделители, повтор букв).
 - Case-insensitive / whole words (CJK — substring, без `\b`).
@@ -267,6 +323,10 @@
 ---
 
 ## 11. TTS-модуль
+
+<p align="center">
+  <img src="../Images/TTS_window.jpg" alt="Модуль TTS — Speech и Twitch" width="820">
+</p>
 
 ### Элемент: окно `/tts`
 - Отдельный UI: вкладки **Speech** и **Twitch**.
@@ -297,6 +357,10 @@
 
 ## 12. Инструменты и данные (Tools & Data)
 
+<p align="center">
+  <img src="../Images/Tools%26Data_window.jpg" alt="Tools & Data — профили и диагностика" width="820">
+</p>
+
 ### Элемент: Runtime Diagnostics
 - Phase, worker connected, translation queue, OBS CC state, metrics.
 - Пути к логам: `logs/core.log`, `runtime-events.log`, `session-latest.jsonl`.
@@ -317,6 +381,10 @@
 
 ## 13. Настройки (Settings)
 
+<p align="center">
+  <img src="../Images/Settings_window.jpg" alt="Settings — язык, layout, Web Speech advanced" width="820">
+</p>
+
 ### Элемент: язык интерфейса (EN / RU / JA / KO / ZH)
 - Svelte i18n: `src/lib/i18n/locales/*.json` (генерируется из `scripts/i18n-source/locales/*.js`).
 - Сохраняется в `ui.language` → Save config.
@@ -335,6 +403,10 @@
 ---
 
 ## 14. Справка (Help)
+
+<p align="center">
+  <img src="../Images/Help_window.jpg" alt="Встроенная справка" width="820">
+</p>
 
 Встроенные темы: обзор, распознавание, перевод, субтитры/стиль, OBS, инструменты.
 

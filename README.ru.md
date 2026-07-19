@@ -19,6 +19,26 @@ VoiceSub — Windows desktop-приложение, которое превращ
 
 Преемник SST Desktop `0.4.4`. Первый релиз VoiceSub: **`0.5.0`**. Текущая линия: **`0.6.0`**.
 
+<p align="center">
+  <img src="./Images/Live_window.jpg" alt="VoiceSub Live — статус распознавания, транскрипт и превью субтитров" width="880">
+</p>
+
+<p align="center">
+  <img src="./Images/Translation_window.jpg" alt="Перевод" width="280">
+  &nbsp;
+  <img src="./Images/Subtitles_window.jpg" alt="Субтитры" width="280">
+  &nbsp;
+  <img src="./Images/modules_window.jpg" alt="Модули — TTS и Local ASR" width="280">
+</p>
+
+<p align="center">
+  <img src="./Images/OBS_window.jpg" alt="OBS overlay и Closed Captions" width="280">
+  &nbsp;
+  <img src="./Images/Local_ASR_window.jpg" alt="Модуль Local ASR" width="280">
+  &nbsp;
+  <img src="./Images/TTS_window.jpg" alt="Модуль TTS" width="280">
+</p>
+
 ---
 
 ## Возможности
