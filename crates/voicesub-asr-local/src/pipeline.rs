@@ -148,11 +148,11 @@ impl RealtimePipeline {
             return Vec::new();
         }
 
-        if !is_final {
+        if is_final {
+            self.clear_partial_tracking(&item.segment_id);
+        } else {
             self.segment_state
                 .mark_partial_emitted(&item.segment_id, &text);
-        } else {
-            self.clear_partial_tracking(&item.segment_id);
         }
 
         vec![self.build_emit(

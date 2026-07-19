@@ -14,6 +14,14 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- TTS: исходный текст снова озвучивается в режиме Local ASR — ingest больше не оставляет `source_lang=auto` (Google TTS `tl=auto` молчал); берётся `asr.browser.recognition_language` или `en`. Web Speech не затрагивался (worker уже слал конкретный язык).
+
+### Changed
+
+- Clippy: в workspace включён `clippy::pedantic = warn` (точечные allow на шумный docs/API/cast/style, чтобы CI `-D warnings` оставался зелёным); deny для async hygiene + `redundant_clone` сохранён.
+
 ## [0.6.0] - 2026-07-18
 
 ### Added

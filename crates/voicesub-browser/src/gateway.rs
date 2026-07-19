@@ -244,9 +244,7 @@ impl BrowserAsrGateway {
         if self.state.last_error.is_some()
             && (matches!(
                 reason.as_deref(),
-                Some("recognition-error")
-                    | Some("terminal-error")
-                    | Some("microphone-permission-failed")
+                Some("recognition-error" | "terminal-error" | "microphone-permission-failed")
             ) || previous.last_error != self.state.last_error)
             && should_log_error_event(&self.state)
         {
@@ -288,7 +286,7 @@ impl BrowserAsrGateway {
 
     #[doc(hidden)]
     pub fn set_last_heartbeat_ago_for_test(&mut self, ago_ms: u64) {
-        self.last_status_heartbeat = Instant::now() - Duration::from_millis(ago_ms);
+        self.last_status_heartbeat = Instant::now().checked_sub(Duration::from_millis(ago_ms)).unwrap();
     }
 
     #[doc(hidden)]
@@ -717,10 +715,8 @@ fn should_log_status_snapshot(
     }
     if matches!(
         reason,
-        Some("socket-open")
-            | Some("user-stop")
-            | Some("terminal-error")
-            | Some("microphone-permission-failed")
+        Some("socket-open" | "user-stop" | "terminal-error" |
+"microphone-permission-failed")
     ) {
         return true;
     }

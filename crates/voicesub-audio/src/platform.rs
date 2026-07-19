@@ -135,7 +135,7 @@ pub fn is_per_process_routing_enabled() -> bool {
             .map(str::trim)
             .map(str::to_ascii_lowercase)
             .as_deref(),
-        Some("1") | Some("true") | Some("yes") | Some("on")
+        Some("1" | "true" | "yes" | "on")
     )
 }
 

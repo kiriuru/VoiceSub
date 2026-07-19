@@ -569,7 +569,7 @@ fn path_locked(err: &std::io::Error) -> bool {
     matches!(
         err.kind(),
         std::io::ErrorKind::PermissionDenied | std::io::ErrorKind::Other
-    ) || matches!(err.raw_os_error(), Some(5) | Some(32))
+    ) || matches!(err.raw_os_error(), Some(5 | 32))
 }
 
 async fn download_ort_zip(

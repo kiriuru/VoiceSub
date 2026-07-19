@@ -553,8 +553,7 @@ async fn browser_same_sequence_partial_keeps_completed_translations() {
         .collect();
     assert!(
         texts.contains(&"Good evening ladies and gentlemen"),
-        "expected EN translation in visible_items, got {:?}",
-        texts
+        "expected EN translation in visible_items, got {texts:?}"
     );
     assert_eq!(
         payload.active_partial_sequence,

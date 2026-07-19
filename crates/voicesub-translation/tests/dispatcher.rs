@@ -522,7 +522,7 @@ async fn dispatcher_cancel_older_than_cancels_irrelevant_jobs() {
     dispatcher.cancel_older_than(2).await;
     dispatcher.submit_final(2, "new", "ru", None).await;
 
-    let deadline = Instant::now() + Duration::from_millis(2000);
+    let deadline = Instant::now() + Duration::from_secs(2);
     loop {
         let has_seq2 = recorder
             .events

@@ -374,8 +374,8 @@ impl ChannelOrchestrator {
                 // Wake on the next prefetch completion, with a short timeout as a
                 // safety net against epoch/enabled changes that bypass the notifier.
                 tokio::select! {
-                    _ = notified => {}
-                    _ = tokio::time::sleep(PREFETCH_WAIT_TIMEOUT) => {}
+                    () = notified => {}
+                    () = tokio::time::sleep(PREFETCH_WAIT_TIMEOUT) => {}
                 }
             };
 
@@ -448,12 +448,9 @@ impl ChannelOrchestrator {
                     break;
                 }
                 let wait = self.completion_waiter.wait(&self.channel, &chunk_item_id);
-                match wait.await {
-                    Ok(true) => {}
-                    Ok(false) | Err(_) => {
-                        playback_ok = false;
-                        break;
-                    }
+                if let Ok(true) = wait.await {} else {
+                    playback_ok = false;
+                    break;
                 }
             }
 

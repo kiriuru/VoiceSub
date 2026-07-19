@@ -595,7 +595,7 @@ mod tests {
         assert!(result.is_err());
         match result {
             Err(err) => assert!(err.to_string().contains("empty audio buffer")),
-            Ok(_) => panic!("expected empty audio buffer error"),
+            Ok(()) => panic!("expected empty audio buffer error"),
         }
         drop(tx);
     }

@@ -305,7 +305,7 @@ fn merge_line_style(base: &Value, override_style: &Value) -> Value {
 
     let normalized_override = normalize_base_style(override_style);
     let mut merged = base_obj.clone();
-    for (key, base_value) in base_obj.iter() {
+    for (key, base_value) in base_obj {
         if let Some(raw_override) = override_obj.get(key) {
             let should_override = match raw_override {
                 Value::Null => false,
@@ -359,7 +359,7 @@ fn clone_slot_overrides(overrides: Option<&Value>) -> Value {
 
         let mut slot_map = Map::new();
         slot_map.insert("enabled".to_string(), json!(enabled));
-        for (k, v) in slot_raw.iter() {
+        for (k, v) in slot_raw {
             slot_map.insert(k.clone(), v.clone());
         }
         out.insert(slot_name.to_string(), Value::Object(slot_map));

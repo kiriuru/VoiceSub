@@ -20,7 +20,7 @@ pub fn browser_worker_launch_skipped() -> bool {
         std::env::var("VOICESUB_FORCE_BROWSER_WORKER")
             .ok()
             .as_deref(),
-        Some("1") | Some("true") | Some("yes")
+        Some("1" | "true" | "yes")
     ) {
         return false;
     }
@@ -31,7 +31,7 @@ pub fn browser_worker_launch_skipped() -> bool {
         std::env::var("VOICESUB_SKIP_BROWSER_WORKER")
             .ok()
             .as_deref(),
-        Some("1") | Some("true") | Some("yes")
+        Some("1" | "true" | "yes")
     )
 }
 

@@ -101,7 +101,7 @@ fn enum_process_ids() -> Vec<u32> {
             EnumProcesses(
                 buffer.as_mut_ptr(),
                 (buffer.len() * std::mem::size_of::<u32>()) as u32,
-                &mut bytes_returned,
+                &raw mut bytes_returned,
             )
         };
         if result.is_ok() {
@@ -150,7 +150,7 @@ unsafe fn read_process_snapshot(
             handle,
             PROCESS_NAME_WIN32,
             PWSTR(name_buf.as_mut_ptr()),
-            &mut name_len,
+            &raw mut name_len,
         )
         .is_ok()
         {
@@ -164,13 +164,13 @@ unsafe fn read_process_snapshot(
         };
 
         let mut handle_count = 0u32;
-        let _ = GetProcessHandleCount(handle, &mut handle_count);
+        let _ = GetProcessHandleCount(handle, &raw mut handle_count);
 
         let mut counters = PROCESS_MEMORY_COUNTERS_EX {
             cb: size_of::<PROCESS_MEMORY_COUNTERS_EX>() as u32,
             ..Default::default()
         };
-        if GetProcessMemoryInfo(handle, &mut counters as *mut _ as *mut _, counters.cb).is_err() {
+        if GetProcessMemoryInfo(handle, (&raw mut counters).cast(), counters.cb).is_err() {
             return Some(ProcessResourceSnapshot {
                 pid,
                 name,

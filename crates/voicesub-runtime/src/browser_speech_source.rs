@@ -120,15 +120,13 @@ impl BrowserSpeechSource {
         format!("{}:{generation_id}", session_id.unwrap_or(""))
     }
 
+    /// Concrete language for ingest when the worker/Local ASR omit `source_lang`.
+    ///
+    /// Local ASR always omits it; falling back to config `source_lang = "auto"` made Google TTS
+    /// fetch `tl=auto` and silently fail source speech (Web Speech works because the worker
+    /// sends `recognition_language`).
     fn browser_source_lang(snapshot: &std::sync::RwLock<serde_json::Value>) -> String {
-        snapshot
-            .read()
-            .unwrap_or_else(|e| e.into_inner())
-            .get("source_lang")
-            .and_then(|v| v.as_str())
-            .unwrap_or("auto")
-            .trim()
-            .to_ascii_lowercase()
+        resolve_ingest_source_lang(&snapshot.read().unwrap_or_else(|e| e.into_inner()))
     }
 
     fn note_stale_ignored(gateway: &Arc<std::sync::Mutex<BrowserAsrGateway>>) {
@@ -394,9 +392,62 @@ impl SharedBrowserSpeechSource {
     }
 }
 
+/// Resolve a speakable source language for ASR ingest (never `"auto"`).
+pub(crate) fn resolve_ingest_source_lang(config: &serde_json::Value) -> String {
+    let source = config
+        .get("source_lang")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim();
+    if !source.is_empty() && !source.eq_ignore_ascii_case("auto") {
+        return source.to_ascii_lowercase();
+    }
+    let recognition = config
+        .pointer("/asr/browser/recognition_language")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim();
+    if !recognition.is_empty() {
+        return recognition.to_ascii_lowercase();
+    }
+    "en".into()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn resolve_ingest_source_lang_prefers_concrete_source_lang() {
+        assert_eq!(
+            resolve_ingest_source_lang(&json!({
+                "source_lang": "ja",
+                "asr": { "browser": { "recognition_language": "ru-RU" } }
+            })),
+            "ja"
+        );
+    }
+
+    #[test]
+    fn resolve_ingest_source_lang_maps_auto_to_recognition_language() {
+        assert_eq!(
+            resolve_ingest_source_lang(&json!({
+                "source_lang": "auto",
+                "asr": { "browser": { "recognition_language": "ru-RU" } }
+            })),
+            "ru-ru"
+        );
+    }
+
+    #[test]
+    fn resolve_ingest_source_lang_defaults_to_en_when_auto_and_no_recognition() {
+        assert_eq!(
+            resolve_ingest_source_lang(&json!({ "source_lang": "auto" })),
+            "en"
+        );
+        assert_eq!(resolve_ingest_source_lang(&json!({})), "en");
+    }
 
     #[test]
     fn session_rollover_accepts_new_session_when_generation_advances() {

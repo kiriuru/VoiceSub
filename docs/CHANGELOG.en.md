@@ -14,6 +14,14 @@ This file covers the desktop line: **VoiceSub** (from `0.5.0`) and earlier **SST
 
 ## [Unreleased]
 
+### Fixed
+
+- TTS: source speech works again with Local ASR — ingest no longer leaves `source_lang=auto` (Google TTS `tl=auto` failed silently); falls back to `asr.browser.recognition_language` or `en`. Web Speech was unaffected (worker already sent a concrete language).
+
+### Changed
+
+- Clippy: enable workspace `clippy::pedantic = warn` (with curated allows for high-churn docs/API/cast/style noise so CI `-D warnings` stays green); keep deny for async hygiene + `redundant_clone`.
+
 ## [0.6.0] - 2026-07-18
 
 ### Added

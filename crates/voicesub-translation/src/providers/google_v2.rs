@@ -92,10 +92,10 @@ impl TranslationProvider for GoogleTranslateV2Provider {
             ("target", request.target_lang),
             ("format", "text"),
         ];
-        let source_ref = if source != "auto" {
-            Some(source.as_str())
-        } else {
+        let source_ref = if source == "auto" {
             None
+        } else {
+            Some(source.as_str())
         };
         if let Some(source_lang) = source_ref {
             form.push(("source", source_lang));

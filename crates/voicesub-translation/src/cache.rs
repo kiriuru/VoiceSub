@@ -58,12 +58,9 @@ impl CacheState {
             Ok(text) => text,
             Err(_) => return,
         };
-        let payload: HashMap<String, String> = match serde_json::from_str(&raw) {
-            Ok(map) => map,
-            Err(_) => {
-                let _ = fs::write(&path, "{}");
-                return;
-            }
+        let payload: HashMap<String, String> = if let Ok(map) = serde_json::from_str(&raw) { map } else {
+            let _ = fs::write(&path, "{}");
+            return;
         };
         for (key, value) in payload {
             self.insert_locked(key, value, false);

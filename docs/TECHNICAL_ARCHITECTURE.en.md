@@ -1003,6 +1003,7 @@ When `asr.mode = local_parakeet`:
 2. starts `LocalAsrSpeechSource` (cpal mic → 16 kHz → VAD → Parakeet decode → partial/final);
 3. **does not** launch Chrome Web Speech worker;
 4. emits typed partial/final into the same `IngestedAsrUpdate` path as browser ASR (subtitle FSM / translation / overlay unchanged).
+5. Local ASR omits `source_lang` on ingest; runtime resolves a concrete language for TTS/subtitle (`source_lang` if not `auto`, else `asr.browser.recognition_language`, else `en`) so Google TTS never sees `tl=auto`.
 
 Stop tears down the local pipeline (and browser path when that mode is active).
 
@@ -1215,7 +1216,7 @@ Config key: `ui.language` (empty = browser default).
 - **No new Rust module without tests** in the same task
 - Golden fixtures in `tests/golden/` — update when behavioral contracts change
 - `cargo test --workspace` required before done
-- CI: `cargo clippy --workspace --all-targets -- -D warnings`; workspace lints in root `Cargo.toml` (`unused_async`, `await_holding_lock` / `await_holding_refcell_ref`, `redundant_clone` deny — pedantic-light) + `clippy.toml` MSRV `1.85`
+- CI: `cargo clippy --workspace --all-targets -- -D warnings`; workspace lints in root `Cargo.toml` — `clippy::pedantic = warn` (curated allows for docs/API/cast/style noise), deny `unused_async` / `await_holding_lock` / `await_holding_refcell_ref` / `redundant_clone` + `clippy.toml` MSRV `1.85`
 - Hot-path async hygiene: Chrome / Local ASR process work and Local ASR zip extract via `spawn_blocking`; avoid holding orchestrator / translation controller locks across status broadcast or enqueue awaits
 
 ### Levels

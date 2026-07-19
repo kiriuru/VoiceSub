@@ -295,7 +295,7 @@ pub async fn run_runtime_event_ipc_pump(
                 }
             }
 
-            _ = state.overlay_timer.as_mut(), if state.overlay_timer_active => {
+            () = state.overlay_timer.as_mut(), if state.overlay_timer_active => {
                 state.flush_overlay(&app);
             }
         }

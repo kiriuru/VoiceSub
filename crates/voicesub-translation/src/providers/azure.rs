@@ -55,10 +55,10 @@ impl TranslationProvider for AzureTranslatorProvider {
         let region = http::setting(request.settings, "region");
         let source = normalize_source_lang(request.source_lang);
         let target = azure_lang(request.target_lang);
-        let from = if source != "auto" {
-            Some(azure_lang(&source))
-        } else {
+        let from = if source == "auto" {
             None
+        } else {
+            Some(azure_lang(&source))
         };
         let mut query = vec![("api-version", "3.0"), ("to", target.as_str())];
         if let Some(ref from_lang) = from {

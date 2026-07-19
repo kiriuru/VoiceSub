@@ -1010,52 +1010,49 @@ impl TranslationDispatcher {
         })
         .await;
 
-        match timed {
-            Ok((item, diagnostics)) => {
-                let status_message = diagnostics
-                    .get("status_message")
-                    .and_then(|v| v.as_str())
-                    .map(str::to_string);
-                let used_default_prompt = diagnostics
-                    .get("used_default_prompt")
-                    .and_then(|v| v.as_bool())
-                    .unwrap_or(false);
-                let outcome = if item.success {
-                    LineOutcome::Done
-                } else {
-                    LineOutcome::Error
-                };
-                let reason = if item.success {
-                    Some("success".into())
-                } else {
-                    status_message.clone()
-                };
-                LineResult {
-                    item,
-                    outcome,
-                    provider_latency_ms: started_at.elapsed().as_secs_f64() * 1000.0,
-                    reason,
-                    status_message,
-                    used_default_prompt,
-                }
+        if let Ok((item, diagnostics)) = timed {
+            let status_message = diagnostics
+                .get("status_message")
+                .and_then(|v| v.as_str())
+                .map(str::to_string);
+            let used_default_prompt = diagnostics
+                .get("used_default_prompt")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            let outcome = if item.success {
+                LineOutcome::Done
+            } else {
+                LineOutcome::Error
+            };
+            let reason = if item.success {
+                Some("success".into())
+            } else {
+                status_message.clone()
+            };
+            LineResult {
+                item,
+                outcome,
+                provider_latency_ms: started_at.elapsed().as_secs_f64() * 1000.0,
+                reason,
+                status_message,
+                used_default_prompt,
             }
-            Err(_) => {
-                warn!(
-                    sequence = job.sequence,
-                    slot = %line.slot_id,
-                    "translation line timeout"
-                );
-                LineResult {
-                    item: line_item_from_prepared(
-                        line,
-                        Some(format!("Translation timed out after {timeout_ms} ms.")),
-                    ),
-                    outcome: LineOutcome::Timeout,
-                    provider_latency_ms: started_at.elapsed().as_secs_f64() * 1000.0,
-                    reason: Some(format!("timeout_after_{timeout_ms}_ms")),
-                    status_message: Some("Translation target timed out.".into()),
-                    used_default_prompt: false,
-                }
+        } else {
+            warn!(
+                sequence = job.sequence,
+                slot = %line.slot_id,
+                "translation line timeout"
+            );
+            LineResult {
+                item: line_item_from_prepared(
+                    line,
+                    Some(format!("Translation timed out after {timeout_ms} ms.")),
+                ),
+                outcome: LineOutcome::Timeout,
+                provider_latency_ms: started_at.elapsed().as_secs_f64() * 1000.0,
+                reason: Some(format!("timeout_after_{timeout_ms}_ms")),
+                status_message: Some("Translation target timed out.".into()),
+                used_default_prompt: false,
             }
         }
     }

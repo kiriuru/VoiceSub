@@ -157,6 +157,11 @@ impl RuntimeOrchestrator {
             {
                 let module_status = state.local_asr.status();
                 let mut inner = self.inner.lock().await;
+                // Mark running before capture starts so TTS `runtime_active` is true for the
+                // first Local ASR finals (Web Speech is slower to produce audio).
+                inner.running = true;
+                inner.phase = "starting";
+                inner.started_at_utc = Some(started_at.clone());
                 inner.status_message = Some(local_asr_startup_message(&module_status));
             }
             {
@@ -365,34 +370,31 @@ impl RuntimeOrchestrator {
         // after a failed taskkill (so the next start / orphan reap can retry).
         let user_data_dir = state.paths.user_data_dir.clone();
         let worker_terminated = tokio::task::spawn_blocking(move || {
-            match worker_pid.or_else(|| voicesub_browser::read_persisted_pid(&user_data_dir)) {
-                Some(pid) => {
-                    let killed = BrowserWorkerLauncher::terminate_worker(pid);
-                    let still_live = voicesub_browser::is_live_worker_pid(pid);
-                    if killed {
-                        tracing::info!(pid, "browser worker process terminated");
-                    } else if still_live {
-                        tracing::warn!(
-                            pid,
-                            "failed to terminate browser worker; keeping pid for orphan reap"
-                        );
-                    } else {
-                        tracing::info!(
-                            pid,
-                            "browser worker pid no longer live; clearing pid tracking"
-                        );
-                    }
-                    if !still_live {
-                        voicesub_browser::clear_worker_pid(&user_data_dir);
-                        true
-                    } else {
-                        false
-                    }
+            if let Some(pid) = worker_pid.or_else(|| voicesub_browser::read_persisted_pid(&user_data_dir)) {
+                let killed = BrowserWorkerLauncher::terminate_worker(pid);
+                let still_live = voicesub_browser::is_live_worker_pid(pid);
+                if killed {
+                    tracing::info!(pid, "browser worker process terminated");
+                } else if still_live {
+                    tracing::warn!(
+                        pid,
+                        "failed to terminate browser worker; keeping pid for orphan reap"
+                    );
+                } else {
+                    tracing::info!(
+                        pid,
+                        "browser worker pid no longer live; clearing pid tracking"
+                    );
                 }
-                None => {
+                if still_live {
+                    false
+                } else {
                     voicesub_browser::clear_worker_pid(&user_data_dir);
                     true
                 }
+            } else {
+                voicesub_browser::clear_worker_pid(&user_data_dir);
+                true
             }
         })
         .await

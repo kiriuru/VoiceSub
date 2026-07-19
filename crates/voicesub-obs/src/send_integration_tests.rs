@@ -485,7 +485,7 @@ async fn translation_mode_allows_same_text_for_new_sequence_after_clear() {
 
     assert_eq!(
         stream_caption_texts(&requests),
-        vec!["Hello".to_string(), "".to_string(), "Hello".to_string()],
+        vec!["Hello".to_string(), String::new(), "Hello".to_string()],
         "after clear, same text for a new sequence should be sent again"
     );
 }
@@ -585,7 +585,7 @@ async fn stream_inactive_schedules_debug_mirror_clear_after_501() {
 
     assert_eq!(
         debug_mirror_texts(&requests),
-        vec!["Hello".to_string(), "".to_string()],
+        vec!["Hello".to_string(), String::new()],
         "debug mirror should clear after 501 when stream is inactive"
     );
 }
@@ -618,7 +618,7 @@ async fn schedule_final_send_cancels_stale_clear_from_previous_caption() {
 
     assert_eq!(
         stream_caption_texts(&requests),
-        vec!["Hello".to_string(), "World".to_string(), "".to_string()],
+        vec!["Hello".to_string(), "World".to_string(), String::new()],
         "stale clear from the first caption must not fire after the second caption replaces it"
     );
 }
@@ -657,7 +657,7 @@ async fn deduped_payload_does_not_cancel_pending_clear() {
 
     assert_eq!(
         stream_caption_texts(&requests),
-        vec!["Hello".to_string(), "".to_string()],
+        vec!["Hello".to_string(), String::new()],
         "deduped payload republish must not cancel the pending clear timer"
     );
 }
@@ -699,7 +699,7 @@ async fn partial_payload_does_not_cancel_pending_clear() {
 
     assert_eq!(
         stream_caption_texts(&requests),
-        vec!["Hello".to_string(), "".to_string()],
+        vec!["Hello".to_string(), String::new()],
         "partial overlay payload must not cancel the pending clear timer"
     );
 }

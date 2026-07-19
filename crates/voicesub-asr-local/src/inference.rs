@@ -202,10 +202,10 @@ impl InferenceEngine {
                     ok: true,
                     load_ms,
                     message: format!("Session created with {active_provider} EP"),
-                    fallback_provider: if active_provider != provider {
-                        Some(active_provider)
-                    } else {
+                    fallback_provider: if active_provider == provider {
                         None
+                    } else {
+                        Some(active_provider)
                     },
                 })
             }
@@ -356,14 +356,11 @@ impl InferenceEngine {
         }
         let result = {
             let mut guard = self.inner.lock();
-            match guard.as_mut() {
-                Some(model) => f(model),
-                None => {
-                    if self.snapshot.lock().ort_profiling_stopped_budget {
-                        return Err(InferenceError::ProfilingBudgetReached);
-                    }
-                    Err(InferenceError::Runtime("model is not loaded".into()))
+            if let Some(model) = guard.as_mut() { f(model) } else {
+                if self.snapshot.lock().ort_profiling_stopped_budget {
+                    return Err(InferenceError::ProfilingBudgetReached);
                 }
+                Err(InferenceError::Runtime("model is not loaded".into()))
             }
         };
         if result.is_ok() {

@@ -418,7 +418,7 @@ async fn sleep_or_stop(stop_rx: &mut watch::Receiver<bool>, delay: std::time::Du
         return true;
     }
     tokio::select! {
-        _ = tokio::time::sleep(delay) => *stop_rx.borrow(),
+        () = tokio::time::sleep(delay) => *stop_rx.borrow(),
         changed = stop_rx.changed() => {
             changed.is_ok() && *stop_rx.borrow()
         }

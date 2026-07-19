@@ -8,8 +8,8 @@ const ENV_EXCLUDE_LOW: &str = "VOICESUB_BROWSER_AFFINITY_EXCLUDE_LOW";
 
 fn env_truthy(name: &str) -> Option<bool> {
     match std::env::var(name).ok().as_deref() {
-        Some("1") | Some("true") | Some("yes") | Some("on") => Some(true),
-        Some("0") | Some("false") | Some("no") | Some("off") => Some(false),
+        Some("1" | "true" | "yes" | "on") => Some(true),
+        Some("0" | "false" | "no" | "off") => Some(false),
         _ => None,
     }
 }

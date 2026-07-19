@@ -831,18 +831,15 @@ impl SubtitleLifecycleCore {
     }
 
     fn promote_or_defer(&mut self, sequence: u64, presentation: &SubtitlePresentation) {
-        let payload = match self.promotion_payload(sequence, presentation) {
-            Some(p) => p,
-            None => {
-                self.pending_final_sequence = Some(sequence);
-                self.log.promote_or_defer(
-                    sequence,
-                    "deferred",
-                    "promotion_payload_empty",
-                    json!({ "pending_final_sequence": sequence }),
-                );
-                return;
-            }
+        let payload = if let Some(p) = self.promotion_payload(sequence, presentation) { p } else {
+            self.pending_final_sequence = Some(sequence);
+            self.log.promote_or_defer(
+                sequence,
+                "deferred",
+                "promotion_payload_empty",
+                json!({ "pending_final_sequence": sequence }),
+            );
+            return;
         };
         let lifecycle = self.lifecycle_config();
         if let Some(completed) = self.completed_sequence {

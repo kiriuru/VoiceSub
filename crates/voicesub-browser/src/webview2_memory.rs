@@ -65,7 +65,7 @@ mod imp {
             return Ok(());
         };
         let mut suspended = BOOL(0);
-        unsafe { webview3.IsSuspended(&mut suspended)? };
+        unsafe { webview3.IsSuspended(&raw mut suspended)? };
         if suspended.as_bool() {
             unsafe { webview3.Resume()? };
             debug!(label, "webview resumed");

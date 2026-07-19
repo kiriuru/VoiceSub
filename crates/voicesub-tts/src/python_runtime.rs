@@ -57,7 +57,8 @@ pub fn runtime_platform_dir() -> &'static str {
 
 pub fn normalize_tts_lang(lang: &str) -> String {
     let trimmed = lang.trim().to_lowercase();
-    if trimmed.is_empty() {
+    // Google translate_tts rejects `tl=auto`; treat as unset (Local ASR ingest used to pass this).
+    if trimmed.is_empty() || trimmed == "auto" {
         return "en".to_string();
     }
     trimmed
@@ -369,6 +370,8 @@ mod tests {
         assert_eq!(normalize_tts_lang("ru-RU"), "ru");
         assert_eq!(normalize_tts_lang("en"), "en");
         assert_eq!(normalize_tts_lang(""), "en");
+        assert_eq!(normalize_tts_lang("auto"), "en");
+        assert_eq!(normalize_tts_lang("AUTO"), "en");
     }
 
     #[test]

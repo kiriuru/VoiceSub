@@ -187,7 +187,7 @@ impl SubtitlePayloadForwarder {
 fn payload_is_speakable(body: &serde_json::Value) -> bool {
     matches!(
         body.get("lifecycle_state").and_then(|v| v.as_str()),
-        Some("completed_only") | Some("completed_with_partial")
+        Some("completed_only" | "completed_with_partial")
     )
 }
 
@@ -245,13 +245,13 @@ impl RuntimeHandle {
             .take()
             .expect("runtime server task missing");
         let abort_handle = server_task.abort_handle();
-        match tokio::time::timeout(std::time::Duration::from_secs(5), &mut server_task).await {
-            Ok(_) => {}
-            Err(_) => {
-                tracing::warn!("runtime server graceful shutdown timed out; aborting task");
-                abort_handle.abort();
-                let _ = server_task.await;
-            }
+        if tokio::time::timeout(std::time::Duration::from_secs(5), &mut server_task)
+            .await
+            .is_err()
+        {
+            tracing::warn!("runtime server graceful shutdown timed out; aborting task");
+            abort_handle.abort();
+            let _ = server_task.await;
         }
         if let Some(heartbeat_task) = self.heartbeat_task.take() {
             heartbeat_task.abort();

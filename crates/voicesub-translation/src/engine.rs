@@ -347,24 +347,21 @@ impl TranslationEngine {
             .or_else(|| Some(line.slot_id.clone()));
         let item_label = options.label.clone().or_else(|| Some(line.label.clone()));
 
-        let provider = match self.providers.get(&line.provider_name) {
-            Some(provider) => provider.clone(),
-            None => {
-                let message = format!("Unsupported translation provider: {}", line.provider_name);
-                return LineTranslatePlan::Done(
-                    Self::failed_item(FailedTranslationItem {
-                        target_lang: normalized_target,
-                        provider_name: line.provider_name.clone(),
-                        provider_group: line.provider_group.clone(),
-                        experimental: line.experimental,
-                        local_provider: line.local_provider,
-                        slot_id: slot,
-                        label: item_label,
-                        message: message.clone(),
-                    }),
-                    serde_json::json!({ "status_message": message }),
-                );
-            }
+        let provider = if let Some(provider) = self.providers.get(&line.provider_name) { provider.clone() } else {
+            let message = format!("Unsupported translation provider: {}", line.provider_name);
+            return LineTranslatePlan::Done(
+                Self::failed_item(FailedTranslationItem {
+                    target_lang: normalized_target,
+                    provider_name: line.provider_name.clone(),
+                    provider_group: line.provider_group.clone(),
+                    experimental: line.experimental,
+                    local_provider: line.local_provider,
+                    slot_id: slot,
+                    label: item_label,
+                    message: message.clone(),
+                }),
+                serde_json::json!({ "status_message": message }),
+            );
         };
 
         if source_text.trim().is_empty()

@@ -33,7 +33,7 @@ pub fn opt_out_chrome_power_throttling(pid: u32) {
         let ok = SetProcessInformation(
             handle,
             ProcessPowerThrottling,
-            &mut state as *mut _ as *mut _,
+            (&raw mut state).cast(),
             std::mem::size_of::<PROCESS_POWER_THROTTLING_STATE>() as u32,
         );
 

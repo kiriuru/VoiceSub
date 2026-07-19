@@ -88,13 +88,11 @@ fn golden_short_hallucination_tokens() {
     for token in &tokens {
         assert!(
             should_drop_short_hallucination(token, 500, false),
-            "token {:?} should drop within partial limit",
-            token
+            "token {token:?} should drop within partial limit"
         );
         assert!(
             !should_drop_short_hallucination(token, 2000, false),
-            "token {:?} should keep beyond partial limit",
-            token
+            "token {token:?} should keep beyond partial limit"
         );
     }
     let cases: Vec<ShortHallucinationCase> =

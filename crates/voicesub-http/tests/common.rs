@@ -18,7 +18,7 @@ fn ensure_skip_browser_worker_in_tests() {
             std::env::var("VOICESUB_FORCE_BROWSER_WORKER")
                 .ok()
                 .as_deref(),
-            Some("1") | Some("true") | Some("yes")
+            Some("1" | "true" | "yes")
         ) {
             return;
         }

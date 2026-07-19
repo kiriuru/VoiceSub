@@ -100,14 +100,14 @@ fn load_fixes_legacy_keep_completed_false() {
     let path = dir.join("config.toml");
     fs::write(
         &path,
-        r#"
+        r"
 config_version = 7
 
 [subtitle_lifecycle]
 keep_completed_translation_during_active_partial = false
 completed_source_ttl_ms = 4500
 completed_translation_ttl_ms = 7000
-"#,
+",
     )
     .unwrap();
 

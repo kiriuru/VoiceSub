@@ -592,7 +592,7 @@ fn window_process_id(window: &WebviewWindow) -> Option<u32> {
         let mut pid = 0u32;
 
         unsafe {
-            GetWindowThreadProcessId(hwnd, Some(&mut pid));
+            GetWindowThreadProcessId(hwnd, Some(&raw mut pid));
         }
 
         if pid == 0 { None } else { Some(pid) }

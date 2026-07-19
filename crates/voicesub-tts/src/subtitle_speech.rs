@@ -311,17 +311,26 @@ fn speech_lang_for_item(
     is_source: bool,
     payload: &Value,
 ) -> String {
+    let usable = |raw: Option<&str>| -> Option<String> {
+        let trimmed = raw.map(str::trim).filter(|s| !s.is_empty())?;
+        if trimmed.eq_ignore_ascii_case("auto") {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
+    };
     let from_item = if is_source {
-        item.get("lang").and_then(|v| v.as_str())
+        usable(item.get("lang").and_then(|v| v.as_str()))
     } else {
-        item.get("target_lang")
-            .or_else(|| item.get("lang"))
-            .and_then(|v| v.as_str())
+        usable(
+            item.get("target_lang")
+                .or_else(|| item.get("lang"))
+                .and_then(|v| v.as_str()),
+        )
     };
     from_item
-        .or_else(|| payload.get("source_lang").and_then(|v| v.as_str()))
-        .unwrap_or("en")
-        .to_string()
+        .or_else(|| usable(payload.get("source_lang").and_then(|v| v.as_str())))
+        .unwrap_or_else(|| "en".to_string())
 }
 
 #[cfg(test)]
@@ -495,6 +504,25 @@ mod tests {
         assert_eq!(lines.len(), 2);
         assert_eq!(lines[0].lang, "ru");
         assert_eq!(lines[1].lang, "en");
+    }
+
+    #[test]
+    fn auto_source_lang_falls_back_to_en_for_tts() {
+        let mut planner = SubtitleSpeechPlanner::new();
+        let settings = TtsSpeechSettings::default();
+        let payload = json!({
+            "sequence": 11,
+            "lifecycle_state": "completed_only",
+            "completed_block_visible": true,
+            "source_lang": "auto",
+            "visible_items": [
+                {"kind": "source", "text": "Hello", "lang": "auto"},
+            ],
+            "active_partial_text": ""
+        });
+        let lines = planner.plan(&payload, &settings);
+        assert_eq!(lines.len(), 1);
+        assert_eq!(lines[0].lang, "en");
     }
 
     #[test]

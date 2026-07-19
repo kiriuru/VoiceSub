@@ -461,14 +461,14 @@ impl TtsModuleService {
     pub fn bind_window_process(&self, pid: u32) -> Result<TtsConfig, TtsServiceError> {
         self.register_window_process(pid)?;
         let config = self.load_config()?;
-        if !config.audio_output_device_id.is_empty() {
-            self.apply_audio_route(pid, &config.audio_output_device_id)?;
-        } else {
+        if config.audio_output_device_id.is_empty() {
             debug!(
                 target: "voicesub.tts",
                 pid,
                 "audio routing deferred: default device selected"
             );
+        } else {
+            self.apply_audio_route(pid, &config.audio_output_device_id)?;
         }
         trace::trace(
             "service",

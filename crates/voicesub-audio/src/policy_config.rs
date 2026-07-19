@@ -124,7 +124,7 @@ fn ro_get_activation_factory(class_id: &HSTRING, iid: &GUID) -> Result<IUnknown,
 
     let mut factory: *mut c_void = ptr::null_mut();
     unsafe {
-        let hr = RoGetActivationFactory(std::mem::transmute_copy(class_id), iid, &mut factory);
+        let hr = RoGetActivationFactory(std::mem::transmute_copy(class_id), iid, &raw mut factory);
         if hr.is_err() || factory.is_null() {
             return Err(AudioError::RoutingFailed(format!(
                 "RoGetActivationFactory failed: {hr:?}"
