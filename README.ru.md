@@ -4,7 +4,7 @@
 
 [![Version](https://img.shields.io/badge/version-0.6.0-blue.svg)](./docs/CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-lightgrey.svg)](#системные-требования)
-[![Stack](https://img.shields.io/badge/stack-Rust%20%2B%20Tauri%20%2B%20Svelte-orange.svg)](#contributing)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
 [![Changelog](https://img.shields.io/badge/changelog-Keep%20a%20Changelog-E05735.svg)](./docs/CHANGELOG.md)
 
 <p align="center">
@@ -20,33 +20,30 @@ VoiceSub — Windows desktop-приложение, которое превращ
 Преемник SST Desktop `0.4.4`. Первый релиз VoiceSub: **`0.5.0`**. Текущая линия: **`0.6.0`**.
 
 <p align="center">
-  <img src="./Images/Live_window.jpg" alt="VoiceSub Live — статус распознавания, транскрипт и превью субтитров" width="880">
+  <img src="./Images/Live_window.jpg" alt="Вкладка Live в VoiceSub" width="860">
+  <br>
+  <em>Live — Start/Stop, статус распознавания, транскрипт и превью субтитров</em>
 </p>
 
-<p align="center">
-  <img src="./Images/Translation_window.jpg" alt="Перевод" width="280">
-  &nbsp;
-  <img src="./Images/Subtitles_window.jpg" alt="Субтитры" width="280">
-  &nbsp;
-  <img src="./Images/modules_window.jpg" alt="Модули — TTS и Local ASR" width="280">
-</p>
+## Содержание
 
-<p align="center">
-  <img src="./Images/OBS_window.jpg" alt="OBS overlay и Closed Captions" width="280">
-  &nbsp;
-  <img src="./Images/Local_ASR_window.jpg" alt="Модуль Local ASR" width="280">
-  &nbsp;
-  <img src="./Images/TTS_window.jpg" alt="Модуль TTS" width="280">
-</p>
-
----
+- [Возможности](#возможности)
+- [Скриншоты](#скриншоты)
+- [Системные требования](#системные-требования)
+- [Быстрый старт](#быстрый-старт)
+- [Локальные URL](#локальные-url)
+- [Пути данных](#пути-данных)
+- [Troubleshooting](#troubleshooting)
+- [Документация](#документация)
+- [Contributing](#contributing)
+- [License](#license)
 
 ## Возможности
 
 | Область | Что даёт |
 | --- | --- |
 | **Речь** | Google Chrome Web Speech worker или офлайн Local ASR (Parakeet / ONNX, CPU или CUDA) |
-| **Перевод** | 13 провайдеров, до 5 линий перевода |
+| **Перевод** | 17 провайдеров (в т.ч. Baidu / Youdao / Tencent / Caiyun), до 5 линий перевода |
 | **OBS** | Browser Source overlay + опциональные Closed Captions (WebSocket) |
 | **Стиль** | Анимированные пресеты, стили по слотам, палитра темы |
 | **TTS** | Native / Sonic playback; озвучка субтитров + Twitch chat TTS (до 5 каналов) |
@@ -55,7 +52,72 @@ VoiceSub — Windows desktop-приложение, которое превращ
 
 Компактный макет под второй монитор / узкое окно.
 
----
+## Скриншоты
+
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <img src="./Images/Translation_window.jpg" alt="Вкладка Translation" width="420"><br>
+      <strong>Перевод</strong><br>
+      <sub>Провайдеры, кэш и до 5 линий перевода</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="./Images/Subtitles_window.jpg" alt="Вкладка Subtitles" width="420"><br>
+      <strong>Субтитры</strong><br>
+      <sub>Пресет overlay, видимость, порядок и TTL</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="./Images/Subtitle_Style_window.jpg" alt="Вкладка Subtitle Style" width="420"><br>
+      <strong>Стиль субтитров</strong><br>
+      <sub>Шрифты, цвета, эффекты и стили по слотам</sub>
+    </td>
+    <td align="center">
+      <img src="./Images/OBS_window.jpg" alt="Вкладка OBS" width="420"><br>
+      <strong>OBS</strong><br>
+      <sub>URL overlay и Closed Captions</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="./Images/modules_window.jpg" alt="Вкладка Modules" width="420"><br>
+      <strong>Модули</strong><br>
+      <sub>Открытие sidecar-окон TTS и Local ASR</sub>
+    </td>
+    <td align="center">
+      <img src="./Images/Web_Speech_Window.jpg" alt="Настройки Web Speech" width="420"><br>
+      <strong>Web Speech</strong><br>
+      <sub>Язык Chrome worker и расширенные опции распознавания</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="./Images/Local_ASR_window.jpg" alt="Модуль Local ASR" width="420"><br>
+      <strong>Local ASR</strong><br>
+      <sub>Офлайн Parakeet / ONNX (CPU или CUDA)</sub>
+    </td>
+    <td align="center">
+      <img src="./Images/TTS_window.jpg" alt="Модуль TTS" width="420"><br>
+      <strong>TTS</strong><br>
+      <sub>Озвучка субтитров и Twitch chat TTS</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="./Images/UI_Theme_window.jpg" alt="Вкладка UI Theme" width="420"><br>
+      <strong>Тема UI</strong><br>
+      <sub>Тёмная/светлая тема и accent palette</sub>
+    </td>
+    <td align="center">
+      <img src="./Images/Settings_window.jpg" alt="Вкладка Settings" width="420"><br>
+      <strong>Настройки</strong><br>
+      <sub>Язык UI, layout и импорт SST config</sub>
+    </td>
+  </tr>
+</table>
+
+Остальные экраны (Word Replace, Tools & Data, Help, компоненты Local ASR): [Wiki](./docs/WIKI.ru.md).
 
 ## Системные требования
 
@@ -66,8 +128,6 @@ VoiceSub — Windows desktop-приложение, которое превращ
 - Интернет — опционально для облачных провайдеров перевода; также для первой загрузки модели / ORT Local ASR
 
 Python, Node.js и CUDA **не входят** в core-установщик. CUDA — опциональная загрузка модуля Local ASR.
-
----
 
 ## Быстрый старт
 
@@ -81,8 +141,6 @@ Python, Node.js и CUDA **не входят** в core-установщик. CUDA
 
 Пошаговый гайд: [Wiki (RU)](./docs/WIKI.ru.md) · [Wiki (EN)](./docs/WIKI.en.md)
 
----
-
 ## Локальные URL
 
 | URL | Назначение |
@@ -94,8 +152,6 @@ Python, Node.js и CUDA **не входят** в core-установщик. CUDA
 | `http://127.0.0.1:8765/local-asr` | Модуль Local ASR |
 
 Примеры query для overlay: `?preset=single` · `?compact=1` · `?profile=default`
-
----
 
 ## Пути данных
 
@@ -111,8 +167,6 @@ Python, Node.js и CUDA **не входят** в core-установщик. CUDA
 
 SST `config.json` можно импортировать при первом запуске или из настроек. Legacy `local` / experimental → `browser_google`; `local_parakeet` сохраняется. Подробности: [Архитектура §7](./docs/TECHNICAL_ARCHITECTURE.md).
 
----
-
 ## Troubleshooting
 
 | Симптом | Что проверить |
@@ -126,15 +180,11 @@ SST `config.json` можно импортировать при первом за
 
 Полный гайд: [Wiki → Troubleshooting](./docs/WIKI.ru.md).
 
----
-
 ## Документация
 
 - [Wiki (RU)](./docs/WIKI.ru.md) / [Wiki (EN)](./docs/WIKI.en.md) — пользовательский гайд
 - [Technical Architecture (RU)](./docs/TECHNICAL_ARCHITECTURE.md) / [(EN)](./docs/TECHNICAL_ARCHITECTURE.en.md)
 - [Changelog (RU)](./docs/CHANGELOG.md) / [(EN)](./docs/CHANGELOG.en.md) — [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/)
-
----
 
 ## Contributing
 
@@ -145,14 +195,6 @@ cargo test --workspace
 npm run build
 npm run test:frontend
 ```
-
----
-
-## License
-
-[MIT](./LICENSE) © 2026 Kiriuru
-
----
 
 <details>
 <summary><strong>Разработчикам — стек и сборка</strong></summary>
@@ -195,3 +237,7 @@ Tauri `beforeBuildCommand`: `npm run build`. В bundle: `bin/dashboard`, `overla
 Полный справочник: [Technical Architecture](./docs/TECHNICAL_ARCHITECTURE.md).
 
 </details>
+
+## License
+
+[MIT](./LICENSE) © 2026 Kiriuru

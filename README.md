@@ -4,7 +4,7 @@
 
 [![Version](https://img.shields.io/badge/version-0.6.0-blue.svg)](./docs/CHANGELOG.en.md)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-lightgrey.svg)](#system-requirements)
-[![Stack](https://img.shields.io/badge/stack-Rust%20%2B%20Tauri%20%2B%20Svelte-orange.svg)](#development)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
 [![Changelog](https://img.shields.io/badge/changelog-Keep%20a%20Changelog-E05735.svg)](./docs/CHANGELOG.en.md)
 
 <p align="center">
@@ -20,26 +20,23 @@ VoiceSub is a Windows desktop app that turns speech into real-time subtitles wit
 Successor to SST Desktop `0.4.4`. First VoiceSub release: **`0.5.0`**. Current line: **`0.6.0`**.
 
 <p align="center">
-  <img src="./Images/Live_window.jpg" alt="VoiceSub Live — recognition status, transcript, and subtitle preview" width="880">
+  <img src="./Images/Live_window.jpg" alt="VoiceSub Live tab" width="860">
+  <br>
+  <em>Live — Start/Stop, recognition status, transcript, and subtitle preview</em>
 </p>
 
-<p align="center">
-  <img src="./Images/Translation_window.jpg" alt="Translation" width="280">
-  &nbsp;
-  <img src="./Images/Subtitles_window.jpg" alt="Subtitles" width="280">
-  &nbsp;
-  <img src="./Images/modules_window.jpg" alt="Modules — TTS and Local ASR" width="280">
-</p>
+## Table of contents
 
-<p align="center">
-  <img src="./Images/OBS_window.jpg" alt="OBS overlay and Closed Captions" width="280">
-  &nbsp;
-  <img src="./Images/Local_ASR_window.jpg" alt="Local ASR module" width="280">
-  &nbsp;
-  <img src="./Images/TTS_window.jpg" alt="TTS module" width="280">
-</p>
-
----
+- [Features](#features)
+- [Screenshots](#screenshots)
+- [System requirements](#system-requirements)
+- [Quick start](#quick-start)
+- [Local URLs](#local-urls)
+- [Data paths](#data-paths)
+- [Troubleshooting](#troubleshooting)
+- [Documentation](#documentation)
+- [Contributing](#contributing)
+- [License](#license)
 
 ## Features
 
@@ -55,7 +52,72 @@ Successor to SST Desktop `0.4.4`. First VoiceSub release: **`0.5.0`**. Current l
 
 Compact phone-style layout is available for secondary monitors.
 
----
+## Screenshots
+
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <img src="./Images/Translation_window.jpg" alt="Translation tab" width="420"><br>
+      <strong>Translation</strong><br>
+      <sub>Providers, cache, and up to 5 translation lines</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="./Images/Subtitles_window.jpg" alt="Subtitles tab" width="420"><br>
+      <strong>Subtitles</strong><br>
+      <sub>Overlay preset, visibility, order, and TTL</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="./Images/Subtitle_Style_window.jpg" alt="Subtitle Style tab" width="420"><br>
+      <strong>Subtitle Style</strong><br>
+      <sub>Fonts, colors, effects, and per-slot styles</sub>
+    </td>
+    <td align="center">
+      <img src="./Images/OBS_window.jpg" alt="OBS tab" width="420"><br>
+      <strong>OBS</strong><br>
+      <sub>Overlay URL and Closed Captions</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="./Images/modules_window.jpg" alt="Modules tab" width="420"><br>
+      <strong>Modules</strong><br>
+      <sub>Open sidecar TTS and Local ASR windows</sub>
+    </td>
+    <td align="center">
+      <img src="./Images/Web_Speech_Window.jpg" alt="Web Speech settings" width="420"><br>
+      <strong>Web Speech</strong><br>
+      <sub>Chrome worker language and advanced recognition options</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="./Images/Local_ASR_window.jpg" alt="Local ASR module" width="420"><br>
+      <strong>Local ASR</strong><br>
+      <sub>Offline Parakeet / ONNX setup (CPU or CUDA)</sub>
+    </td>
+    <td align="center">
+      <img src="./Images/TTS_window.jpg" alt="TTS module" width="420"><br>
+      <strong>TTS</strong><br>
+      <sub>Subtitle speech and Twitch chat TTS</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="./Images/UI_Theme_window.jpg" alt="UI Theme tab" width="420"><br>
+      <strong>UI Theme</strong><br>
+      <sub>Dark/light mode and accent palette</sub>
+    </td>
+    <td align="center">
+      <img src="./Images/Settings_window.jpg" alt="Settings tab" width="420"><br>
+      <strong>Settings</strong><br>
+      <sub>UI language, layout, and SST config import</sub>
+    </td>
+  </tr>
+</table>
+
+More UI walkthroughs (Word Replace, Tools & Data, Help, Local ASR components): [Wiki](./docs/WIKI.en.md).
 
 ## System requirements
 
@@ -66,8 +128,6 @@ Compact phone-style layout is available for secondary monitors.
 - Internet — optional for cloud translation providers; also used for first-time Local ASR model / ORT downloads
 
 No Python, Node.js, or CUDA in the core installer. CUDA is an optional Local ASR download.
-
----
 
 ## Quick start
 
@@ -81,8 +141,6 @@ No Python, Node.js, or CUDA in the core installer. CUDA is an optional Local ASR
 
 Step-by-step UI guide: [Wiki (EN)](./docs/WIKI.en.md) · [Wiki (RU)](./docs/WIKI.ru.md)
 
----
-
 ## Local URLs
 
 | URL | Purpose |
@@ -94,8 +152,6 @@ Step-by-step UI guide: [Wiki (EN)](./docs/WIKI.en.md) · [Wiki (RU)](./docs/WIKI
 | `http://127.0.0.1:8765/local-asr` | Local ASR module |
 
 Overlay query examples: `?preset=single` · `?compact=1` · `?profile=default`
-
----
 
 ## Data paths
 
@@ -111,8 +167,6 @@ Overlay query examples: `?preset=single` · `?compact=1` · `?profile=default`
 
 SST `config.json` can be imported on first run or from settings. Legacy `local` / experimental modes map to `browser_google`; `local_parakeet` is preserved. Details: [Architecture §7](./docs/TECHNICAL_ARCHITECTURE.en.md).
 
----
-
 ## Troubleshooting
 
 | Symptom | What to check |
@@ -126,15 +180,11 @@ SST `config.json` can be imported on first run or from settings. Legacy `local` 
 
 Full guide: [Wiki → Troubleshooting](./docs/WIKI.en.md).
 
----
-
 ## Documentation
 
 - [Wiki (EN)](./docs/WIKI.en.md) / [Wiki (RU)](./docs/WIKI.ru.md) — user guide
 - [Technical Architecture (EN)](./docs/TECHNICAL_ARCHITECTURE.en.md) / [(RU)](./docs/TECHNICAL_ARCHITECTURE.md)
 - [Changelog (EN)](./docs/CHANGELOG.en.md) / [(RU)](./docs/CHANGELOG.md) — [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
-
----
 
 ## Contributing
 
@@ -145,14 +195,6 @@ cargo test --workspace
 npm run build
 npm run test:frontend
 ```
-
----
-
-## License
-
-[MIT](./LICENSE) © 2026 Kiriuru
-
----
 
 <details>
 <summary><strong>Developers — stack and build</strong></summary>
@@ -195,3 +237,7 @@ Version source: `voicesub-types::PROJECT_VERSION` = **`0.6.0`**.
 Full reference: [Technical Architecture](./docs/TECHNICAL_ARCHITECTURE.en.md).
 
 </details>
+
+## License
+
+[MIT](./LICENSE) © 2026 Kiriuru
